@@ -1,0 +1,1155 @@
+{
+    "tickets": [],
+    "availabilityStatus": "reduced_assistance",
+    "availabilityOverrides": {
+        "general support": "increased_volume"
+    },
+    "closeRequests": {},
+    "pendingUrgentReasons": {
+        "1372682370259357716": {
+            "selectedType": "administrator-applications",
+            "reason": "Marked as urgent by requester.",
+            "createdAt": "2026-03-15T23:09:19.996Z"
+        }
+    },
+    "aiControl": {
+        "manualDisabled": false,
+        "rateLimitedUntil": null
+    },
+    "staffStatsEvents": [
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1477772691665584211",
+            "createdAt": "2026-03-01T21:01:23.480Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1477772808938590393",
+            "createdAt": "2026-03-01T21:01:38.177Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1477772897983402196",
+            "createdAt": "2026-03-01T21:02:10.405Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1477785433017548833",
+            "createdAt": "2026-03-01T21:51:48.079Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1477786117553131712",
+            "createdAt": "2026-03-01T21:55:12.266Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1477792389983768678",
+            "createdAt": "2026-03-01T22:19:45.757Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1477794539795255377",
+            "createdAt": "2026-03-01T22:28:03.584Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1477794791461752832",
+            "createdAt": "2026-03-01T22:35:25.038Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1477796790781874290",
+            "createdAt": "2026-03-01T22:37:06.758Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1477797853471576064",
+            "createdAt": "2026-03-01T22:41:10.468Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "channelId": "1479611248487436288",
+            "createdAt": "2026-03-06T22:47:08.641Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1479611248487436288",
+            "createdAt": "2026-03-06T22:48:18.337Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "channelId": "1479614417246355476",
+            "createdAt": "2026-03-06T23:00:12.072Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1479614417246355476",
+            "createdAt": "2026-03-06T23:46:05.950Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "channelId": "1479626217094381829",
+            "createdAt": "2026-03-06T23:47:32.404Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1479626217094381829",
+            "createdAt": "2026-03-06T23:57:31.035Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "channelId": "1479629063529431113",
+            "createdAt": "2026-03-06T23:57:48.756Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1479629063529431113",
+            "createdAt": "2026-03-06T23:58:48.098Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "channelId": "1479629380731932724",
+            "createdAt": "2026-03-06T23:59:10.642Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1479629380731932724",
+            "createdAt": "2026-03-07T00:00:25.237Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "channelId": "1479631795031904256",
+            "createdAt": "2026-03-07T00:08:36.373Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1479631795031904256",
+            "createdAt": "2026-03-07T12:32:25.078Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1479819130650493061",
+            "createdAt": "2026-03-07T12:37:01.669Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1479820194762457088",
+            "createdAt": "2026-03-07T17:58:15.383Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "channelId": "1479939321053188160",
+            "createdAt": "2026-03-07T20:30:46.124Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1479939321053188160",
+            "createdAt": "2026-03-07T20:34:54.976Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1479940483865120779",
+            "createdAt": "2026-03-07T20:38:30.522Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1479941424777793608",
+            "createdAt": "2026-03-07T20:41:20.507Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "channelId": "1479942097321857178",
+            "createdAt": "2026-03-07T20:41:51.505Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1481073456597569626",
+            "createdAt": "2026-03-10T23:38:01.558Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1479942097321857178",
+            "createdAt": "2026-03-10T23:45:14.223Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1481075615716212756",
+            "createdAt": "2026-03-10T23:46:14.558Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "channelId": "1481076760400498730",
+            "createdAt": "2026-03-10T23:50:58.952Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1481076760400498730",
+            "createdAt": "2026-03-10T23:52:15.436Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1481076580129181737",
+            "createdAt": "2026-03-10T23:52:20.352Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1481076213207269427",
+            "createdAt": "2026-03-10T23:52:24.015Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1481078426759860256",
+            "createdAt": "2026-03-10T23:57:48.731Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "channelId": "1481079137496989851",
+            "createdAt": "2026-03-11T00:00:14.516Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1482878322903093390",
+            "createdAt": "2026-03-15T23:20:13.002Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1482878310387286016",
+            "createdAt": "2026-03-15T23:20:14.359Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482878123572858952",
+            "createdAt": "2026-03-15T23:20:17.434Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482878115045834894",
+            "createdAt": "2026-03-15T23:20:20.775Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482878084641325128",
+            "createdAt": "2026-03-15T23:20:23.959Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482878151062327376",
+            "createdAt": "2026-03-15T23:20:26.788Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482878077485977834",
+            "createdAt": "2026-03-15T23:20:30.443Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482877863282610226",
+            "createdAt": "2026-03-15T23:20:34.164Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482877797813846199",
+            "createdAt": "2026-03-15T23:20:37.167Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482878260252643470",
+            "createdAt": "2026-03-15T23:20:41.461Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482878065980997742",
+            "createdAt": "2026-03-15T23:20:42.116Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482877722580750357",
+            "createdAt": "2026-03-15T23:20:44.650Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1482877694055026918",
+            "createdAt": "2026-03-15T23:20:47.462Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482876738794033404",
+            "createdAt": "2026-03-15T23:20:51.542Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482878092455444480",
+            "createdAt": "2026-03-15T23:20:54.483Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482878044019494953",
+            "createdAt": "2026-03-15T23:20:58.469Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482877845146570905",
+            "createdAt": "2026-03-15T23:21:00.446Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482878103775871218",
+            "createdAt": "2026-03-15T23:21:02.627Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482878055281328142",
+            "createdAt": "2026-03-15T23:21:04.791Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1482878301499297813",
+            "createdAt": "2026-03-15T23:21:07.355Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1482896268433952892",
+            "createdAt": "2026-03-16T00:20:31.695Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1482900085066039398",
+            "createdAt": "2026-03-16T00:36:44.357Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487430081289912330",
+            "createdAt": "2026-03-28T12:36:38.568Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487430081289912330",
+            "createdAt": "2026-03-28T12:38:13.128Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487434208208224386",
+            "createdAt": "2026-03-28T12:53:27.351Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487439396687970504",
+            "createdAt": "2026-03-28T13:15:50.901Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487440319518736424",
+            "createdAt": "2026-03-28T13:33:00.623Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487445562365313254",
+            "createdAt": "2026-03-28T13:37:50.942Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487445562365313254",
+            "createdAt": "2026-03-28T15:15:23.406Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487470214898778183",
+            "createdAt": "2026-03-28T15:15:57.281Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487586407248695429",
+            "createdAt": "2026-03-28T23:01:13.470Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487587429329408040",
+            "createdAt": "2026-03-28T23:01:37.026Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482898060760584354",
+            "createdAt": "2026-03-28T23:03:46.352Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482898764153880676",
+            "createdAt": "2026-03-28T23:03:47.792Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "1372682370259357716",
+            "channelId": "1482899060942704731",
+            "createdAt": "2026-03-28T23:03:49.363Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1482900085066039398",
+            "createdAt": "2026-03-28T23:03:50.789Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "846077952449708094",
+            "channelId": "1483197136463200360",
+            "createdAt": "2026-03-28T23:03:51.977Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "846077952449708094",
+            "channelId": "1483199585319911688",
+            "createdAt": "2026-03-28T23:03:53.110Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1483203508386660424",
+            "createdAt": "2026-03-28T23:03:54.372Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487439396687970504",
+            "createdAt": "2026-03-28T23:03:55.544Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487470214898778183",
+            "createdAt": "2026-03-28T23:03:56.817Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487590720091979948",
+            "createdAt": "2026-03-28T23:14:33.312Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1487727040663781508",
+            "createdAt": "2026-03-29T08:16:14.667Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1490845052715667496",
+            "createdAt": "2026-04-06T22:46:23.295Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1490852100064940082",
+            "createdAt": "2026-04-06T23:14:16.561Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1490872896233668801",
+            "createdAt": "2026-04-07T00:37:23.645Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1490872896233668801",
+            "createdAt": "2026-04-07T00:40:56.218Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1490875320671404135",
+            "createdAt": "2026-04-07T00:47:02.867Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1491049735975473236",
+            "createdAt": "2026-04-07T12:20:01.611Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1491049960496697378",
+            "createdAt": "2026-04-07T12:20:31.148Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1491050163459068096",
+            "createdAt": "2026-04-07T12:33:01.727Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1491084071953105046",
+            "createdAt": "2026-04-07T14:35:53.073Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "createdBy": "761276320130662430",
+            "channelId": "1491084298541990029",
+            "createdAt": "2026-04-07T15:02:14.894Z"
+        },
+        {
+            "type": "claimed",
+            "userId": "761276320130662430",
+            "guildId": null,
+            "createdBy": "761276320130662430",
+            "channelId": "1502375531423989872",
+            "createdAt": "2026-05-08T18:24:23.138Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "guildId": null,
+            "createdBy": "761276320130662430",
+            "channelId": "1502376071914586252",
+            "createdAt": "2026-05-08T18:26:27.411Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "guildId": null,
+            "createdBy": "761276320130662430",
+            "channelId": "1502375964561244161",
+            "createdAt": "2026-05-08T18:56:44.476Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "guildId": null,
+            "createdBy": "761276320130662430",
+            "channelId": "1502376903603130581",
+            "createdAt": "2026-05-08T18:56:47.044Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "guildId": null,
+            "createdBy": "761276320130662430",
+            "channelId": "1502376795557728438",
+            "createdAt": "2026-05-08T18:56:49.800Z"
+        },
+        {
+            "type": "closed",
+            "userId": "761276320130662430",
+            "guildId": null,
+            "createdBy": "761276320130662430",
+            "channelId": "1502375531423989872",
+            "createdAt": "2026-05-08T18:56:53.364Z"
+        }
+    ],
+    "closeRequestReasonEvents": [
+        {
+            "reason": "Resolved.",
+            "userId": "761276320130662430",
+            "createdAt": "2026-03-01T22:19:35.627Z"
+        },
+        {
+            "reason": "test",
+            "userId": "761276320130662430",
+            "createdAt": "2026-03-06T22:48:13.524Z"
+        },
+        {
+            "reason": "Handled.",
+            "userId": "761276320130662430",
+            "createdAt": "2026-03-07T21:19:19.816Z"
+        },
+        {
+            "reason": "Handled.",
+            "userId": "761276320130662430",
+            "createdAt": "2026-03-10T23:52:11.718Z"
+        },
+        {
+            "reason": "test",
+            "userId": "761276320130662430",
+            "createdAt": "2026-03-28T12:38:08.162Z"
+        },
+        {
+            "reason": "bkj",
+            "userId": "761276320130662430",
+            "createdAt": "2026-03-28T12:53:22.280Z"
+        },
+        {
+            "reason": "r",
+            "userId": "761276320130662430",
+            "createdAt": "2026-03-28T13:13:20.332Z"
+        },
+        {
+            "reason": "e",
+            "userId": "761276320130662430",
+            "createdAt": "2026-03-28T13:15:41.178Z"
+        },
+        {
+            "reason": "t",
+            "userId": "761276320130662430",
+            "createdAt": "2026-03-28T15:23:53.966Z"
+        },
+        {
+            "reason": "User-initiated ticket closure",
+            "userId": "761276320130662430",
+            "createdAt": "2026-03-28T23:00:39.058Z"
+        },
+        {
+            "reason": "User-initiated ticket closure",
+            "userId": "761276320130662430",
+            "createdAt": "2026-03-28T23:01:09.804Z"
+        },
+        {
+            "reason": "r",
+            "userId": "761276320130662430",
+            "createdAt": "2026-03-28T23:01:31.957Z"
+        },
+        {
+            "reason": "User-initiated ticket closure",
+            "userId": "761276320130662430",
+            "createdAt": "2026-03-28T23:14:30.391Z"
+        },
+        {
+            "reason": "tes",
+            "userId": "761276320130662430",
+            "createdAt": "2026-04-07T00:40:47.205Z"
+        },
+        {
+            "reason": "sec",
+            "userId": "761276320130662430",
+            "guildId": "1491090877559607520",
+            "createdAt": "2026-05-08T18:26:19.692Z"
+        }
+    ],
+    "tagUsage": {
+        "blacklist": 2,
+        "giveaway claim": 2,
+        "refunds": 1,
+        "ban appeals": 1,
+        "staff report": 2
+    },
+    "botConfig": {
+        "appealsChannelId": "1477480523810209933",
+        "embedTemplates": {
+            "auto_ticket_claimed": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#57f287",
+                "__legacyTitle": "Ticket Claimed",
+                "__legacyDescription": "Changed by <@761276320130662430>\nThis ticket is now claimed by <@761276320130662430>.",
+                "__auto": true,
+                "__autoMigratedAt": "2026-03-28T12:36:38.571Z"
+            },
+            "auto_ticket_renamed": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#57f287",
+                "__legacyTitle": "Ticket Renamed",
+                "__legacyDescription": "Changed by <@761276320130662430>\nNew name: `test`",
+                "__auto": true,
+                "__autoMigratedAt": "2026-04-07T00:37:10.453Z"
+            },
+            "auto_inactivity_notice": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#fee75c",
+                "__legacyTitle": "Inactivity Notice",
+                "__legacyDescription": "This ticket has been inactive for 12+ hours.\nA close request was created and will auto-close in **360 minutes** unless the ticket opener acts.",
+                "__auto": true,
+                "__autoMigratedAt": "2026-03-28T11:36:35.710Z"
+            },
+            "auto_close_request_cancelled": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#57f287",
+                "__legacyTitle": "Close Request Cancelled",
+                "__legacyDescription": "The pending close request has been cancelled.",
+                "__auto": true,
+                "__autoMigratedAt": "2026-03-28T13:15:35.164Z"
+            },
+            "auto_no_active_request": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#ed4245",
+                "__legacyTitle": "No Active Request",
+                "__legacyDescription": "There is no active close request for this ticket.",
+                "__auto": true,
+                "__autoMigratedAt": "2026-03-28T23:01:07.108Z"
+            },
+            "auto_ticket_closed": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#ed4245",
+                "__legacyTitle": "Ticket Closed",
+                "__legacyDescription": "Closed by <@761276320130662430>.",
+                "__auto": true,
+                "__autoMigratedAt": "2026-03-28T12:38:11.815Z"
+            },
+            "auto_command_error": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#ed4245",
+                "__legacyTitle": "Command Error",
+                "__legacyDescription": "Failed to rename ticket. Please try again.",
+                "__auto": true,
+                "__autoMigratedAt": "2026-03-28T12:51:36.572Z"
+            },
+            "auto_rename_queued": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#5865f2",
+                "__legacyTitle": "Rename Queued",
+                "__legacyDescription": "Changed by <@761276320130662430>\nRenaming channel to `name`...",
+                "__auto": true,
+                "__autoMigratedAt": "2026-04-07T00:37:09.690Z"
+            },
+            "auto_transfer_complete": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#57f287",
+                "__legacyTitle": "Transfer Complete",
+                "__legacyDescription": "Changed by <@761276320130662430>\nTicket type changed from **General Support** to **Administrator Applications**.",
+                "__auto": true,
+                "__autoMigratedAt": "2026-03-28T15:16:11.429Z"
+            },
+            "auto_escalation_updated": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#57f287",
+                "__legacyTitle": "Escalation Updated",
+                "__legacyDescription": "Ticket escalated to Medium successfully.",
+                "__auto": true,
+                "__autoMigratedAt": "2026-03-28T12:37:43.131Z"
+            },
+            "auto_close_request_created": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#fee75c",
+                "__legacyTitle": "Close Request Created",
+                "__legacyDescription": "Requested by <@761276320130662430>\nReason: Handled.\nAuto-close in **1 hour(s)** unless canceled.",
+                "__auto": true,
+                "__autoMigratedAt": "2026-03-28T12:38:08.164Z"
+            },
+            "auto_resolution_confirmed": {
+                "title": "Resolution Confirmed",
+                "description": "The requester confirmed the issue is resolved. This ticket will now be closed.",
+                "color": "#57f287"
+            },
+            "auto_ai_prompted_response": {
+                "title": "{title}",
+                "description": "[[divider:large]]\n{description}",
+                "color": "#5865f2",
+                "__legacyTitle": "AI Prompted Response",
+                "__legacyDescription": "The requester indicated that support is still required. A representative will continue assisting shortly.",
+                "__auto": true,
+                "__autoMigratedAt": "2026-03-28T12:36:14.831Z"
+            },
+            "auto_closing_ticket": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#fee75c",
+                "__legacyTitle": "Closing Ticket",
+                "__legacyDescription": "Closing now and generating transcript...",
+                "__auto": true,
+                "__autoMigratedAt": "2026-03-28T12:38:11.598Z"
+            },
+            "auto_invalid_selection": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#ed4245",
+                "__legacyTitle": "Invalid Selection",
+                "__legacyDescription": "Choose a specific ticket type when setting a status.",
+                "__auto": true,
+                "__autoMigratedAt": "2026-05-08T18:25:26.219Z"
+            },
+            "auto_ticket_statistics": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#57f287",
+                "__legacyTitle": "Ticket Statistics",
+                "__legacyDescription": "User: <@761276320130662430>\nWindow: Last 7 days\nClaimed: **9**\nClosed: **19**\n\n```txt\nClaimed |########--------| 9\nClosed  |################| 19\n```\nSuggested close prompts (from this user):\n- Handled. (2)\n- test (1)",
+                "__auto": true,
+                "__autoMigratedAt": "2026-04-07T00:38:36.448Z"
+            },
+            "auto_action_appeal": {
+                "title": "Action Appeal",
+                "description": "Complete both dropdowns below, then the appeal form will open.\n\nRequired acknowledgement: \"I acknowledge my appeal may be denied for any reason.\"",
+                "color": "#5865f2"
+            },
+            "auto_appeal_rules": {
+                "title": "Appeal Rules",
+                "description": "Read before continuing:\n- One appeal per action. Do not spam.\n- Be honest and provide complete details.\n- Include any context that helps moderators verify your claim.\n- Abusive or fake appeals may be ignored.\n\nPress **Continue** to start the appeal form.",
+                "color": "#5865f2"
+            },
+            "auto_action_appeal_form": {
+                "title": "Action Appeal Form",
+                "description": "Punishment type: **Not selected**\nAcknowledgement: **Missing**\n\nSelect a punishment type, acknowledge, then press **Open Appeal Form**.",
+                "color": "#fee75c"
+            },
+            "auto_appeal_submitted": {
+                "title": "Appeal Submitted",
+                "description": "Your appeal has been submitted for review.",
+                "color": "#57f287"
+            },
+            "auto_slow_down": {
+                "title": "Slow Down",
+                "description": "Please wait **7s** before opening another ticket.",
+                "color": "#fee75c"
+            },
+            "auto_claim_for_giveaway": {
+                "title": "Claim for Giveaway",
+                "description": "Claim you giveaway by visiting our website",
+                "color": "#5865f2"
+            },
+            "auto_tag_sent": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#57f287",
+                "__legacyTitle": "Tag Sent",
+                "__legacyDescription": "Tag **Giveaway Claim** has been posted.",
+                "__auto": true,
+                "__autoMigratedAt": "2026-04-07T00:40:28.485Z"
+            },
+            "auto_blacklist_request": {
+                "title": "Blacklist Request",
+                "description": "Please follow this format for requesting a blacklist.\n\nOffender's username:\nOffender's Discord ID:\nDetailed description of the incident:\nAny relevant proof or evidence:",
+                "color": "#5865f2"
+            },
+            "auto_refunds": {
+                "title": "Refunds",
+                "description": "We do not offer refunds after 30 days. If your product is faulty, we will be happy to repair it as long as it is in warranty.",
+                "color": "#5865f2"
+            },
+            "auto_ban_appeal": {
+                "title": "Ban Appeal",
+                "description": "If you have been banned, please go to this link \n[[divider:large]]\n[here](https://nowhere.com/)",
+                "color": "#5865f2"
+            },
+            "auto_staff_report": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#5865f2",
+                "__legacyTitle": "Staff Report",
+                "__legacyDescription": "Hi there, if you’re looking to report a member of staff for any form of misconduct or abuse , please open a general support ticket and provide proof along with any relevant information.",
+                "__auto": true,
+                "__autoMigratedAt": "2026-04-07T00:40:28.282Z"
+            },
+            "auto_untitled_embed": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#57f287",
+                "__auto": true
+            },
+            "auto_invalid_channel": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#ed4245",
+                "__auto": true
+            },
+            "auto_already_claimed": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#fee75c",
+                "__auto": true
+            },
+            "auto_owner_commands": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#5865f2",
+                "__auto": true
+            },
+            "auto_dashboard": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#5865f2",
+                "__auto": true
+            },
+            "auto_pong": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#57f287",
+                "__auto": true
+            },
+            "auto_transcript": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#5865f2",
+                "__auto": true
+            },
+            "auto_setup_link": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#5865f2",
+                "__auto": true
+            },
+            "auto_setup_required": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#5865f2",
+                "__auto": true
+            },
+            "auto_current_ticket_availability": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#5865f2",
+                "__auto": true
+            },
+            "auto_ticket_availability_updated": {
+                "title": "{title}",
+                "description": "{description}",
+                "color": "#5865f2",
+                "__auto": true
+            }
+        },
+        "homeImages": []
+    },
+    "transcriptArchives": [
+        {
+            "channelId": "1502376071914586252",
+            "channelName": "ticket-v4lkyrss-xgkx",
+            "guildId": "1491090877559607520",
+            "ticketType": "General Support",
+            "createdBy": "761276320130662430",
+            "claimedBy": null,
+            "createdAt": "2026-05-08T18:26:09.359Z",
+            "lastActivityAt": "2026-05-08T18:26:09.359Z",
+            "closedBy": "761276320130662430",
+            "closeReason": "Closed immediately from close request.\nReason: sec",
+            "closedAt": "2026-05-08T18:26:25.468Z",
+            "archivedAt": "2026-05-08T18:26:25.468Z",
+            "retentionDays": 30,
+            "expiresAt": "2026-06-07T18:26:25.468Z",
+            "publicToken": "4faghHK0UKMOOXl0GQdPsnovc429PtBb",
+            "allowedUserIds": [
+                "761276320130662430"
+            ],
+            "fileName": "1502376071914586252.html",
+            "size": 5719
+        },
+        {
+            "channelId": "1502375964561244161",
+            "channelName": "ticket-v4lkyrss-wwtr",
+            "guildId": "1491090877559607520",
+            "ticketType": "General Support",
+            "createdBy": "761276320130662430",
+            "claimedBy": null,
+            "createdAt": "2026-05-08T18:25:43.543Z",
+            "lastActivityAt": "2026-05-08T18:27:12.793Z",
+            "closedBy": "761276320130662430",
+            "closeReason": "User-initiated ticket closure",
+            "escalations": [],
+            "notes": [],
+            "closedAt": "2026-05-08T18:56:42.436Z",
+            "archivedAt": "2026-05-08T18:56:42.436Z",
+            "retentionDays": 30,
+            "expiresAt": "2026-06-07T18:56:42.436Z",
+            "publicToken": "pGW9jM2Zc8aJOzfllz3rGwhwIOHEqrCZ",
+            "allowedUserIds": [
+                "761276320130662430"
+            ],
+            "fileName": "1502375964561244161.html",
+            "size": 10709
+        },
+        {
+            "channelId": "1502376903603130581",
+            "channelName": "ticket-v4lkyrss-1phy",
+            "guildId": "1491090877559607520",
+            "ticketType": "General Support",
+            "createdBy": "761276320130662430",
+            "claimedBy": null,
+            "createdAt": "2026-05-08T18:29:27.881Z",
+            "lastActivityAt": "2026-05-08T18:29:27.881Z",
+            "closedBy": "761276320130662430",
+            "closeReason": "User-initiated ticket closure",
+            "escalations": [],
+            "notes": [],
+            "closedAt": "2026-05-08T18:56:45.916Z",
+            "archivedAt": "2026-05-08T18:56:45.916Z",
+            "retentionDays": 30,
+            "expiresAt": "2026-06-07T18:56:45.916Z",
+            "publicToken": "a4CqxXJ3j_agGShqCYhpY8a4RF3B55_b",
+            "allowedUserIds": [
+                "761276320130662430"
+            ],
+            "fileName": "1502376903603130581.html",
+            "size": 10178
+        },
+        {
+            "channelId": "1502376795557728438",
+            "channelName": "ticket-v4lkyrss-15q1",
+            "guildId": "1491090877559607520",
+            "ticketType": "General Support",
+            "createdBy": "761276320130662430",
+            "claimedBy": null,
+            "createdAt": "2026-05-08T18:29:01.964Z",
+            "lastActivityAt": "2026-05-08T18:29:01.964Z",
+            "closedBy": "761276320130662430",
+            "closeReason": "User-initiated ticket closure",
+            "escalations": [],
+            "notes": [],
+            "closedAt": "2026-05-08T18:56:48.833Z",
+            "archivedAt": "2026-05-08T18:56:48.833Z",
+            "retentionDays": 30,
+            "expiresAt": "2026-06-07T18:56:48.833Z",
+            "publicToken": "vrhWG6HK9saXd3TcU3F9N0OAOtDcc2ZY",
+            "allowedUserIds": [
+                "761276320130662430"
+            ],
+            "fileName": "1502376795557728438.html",
+            "size": 10178
+        },
+        {
+            "channelId": "1502375531423989872",
+            "channelName": "ticket-v4lkyrss-up64",
+            "guildId": "1491090877559607520",
+            "ticketType": "General Support",
+            "createdBy": "761276320130662430",
+            "claimedBy": "761276320130662430",
+            "createdAt": "2026-05-08T18:24:00.357Z",
+            "lastActivityAt": "2026-05-08T18:24:23.135Z",
+            "closedBy": "761276320130662430",
+            "closeReason": "User-initiated ticket closure",
+            "escalations": [
+                {
+                    "level": "high",
+                    "escalatedBy": "761276320130662430",
+                    "timestamp": "2026-05-08T18:24:35.114Z"
+                }
+            ],
+            "notes": [],
+            "closedAt": "2026-05-08T18:56:51.910Z",
+            "archivedAt": "2026-05-08T18:56:51.910Z",
+            "retentionDays": 30,
+            "expiresAt": "2026-06-07T18:56:51.910Z",
+            "publicToken": "iXDC9OT_QkCDEKUIgn5hPeNplUjL7jPO",
+            "allowedUserIds": [
+                "761276320130662430"
+            ],
+            "fileName": "1502375531423989872.html",
+            "size": 13448
+        }
+    ],
+    "ticketNotes": {}
+}

@@ -1,0 +1,65 @@
+{
+    "setup": {
+        "completed": true,
+        "createdAt": "2026-04-07T22:42:03.690Z",
+        "guildName": "eacw",
+        "restartedAt": "2026-04-08T13:19:56.801Z",
+        "restartedBy": "761276320130662430",
+        "completedAt": "2026-05-08T18:59:08.743Z",
+        "step": 4
+    },
+    "parentCategoryId": "1502374964307689602",
+    "appealsChannelId": "1502374972939698206",
+    "transcriptsChannelId": "1502374984717303819",
+    "managerRoleId": "1491416418003058870",
+    "supportTeams": [
+        {
+            "name": "Staff Support Team",
+            "roleIds": [
+                "1491416418003058870"
+            ],
+            "roleId": "1491416418003058870",
+            "emoji": "<:slatelogo:1477680082796548272>"
+        },
+        {
+            "name": "General Support",
+            "roleIds": [
+                "1491416418003058870"
+            ],
+            "roleId": "1491416418003058870",
+            "emoji": "<:slatelogo:1477680082796548272>"
+        }
+    ],
+    "ticketTypes": [
+        {
+            "name": "General Support",
+            "format": "#general-{username}",
+            "roleIds": [
+                "1491416418003058870"
+            ],
+            "aliases": [
+                "general",
+                "gs",
+                "gen",
+                "main",
+                "staff"
+            ],
+            "embedColor": "#5865F2",
+            "emoji": "<:slatelogo:1477680082796548272>",
+            "requireReason": true,
+            "allowAttachments": true,
+            "openEmbed": {
+                "title": "General Support Ticket",
+                "description": "Hi there {requester} ({username})!\nThis is a test\n[[divider]]\n**Details:**\nUser ID: {userId}\nTime: {timestamp}\nYou are ticket: {channel}"
+            }
+        }
+    ],
+    "rolePermanence": false,
+    "tutorialEnabled": true,
+    "channelTicketTypeRestrictions": {},
+    "availabilityOverrides": {},
+    "escalationRoles": {
+        "high": null,
+        "immediate": null
+    }
+}

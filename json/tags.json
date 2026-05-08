@@ -1,0 +1,79 @@
+{
+    "tags": [
+        {
+            "name": "refunds",
+            "title": "Refunds",
+            "description": "We do not offer refunds after 30 days. If your product is faulty, we will be happy to repair it as long as it is in warranty.",
+            "createdAt": "2026-03-01T02:13:19.013Z",
+            "createdBy": "761276320130662430",
+            "keywords": [
+                "refund",
+                "chargeback",
+                "return",
+                "exchange"
+            ],
+            "updatedAt": "2026-03-01T23:19:31.696Z",
+            "updatedBy": "761276320130662430"
+        },
+        {
+            "name": "ban appeals",
+            "title": "Ban Appeal",
+            "description": "If you have been banned, please go to this link [here](https://nowhere.com/)",
+            "keywords": [
+                "ban",
+                "appeal",
+                "appeals",
+                "banned",
+                "unban",
+                "unbanned"
+            ],
+            "createdAt": "2026-03-01T13:25:54.811Z",
+            "createdBy": "761276320130662430",
+            "updatedAt": "2026-03-01T13:27:22.646Z",
+            "updatedBy": "761276320130662430"
+        },
+        {
+            "name": "Giveaway Claim",
+            "title": "Claim for Giveaway",
+            "description": "Claim you giveaway by visiting our website",
+            "keywords": [
+                "giveaway",
+                "claim",
+                "reward",
+                "claim giveaway",
+                "robux giveaway",
+                "steam key giveaway"
+            ],
+            "createdAt": "2026-03-01T14:12:46.161Z",
+            "createdBy": "761276320130662430",
+            "updatedAt": "2026-03-01T14:13:28.567Z",
+            "updatedBy": "761276320130662430"
+        },
+        {
+            "name": "blacklist",
+            "title": "Blacklist Request",
+            "description": "Please follow this format for requesting a blacklist.\n\nOffender's username:\nOffender's Discord ID:\nDetailed description of the incident:\nAny relevant proof or evidence:",
+            "keywords": [
+                "blacklist",
+                "ban",
+                "report"
+            ],
+            "updatedAt": "2026-03-01T23:20:42.647Z",
+            "createdAt": "2026-03-01T23:20:42.647Z"
+        },
+        {
+            "name": "Staff report",
+            "title": "Staff Report",
+            "description": "Hi there, if you’re looking to report a member of staff for any form of misconduct or abuse , please open a general support ticket and provide proof along with any relevant information.",
+            "keywords": [
+                "staff report",
+                "Staff Report",
+                "Report staff",
+                "Report Misconduct",
+                "Misconduct"
+            ],
+            "updatedAt": "2026-03-16T00:47:47.283Z",
+            "createdAt": "2026-03-16T00:47:47.283Z"
+        }
+    ]
+}

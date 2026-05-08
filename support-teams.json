@@ -1,0 +1,19 @@
+{
+    "teams": [
+        {
+            "name": "General Support",
+            "roleId": "1477438521483726869",
+            "emoji": "🛠️"
+        },
+        {
+            "name": "Moderation Support",
+            "roleId": "1477438526722412665",
+            "emoji": "⚖️"
+        },
+        {
+            "name": "Technical Support",
+            "roleId": "1477089477309501450",
+            "emoji": "💻"
+        }
+    ]
+}

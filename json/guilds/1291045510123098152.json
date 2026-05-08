@@ -1,0 +1,14 @@
+{
+    "setup": {
+        "completed": false,
+        "restartedAt": "2026-04-07T14:44:27.965Z",
+        "restartedBy": "761276320130662430",
+        "step": 3
+    },
+    "parentCategoryId": null,
+    "appealsChannelId": null,
+    "transcriptsChannelId": "1502374363419246787",
+    "managerRoleId": null,
+    "rolePermanence": true,
+    "tutorialEnabled": true
+}
