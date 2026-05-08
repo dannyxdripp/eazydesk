@@ -6,6 +6,15 @@ const { buildV2FromTemplate } = require('../utils/components-v2-messages');
 const TAG_CREATE_CONFIRM_ID = 'tag_create_confirm';
 const TAG_CREATE_CANCEL_ID = 'tag_create_cancel';
 
+const RESPONSES = {
+    notFoundTitle: 'Tag Not Found',
+    notFoundDescription: 'No matching tag was found.',
+    sentTitle: 'Tag Sent',
+    sentDescription: 'Tag **{tag}** has been posted.',
+    unavailableTitle: 'Not Available',
+    unavailableDescription: 'Tag management buttons are no longer used. Use slash commands instead.'
+};
+
 function buildEmbed(title, description, color = 0x5865F2) {
     return buildV2FromTemplate(ticketStore, resolveEmbedByTitle, title, description, color);
 }
@@ -69,7 +78,7 @@ module.exports = {
         }
 
         if (!tag) {
-            const base = buildEmbed('Tag Not Found', 'No matching tag was found.', 0xED4245);
+            const base = buildEmbed(RESPONSES.notFoundTitle, RESPONSES.notFoundDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
@@ -77,13 +86,13 @@ module.exports = {
 
         ticketStore.recordTagUsageForGuild(tag.name, interaction.guildId);
         {
-            const base = buildEmbed('Tag Sent', `Tag **${tag.name}** has been posted.`, 0x57F287);
+            const base = buildEmbed(RESPONSES.sentTitle, RESPONSES.sentDescription.replace('{tag}', tag.name), 0x57F287);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
     },
 
     async handleButton(interaction) {
-        const base = buildEmbed('Not Available', 'Tag management buttons are no longer used. Use slash commands instead.', 0xFEE75C);
+        const base = buildEmbed(RESPONSES.unavailableTitle, RESPONSES.unavailableDescription, 0xFEE75C);
         return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
     }
 };

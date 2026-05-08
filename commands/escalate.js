@@ -4,6 +4,18 @@ const { resolveEmbedByTitle } = require('../utils/embed-config');
 const { buildV2FromTemplate, buildV2Notice } = require('../utils/components-v2-messages');
 const { resolveEscalationRoleId } = require('../utils/guild-defaults');
 
+const RESPONSES = {
+    invalidChannelTitle: 'Invalid Channel',
+    invalidChannelDescription: 'This command can only be used in ticket channels.',
+    deniedTitle: 'Permission Denied',
+    deniedDescription: 'Only configured ticket staff or managers can escalate tickets.',
+    invalidEscalationTitle: 'Invalid Escalation',
+    invalidEscalationDescription: 'Invalid escalation level.',
+    escalatedTitle: 'Ticket Escalated',
+    updatedTitle: 'Escalation Updated',
+    updatedDescription: 'Ticket escalated to {level} successfully.'
+};
+
 function buildMessage(title, description, color = 0x5865F2) {
     return buildV2FromTemplate(ticketStore, resolveEmbedByTitle, title, description, color);
 }
@@ -46,12 +58,12 @@ module.exports = {
         const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
 
         if (!ticket) {
-            const base = buildMessage('Invalid Channel', 'This command can only be used in ticket channels.', 0xED4245);
+            const base = buildMessage(RESPONSES.invalidChannelTitle, RESPONSES.invalidChannelDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         if (!hasEscalationPermission(interaction, ticket)) {
-            const base = buildMessage('Permission Denied', 'Only configured ticket staff or managers can escalate tickets.', 0xED4245);
+            const base = buildMessage(RESPONSES.deniedTitle, RESPONSES.deniedDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
@@ -72,7 +84,7 @@ module.exports = {
                 break;
             default:
                 {
-                    const base = buildMessage('Invalid Escalation', 'Invalid escalation level.', 0xED4245);
+                    const base = buildMessage(RESPONSES.invalidEscalationTitle, RESPONSES.invalidEscalationDescription, 0xED4245);
                     return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
                 }
         }
@@ -88,7 +100,7 @@ module.exports = {
         }
 
         await ticketChannel.send(buildV2Notice(
-            'Ticket Escalated',
+            RESPONSES.escalatedTitle,
             escalationPing ? `${escalationPing}\n\n${description}` : description,
             color
         ));
@@ -98,7 +110,7 @@ module.exports = {
         ticketStore.saveActiveStorage(activeStorage);
 
         {
-            const base = buildMessage('Escalation Updated', `Ticket escalated to ${level.replace(/\b\w/g, l => l.toUpperCase())} successfully.`, 0x57F287);
+            const base = buildMessage(RESPONSES.updatedTitle, RESPONSES.updatedDescription.replace('{level}', level.replace(/\b\w/g, l => l.toUpperCase())), 0x57F287);
             await interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
     },

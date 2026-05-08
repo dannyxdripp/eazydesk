@@ -3,6 +3,11 @@ const ticketStore = require('../utils/ticket-store');
 const { resolveEmbedByTitle } = require('../utils/embed-config');
 const { buildV2FromTemplate } = require('../utils/components-v2-messages');
 
+const RESPONSES = {
+    statsTitle: 'Ticket Statistics',
+    noHistorySuggestion: 'Suggested close prompts:\n- No historical close request prompts yet.'
+};
+
 const WINDOWS = [7, 14, 30];
 
 function buildMessage(title, description, color = 0x5865F2) {
@@ -62,7 +67,7 @@ module.exports = {
             const forUser = ticketStore.getTopCloseRequestReasons(days, targetUser.id, 3, activeStorage);
             const source = forUser.length ? 'user' : 'global';
             const list = forUser.length ? forUser : ticketStore.getTopCloseRequestReasons(days, null, 3, activeStorage);
-            if (!list.length) return { source, text: 'Suggested close prompts:\n- No historical close request prompts yet.' };
+            if (!list.length) return { source, text: RESPONSES.noHistorySuggestion };
             return {
                 source,
                 text: `Suggested close prompts (${source === 'user' ? 'from this user' : 'from server usage'}):\n${list
@@ -72,7 +77,7 @@ module.exports = {
         })();
 
         const base = buildMessage(
-            'Ticket Statistics',
+            RESPONSES.statsTitle,
             [
                 `User: ${targetUser}`,
                 `Window: Last ${days} days`,

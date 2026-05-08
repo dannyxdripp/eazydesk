@@ -4,6 +4,16 @@ const closeRequestCommand = require('./closerequest');
 const { buildV2Notice } = require('../utils/components-v2-messages');
 const { resolveManagerRoleId } = require('../utils/guild-defaults');
 
+const RESPONSES = {
+    invalidContextTitle: 'Invalid Context',
+    invalidContextDescription: 'This command can only be used in a server.',
+    deniedTitle: 'Permission Denied',
+    deniedDescription: 'You do not have permission to use this command.',
+    confirmTitle: 'Confirmation Required',
+    confirmDescription: 'Re-run with `confirm: true` to proceed.',
+    completeTitle: 'Mass Close Complete'
+};
+
 function normalize(value) {
     return ticketStore.normalizeType(String(value || ''));
 }
@@ -39,19 +49,19 @@ module.exports = {
 
     async execute(interaction) {
         if (!interaction.inGuild?.() || !interaction.guild) {
-            const base = buildV2Notice('Invalid Context', 'This command can only be used in a server.', 0xED4245);
+            const base = buildV2Notice(RESPONSES.invalidContextTitle, RESPONSES.invalidContextDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         const managerRoleId = resolveManagerRoleId(interaction.guildId);
         if (!managerRoleId || !interaction.member?.roles?.cache?.has(managerRoleId)) {
-            const base = buildV2Notice('Permission Denied', 'You do not have permission to use this command.', 0xED4245);
+            const base = buildV2Notice(RESPONSES.deniedTitle, RESPONSES.deniedDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         const confirm = Boolean(interaction.options.getBoolean('confirm', true));
         if (!confirm) {
-            const base = buildV2Notice('Confirmation Required', 'Re-run with `confirm: true` to proceed.', 0xFEE75C);
+            const base = buildV2Notice(RESPONSES.confirmTitle, RESPONSES.confirmDescription, 0xFEE75C);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
@@ -100,7 +110,7 @@ module.exports = {
                 : null
         ].filter(Boolean).join('\n');
 
-        const base = buildV2Notice('Mass Close Complete', summary, failed.length ? 0xFEE75C : 0x57F287);
+        const base = buildV2Notice(RESPONSES.completeTitle, summary, failed.length ? 0xFEE75C : 0x57F287);
         return interaction.editReply(base);
     }
 };

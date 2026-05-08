@@ -238,7 +238,7 @@ function createHomeHtml(options = {}) {
     </div>
     <nav class="nav">
       <a class="nav-link" href="/documentation">Docs</a>
-      <a class="nav-link" href="/overview">Open Dashboard</a>
+      <a class="nav-link" href="/controller">Open Dashboard</a>
     </nav>
   </header>
 
@@ -250,7 +250,7 @@ function createHomeHtml(options = {}) {
         Configure ticket types, tags, embeds, availability and more from a modern dashboard&mdash;built for fast iteration.
       </p>
       <div class="cta">
-        <a class="btn primary" href="/overview">Open Dashboard</a>
+        <a class="btn primary" href="/controller">Open Dashboard</a>
         <a class="btn ghost" href="/documentation">Documentation</a>
       </div>
       <div class="note">
@@ -342,7 +342,7 @@ function createControllerHtml() {
     const body = `
       <div class="card">
         <h2 style="margin:0 0 6px">Controller Panel</h2>
-        <div class="muted">Owner-only control over every guild this bot is in.</div>
+        <div class="muted">Choose a server, jump into its dashboard, or restart setup when you need a clean pass.</div>
         <div id="ctrlError" class="err" style="display:none;margin-top:12px"></div>
         <div id="guildList" class="list"></div>
       </div>
@@ -353,10 +353,12 @@ function createControllerHtml() {
       const err=document.getElementById('ctrlError');
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
       async function api(path,opt){const r=await fetch(path,{credentials:'include',...(opt||{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
-      function item(g){const icon=g.iconURL?'<img src=\"'+esc(g.iconURL)+'\" style=\"width:28px;height:28px;border-radius:10px\" />':'';return '<div class=\"item\">'+
-        '<div class=\"row\" style=\"gap:10px\">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class=\"muted\">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
+      function item(g){const icon=g.iconURL?'<img src=\"'+esc(g.iconURL)+'\" style=\"width:28px;height:28px;border-radius:10px\" />':'';const status=g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Step '+esc(g.setupStep||1)+'</span>';return '<div class=\"item\">'+
+        '<div class=\"row\" style=\"gap:10px\">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class=\"muted\">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+status+'</div>'+
         '<div class=\"row\">'+
-          '<a class=\"btn primary\" href=\"/setup?guild='+encodeURIComponent(g.id)+'\">Open Setup</a>'+
+          '<a class=\"btn primary\" href=\"/overview?guild='+encodeURIComponent(g.id)+'\">Open Dashboard</a>'+
+          '<a class=\"btn\" href=\"/setup?guild='+encodeURIComponent(g.id)+'&page=1\">Open Setup</a>'+
+          '<a class=\"btn\" href=\"/tickets?guild='+encodeURIComponent(g.id)+'\">Tickets</a>'+
           '<button class=\"btn\" data-restart=\"'+esc(g.id)+'\">Restart Setup</button>'+
         '</div>'+
       '</div>'}
@@ -411,7 +413,7 @@ function createSetupHtml() {
               <div class="setup-title">Server Setup</div>
               <div class="muted setup-sub">Walk through the setup in a few clean steps. You can create the needed channels from here, enable a small tutorial, and keep claimer access stable with role permanence.</div>
             </div>
-            <a class="btn" href="/overview">Open Dashboard</a>
+            <a class="btn" id="setupOpenDashboardLink" href="/overview">Open Dashboard</a>
           </div>
           <div class="setup-progress"><div id="setupProgressBar" class="setup-progress-bar"></div></div>
           <div id="setupStepPills" class="setup-steps">
@@ -532,6 +534,7 @@ function createSetupHtml() {
     const script = `
       const qs=new URLSearchParams(location.search);
       const err=document.getElementById('setupError');
+      const dashboardLink=document.getElementById('setupOpenDashboardLink');
       const guildSelect=document.getElementById('guildSelect');
       const parentCategoryId=document.getElementById('parentCategoryId');
       const appealsChannelId=document.getElementById('appealsChannelId');
@@ -556,8 +559,9 @@ function createSetupHtml() {
       function opt(id,label,selected){return '<option value=\"'+esc(id)+'\" '+(selected?'selected':'')+'>'+esc(label)+'</option>'}
       function fillSelect(el,items,emptyLabel,selected){const rows=['<option value=\"\">'+esc(emptyLabel)+'</option>'].concat(items.map(it=>opt(it.id,it.label||it.name||it.id,selected===it.id)));el.innerHTML=rows.join('')}
       let catalogs={ roles:[], channels:[], categories:[] };
+      function syncPageState(){if(guildSelect&&guildSelect.value)qs.set('guild',guildSelect.value);if(currentStep)qs.set('page',String(currentStep));history.replaceState(null,'','?'+qs.toString());if(dashboardLink)dashboardLink.href='/overview'+(guildSelect&&guildSelect.value?('?guild='+encodeURIComponent(guildSelect.value)):'');}
       function setLocked(locked){setupLocked=!!locked;for(const el of [parentCategoryId,appealsChannelId,transcriptsChannelId,managerRoleId,highEscalationRoleId,immediateEscalationRoleId,rolePermanence,tutorialEnabled]){if(el)el.disabled=setupLocked}for(const btn of document.querySelectorAll('[data-create-kind],#initTemplate,#saveChannels,#saveRoles,#saveSetup,#markComplete')){if(btn)btn.disabled=setupLocked}if(saveBtn)saveBtn.style.display=setupLocked?'none':'';if(doneBtn)doneBtn.style.display=setupLocked?'none':'';if(restartBtn)restartBtn.style.display=setupLocked?'':'none';}
-      function gotoStep(step){const safe=Math.max(1,Math.min(4,Number(step)||1));currentStep=safe;stages.forEach(stage=>stage.classList.toggle('active',Number(stage.dataset.step)===safe));stepPills.forEach((pill,index)=>{const n=index+1;pill.classList.toggle('active',n===safe);pill.classList.toggle('done',n<safe)});if(progressBar)progressBar.style.width=(safe/4*100)+'%';renderSummary()}
+      function gotoStep(step){const safe=Math.max(1,Math.min(4,Number(step)||1));currentStep=safe;stages.forEach(stage=>stage.classList.toggle('active',Number(stage.dataset.step)===safe));stepPills.forEach((pill,index)=>{const n=index+1;pill.classList.toggle('active',n===safe);pill.classList.toggle('done',n<safe)});if(progressBar)progressBar.style.width=(safe/4*100)+'%';syncPageState();renderSummary()}
       function configPayload(){return{guildId:guildSelect.value,parentCategoryId:parentCategoryId.value||null,appealsChannelId:appealsChannelId.value||null,transcriptsChannelId:transcriptsChannelId.value||null,managerRoleId:managerRoleId.value||null,escalationRoles:{high:highEscalationRoleId.value||null,immediate:immediateEscalationRoleId.value||null},rolePermanence:!!rolePermanence.checked,tutorialEnabled:!!tutorialEnabled.checked,setup:{step:currentStep}}}
       function readLabel(selectEl){if(!selectEl)return 'Not set';const option=selectEl.options[selectEl.selectedIndex];return option&&option.value?option.text:'Not set'}
       function renderSummary(){if(!summary)return;summary.innerHTML=''+
@@ -571,8 +575,8 @@ function createSetupHtml() {
         '<div class=\"item\"><div><strong>Role Permanence</strong><div class=\"muted\">'+(rolePermanence.checked?'Enabled':'Disabled')+'</div></div></div>'+
         '<div class=\"item\"><div><strong>Tutorial</strong><div class=\"muted\">'+(tutorialEnabled.checked?'Enabled':'Disabled')+'</div></div></div>';}
       async function loadCatalogs(){const ch=await api('/api/channels');const cats=await api('/api/categories');const roles=await api('/api/roles');catalogs.channels=Array.isArray(ch.channels)?ch.channels:[];catalogs.categories=Array.isArray(cats.categories)?cats.categories:[];catalogs.roles=Array.isArray(roles.roles)?roles.roles:[];fillSelect(parentCategoryId,catalogs.categories,'Not set',null);const texts=catalogs.channels.filter(c=>c.type==='text');fillSelect(appealsChannelId,texts,'Not set',null);fillSelect(transcriptsChannelId,texts,'Not set',null);fillSelect(managerRoleId,catalogs.roles,'Optional',null);fillSelect(highEscalationRoleId,catalogs.roles,'Optional',null);fillSelect(immediateEscalationRoleId,catalogs.roles,'Optional',null)}
-      async function loadGuilds(){const data=await api('/api/my/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];guildSelect.innerHTML=guilds.map(g=>'<option value=\"'+esc(g.id)+'\">'+esc(g.name)+' ('+esc(g.id)+')</option>').join('')||'<option value=\"\">No guilds found</option>';const preset=qs.get('guild');if(preset&&guilds.some(g=>g.id===preset))guildSelect.value=preset}
-      async function loadConfig(){const gid=guildSelect.value; if(!gid) return; const data=await api('/api/guild-config?guildId='+encodeURIComponent(gid)); const c=data.config||{}; parentCategoryId.value=c.parentCategoryId||''; appealsChannelId.value=c.appealsChannelId||''; transcriptsChannelId.value=c.transcriptsChannelId||''; managerRoleId.value=c.managerRoleId||''; highEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.high)||''; immediateEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.immediate)||''; rolePermanence.checked=c.rolePermanence!==false; tutorialEnabled.checked=!!c.tutorialEnabled; setLocked(Boolean(c&&c.setup&&c.setup.completed)); gotoStep(c&&c.setup&&c.setup.completed?4:(c&&c.setup&&c.setup.step)||1);}
+      async function loadGuilds(){const data=await api('/api/my/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];guildSelect.innerHTML=guilds.map(g=>'<option value=\"'+esc(g.id)+'\">'+esc(g.name)+' ('+esc(g.id)+')</option>').join('')||'<option value=\"\">No guilds found</option>';const preset=qs.get('guild');if(preset&&guilds.some(g=>g.id===preset))guildSelect.value=preset;syncPageState()}
+      async function loadConfig(){const gid=guildSelect.value; if(!gid) return; const data=await api('/api/guild-config?guildId='+encodeURIComponent(gid)); const c=data.config||{}; parentCategoryId.value=c.parentCategoryId||''; appealsChannelId.value=c.appealsChannelId||''; transcriptsChannelId.value=c.transcriptsChannelId||''; managerRoleId.value=c.managerRoleId||''; highEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.high)||''; immediateEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.immediate)||''; rolePermanence.checked=c.rolePermanence!==false; tutorialEnabled.checked=!!c.tutorialEnabled; setLocked(Boolean(c&&c.setup&&c.setup.completed)); const requestedPage=Number(qs.get('page')||0); const configStep=Number(c&&c.setup&&c.setup.step)||1; gotoStep(c&&c.setup&&c.setup.completed?4:(requestedPage||configStep));}
       async function saveConfig(extra){const payload={...configPayload(),...(extra||{})};await api('/api/guild-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})}
       saveBtn.onclick=async()=>{try{err.style.display='none';await saveConfig();saveBtn.textContent='Saved';setTimeout(()=>saveBtn.textContent='Save all',1000)}catch(e){err.style.display='block';err.textContent=e.message}};
       doneBtn.onclick=async()=>{try{err.style.display='none';await saveConfig({setupComplete:true,setup:{step:4}});doneBtn.textContent='Completed';setTimeout(()=>doneBtn.textContent='Mark complete',1200);await loadConfig()}catch(e){err.style.display='block';err.textContent=e.message}};
@@ -587,7 +591,7 @@ function createSetupHtml() {
       document.getElementById('stepNext2').onclick=async()=>{try{err.style.display='none';await saveConfig({setup:{step:2}});gotoStep(3)}catch(e){err.style.display='block';err.textContent=e.message}};
       document.getElementById('stepNext3').onclick=async()=>{try{err.style.display='none';await saveConfig({setup:{step:3}});gotoStep(4)}catch(e){err.style.display='block';err.textContent=e.message}};
       [guildSelect,parentCategoryId,appealsChannelId,transcriptsChannelId,managerRoleId,highEscalationRoleId,immediateEscalationRoleId,rolePermanence,tutorialEnabled].forEach(el=>{if(el)el.onchange=renderSummary});
-      guildSelect.onchange=async()=>{qs.set('guild',guildSelect.value);history.replaceState(null,'','?'+qs.toString());try{await api('/api/state?guild='+encodeURIComponent(guildSelect.value))}catch{};await loadCatalogs();await loadConfig();};
+      guildSelect.onchange=async()=>{syncPageState();try{await api('/api/state?guild='+encodeURIComponent(guildSelect.value))}catch{};await loadCatalogs();await loadConfig();};
       (async()=>{try{gotoStep(1);await loadGuilds();try{await api('/api/state?guild='+encodeURIComponent(guildSelect.value))}catch{};await loadCatalogs();await loadConfig();renderSummary()}catch(e){err.style.display='block';err.textContent=e.message}})();
     `;
 
@@ -1240,12 +1244,17 @@ async function handleApi(req, res, url, client) {
         }
 
         const guilds = client?.guilds?.cache
-            ? [...client.guilds.cache.values()].map(g => ({
-                id: g.id,
-                name: g.name,
-                memberCount: g.memberCount ?? null,
-                iconURL: typeof g.iconURL === 'function' ? g.iconURL({ extension: 'png', size: 64 }) : null
-            })).sort((a, b) => String(a.name).localeCompare(String(b.name)))
+            ? [...client.guilds.cache.values()].map(g => {
+                const cfg = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(g.id, ticketStore.getActiveStorage()) : {};
+                return {
+                    id: g.id,
+                    name: g.name,
+                    memberCount: g.memberCount ?? null,
+                    iconURL: typeof g.iconURL === 'function' ? g.iconURL({ extension: 'png', size: 64 }) : null,
+                    setupCompleted: Boolean(cfg?.setup?.completed),
+                    setupStep: Number(cfg?.setup?.step || 1)
+                };
+            }).sort((a, b) => String(a.name).localeCompare(String(b.name)))
             : [];
 
         sendJson(res, 200, { guilds, ownerId: getBotOwnerId() });

@@ -4,6 +4,15 @@ const closeRequestCommand = require('./closerequest');
 const { resolveEmbedByTitle } = require('../utils/embed-config');
 const { buildV2FromTemplate } = require('../utils/components-v2-messages');
 
+const RESPONSES = {
+    invalidChannelTitle: 'Invalid Channel',
+    invalidChannelDescription: 'This command can only be used in ticket channels.',
+    closingTitle: 'Closing Ticket',
+    closingDescription: 'Reason: {reason}\nGenerating transcript...',
+    failedTitle: 'Close Failed',
+    failedDescription: 'Could not close this ticket. Check logs for details.'
+};
+
 function buildMessage(title, description, color = 0x5865F2) {
     return buildV2FromTemplate(ticketStore, resolveEmbedByTitle, title, description, color);
 }
@@ -24,19 +33,19 @@ module.exports = {
         const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
 
         if (!ticket) {
-            const base = buildMessage('Invalid Channel', 'This command can only be used in ticket channels.', 0xED4245);
+            const base = buildMessage(RESPONSES.invalidChannelTitle, RESPONSES.invalidChannelDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         {
-            const base = buildMessage('Closing Ticket', `Reason: ${reason}\nGenerating transcript...`, 0xFEE75C);
+            const base = buildMessage(RESPONSES.closingTitle, RESPONSES.closingDescription.replace('{reason}', reason), 0xFEE75C);
             await interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         try {
             await closeRequestCommand.closeTicketWithTranscript(ticketChannel, reason, interaction.user.id);
         } catch (error) {
-            const base = buildMessage('Close Failed', 'Could not close this ticket. Check logs for details.', 0xED4245);
+            const base = buildMessage(RESPONSES.failedTitle, RESPONSES.failedDescription, 0xED4245);
             await interaction.editReply({ ...base, flags: MessageFlags.Ephemeral | base.flags }).catch(() => null);
         }
     }

@@ -3,6 +3,21 @@ const ticketStore = require('../utils/ticket-store');
 const { resolveEmbedByTitle } = require('../utils/embed-config');
 const { buildV2FromTemplate } = require('../utils/components-v2-messages');
 
+const RESPONSES = {
+    invalidChannelTitle: 'Invalid Channel',
+    invalidChannelDescription: 'This command can only be used in ticket channels.',
+    invalidNameTitle: 'Invalid Name',
+    invalidNameDescription: 'Use letters, numbers, and hyphens for ticket names.',
+    noChangeTitle: 'No Change',
+    noChangeDescription: 'After formatting, this becomes `{name}`, which matches the current name.',
+    queuedTitle: 'Rename Queued',
+    queuedDescription: 'Changed by {user}\nRenaming channel to `{name}`...',
+    renamedTitle: 'Ticket Renamed',
+    renamedDescription: 'Changed by {user}\nNew name: `{name}`',
+    failedTitle: 'Rename Failed',
+    errorTitle: 'Command Error'
+};
+
 function buildMessage(title, description, color = 0x5865F2) {
     return buildV2FromTemplate(ticketStore, resolveEmbedByTitle, title, description, color);
 }
@@ -79,28 +94,28 @@ module.exports = {
             const ticket = ticketStore.getTicketByChannelId(ticketChannel.id);
 
             if (!ticket) {
-                return interaction.editReply(buildMessage('Invalid Channel', 'This command can only be used in ticket channels.', 0xED4245));
+                return interaction.editReply(buildMessage(RESPONSES.invalidChannelTitle, RESPONSES.invalidChannelDescription, 0xED4245));
             }
 
             const requestedName = interaction.options.getString('name', true);
             const nextName = normalizeChannelName(requestedName);
             if (!nextName) {
-                return interaction.editReply(buildMessage('Invalid Name', 'Use letters, numbers, and hyphens for ticket names.', 0xED4245));
+                return interaction.editReply(buildMessage(RESPONSES.invalidNameTitle, RESPONSES.invalidNameDescription, 0xED4245));
             }
 
             if ((ticketChannel.name || '').toLowerCase() === nextName.toLowerCase()) {
-                return interaction.editReply(buildMessage('No Change', `After formatting, this becomes \`${nextName}\`, which matches the current name.`, 0xFEE75C));
+                return interaction.editReply(buildMessage(RESPONSES.noChangeTitle, RESPONSES.noChangeDescription.replace('{name}', nextName), 0xFEE75C));
             }
 
-            await interaction.editReply(buildMessage('Rename Queued', `Changed by ${interaction.user}\nRenaming channel to \`${nextName}\`...`, 0x5865F2));
+            await interaction.editReply(buildMessage(RESPONSES.queuedTitle, RESPONSES.queuedDescription.replace('{user}', String(interaction.user)).replace('{name}', nextName), 0x5865F2));
 
             runDeferredTask(async () => {
                 try {
                     await renameChannelWithRetry(ticketChannel, nextName);
-                    await interaction.editReply(buildMessage('Ticket Renamed', `Changed by ${interaction.user}\nNew name: \`${nextName}\``, 0x57F287));
+                    await interaction.editReply(buildMessage(RESPONSES.renamedTitle, RESPONSES.renamedDescription.replace('{user}', String(interaction.user)).replace('{name}', nextName), 0x57F287));
                 } catch (error) {
                     const message = describeRenameError(error);
-                    await interaction.editReply(buildMessage('Rename Failed', message, 0xED4245)).catch(() => null);
+                    await interaction.editReply(buildMessage(RESPONSES.failedTitle, message, 0xED4245)).catch(() => null);
                 }
             });
             return null;
@@ -109,9 +124,9 @@ module.exports = {
             if (error?.code === 10062) return null;
             const message = describeRenameError(error);
             if (interaction.deferred || interaction.replied) {
-                return interaction.editReply(buildMessage('Command Error', message, 0xED4245)).catch(() => null);
+                return interaction.editReply(buildMessage(RESPONSES.errorTitle, message, 0xED4245)).catch(() => null);
             }
-            return interaction.reply(buildMessage('Command Error', message, 0xED4245)).catch(() => null);
+            return interaction.reply(buildMessage(RESPONSES.errorTitle, message, 0xED4245)).catch(() => null);
         }
     }
 };

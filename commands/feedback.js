@@ -13,6 +13,23 @@ const RATING_ID = 'feedback:rating';
 const COMMENT_ID = 'feedback:comment';
 const { resolveAppealsChannelId } = require('../utils/guild-defaults');
 
+const RESPONSES = {
+    invalidChannelTitle: 'Invalid Channel',
+    invalidChannelDescription: 'This command can only be used in an active ticket channel.',
+    deniedTitle: 'Permission Denied',
+    deniedDescription: 'Only the ticket opener can submit feedback for this ticket.',
+    noStaffTitle: 'No Staff Member',
+    noStaffDescription: 'This ticket has not been claimed yet, so there is nobody to rate.',
+    invalidRatingTitle: 'Invalid Rating',
+    invalidRatingDescription: 'Please enter a number from 1 to 5.',
+    notConfiguredTitle: 'Feedback Channel Not Configured',
+    notConfiguredDescription: 'An admin needs to configure this server’s feedback channel in the Setup page.',
+    channelErrorTitle: 'Feedback Channel Error',
+    channelErrorDescription: 'Feedback channel ({channelId}) is not configured or inaccessible.',
+    newFeedbackTitle: 'New Feedback',
+    thanksDescription: 'Thank you for your feedback.'
+};
+
 function getFeedbackChannelId(guildId) {
     return resolveAppealsChannelId(guildId);
 }
@@ -29,18 +46,18 @@ module.exports = {
         const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
 
         if (!ticket) {
-            const base = buildV2Notice('Invalid Channel', 'This command can only be used in an active ticket channel.', 0xED4245);
+            const base = buildV2Notice(RESPONSES.invalidChannelTitle, RESPONSES.invalidChannelDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         if (ticket.createdBy && ticket.createdBy !== interaction.user.id) {
-            const base = buildV2Notice('Permission Denied', 'Only the ticket opener can submit feedback for this ticket.', 0xED4245);
+            const base = buildV2Notice(RESPONSES.deniedTitle, RESPONSES.deniedDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         const staffId = ticket.claimedBy || null;
         if (!staffId) {
-            const base = buildV2Notice('No Staff Member', 'This ticket has not been claimed yet, so there is nobody to rate.', 0xFEE75C);
+            const base = buildV2Notice(RESPONSES.noStaffTitle, RESPONSES.noStaffDescription, 0xFEE75C);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
@@ -81,25 +98,25 @@ module.exports = {
         const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
 
         if (!ticket) {
-            const base = buildV2Notice('Invalid Channel', 'This action is only available in an active ticket channel.', 0xED4245);
+            const base = buildV2Notice(RESPONSES.invalidChannelTitle, RESPONSES.invalidChannelDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         if (ticket.createdBy && ticket.createdBy !== interaction.user.id) {
-            const base = buildV2Notice('Permission Denied', 'Only the ticket opener can submit feedback for this ticket.', 0xED4245);
+            const base = buildV2Notice(RESPONSES.deniedTitle, RESPONSES.deniedDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         const staffId = ticket.claimedBy || null;
         if (!staffId) {
-            const base = buildV2Notice('No Staff Member', 'This ticket has not been claimed yet, so there is nobody to rate.', 0xFEE75C);
+            const base = buildV2Notice(RESPONSES.noStaffTitle, RESPONSES.noStaffDescription, 0xFEE75C);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         const ratingRaw = String(interaction.fields.getTextInputValue(RATING_ID) || '').trim();
         const rating = Number.parseInt(ratingRaw, 10);
         if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-            const base = buildV2Notice('Invalid Rating', 'Please enter a number from 1 to 5.', 0xED4245);
+            const base = buildV2Notice(RESPONSES.invalidRatingTitle, RESPONSES.invalidRatingDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
@@ -107,17 +124,17 @@ module.exports = {
 
         const feedbackChannelId = getFeedbackChannelId(interaction.guildId);
         if (!feedbackChannelId) {
-            const base = buildV2Notice('Feedback Channel Not Configured', 'An admin needs to configure this server’s feedback channel in the Setup page.', 0xFEE75C);
+            const base = buildV2Notice(RESPONSES.notConfiguredTitle, RESPONSES.notConfiguredDescription, 0xFEE75C);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
         const feedbackChannel = await interaction.client.channels.fetch(feedbackChannelId).catch(() => null);
         if (!feedbackChannel || !feedbackChannel.isTextBased()) {
-            const base = buildV2Notice('Feedback Channel Error', `Feedback channel (${feedbackChannelId}) is not configured or inaccessible.`, 0xED4245);
+            const base = buildV2Notice(RESPONSES.channelErrorTitle, RESPONSES.channelErrorDescription.replace('{channelId}', feedbackChannelId), 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         await feedbackChannel.send(buildV2Notice(
-            'New Feedback',
+            RESPONSES.newFeedbackTitle,
             [
                 `Ticket: <#${ticketChannel.id}>`,
                 `Ticket type: **${ticket.ticketType || 'Unknown'}**`,
@@ -129,7 +146,7 @@ module.exports = {
             0x5865F2
         ));
 
-        const base = buildV2Notice('', 'Thank you for your feedback.', 0x5865F2);
+        const base = buildV2Notice('', RESPONSES.thanksDescription, 0x5865F2);
         return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
     }
 };

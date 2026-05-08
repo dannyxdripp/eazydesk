@@ -4,6 +4,20 @@ const { resolveEmbedByTitle } = require('../utils/embed-config');
 const { buildV2FromTemplate } = require('../utils/components-v2-messages');
 
 const OWNER_ID = process.env.BOT_OWNER_ID || process.env.OWNER_ID || '';
+const RESPONSES = {
+    deniedTitle: 'Permission Denied',
+    deniedDescription: 'This command is owner-only.',
+    invalidLinkTitle: 'Invalid Message Link',
+    invalidLinkDescription: 'Provide a valid Discord message link.',
+    invalidShareTitle: 'Invalid Discohook Share Link',
+    invalidShareDescription: 'Could not extract a valid message payload (content/embeds/components) from that link.',
+    channelMissingTitle: 'Channel Not Found',
+    channelMissingDescription: 'Could not access the target channel.',
+    updatedTitle: 'Embed Updated',
+    updatedDescription: 'Updated message `{messageId}` from Discohook payload.',
+    failedTitle: 'Edit Failed',
+    failedDescription: 'Failed to edit that message. Check link access and bot permissions.'
+};
 
 function buildEmbed(title, description, color = 0x5865F2) {
     return buildV2FromTemplate(ticketStore, resolveEmbedByTitle, title, description, color);
@@ -202,7 +216,7 @@ module.exports = {
 
     async execute(interaction) {
         if (interaction.user.id !== OWNER_ID) {
-            const base = buildEmbed('Permission Denied', 'This command is owner-only.', 0xED4245);
+            const base = buildEmbed(RESPONSES.deniedTitle, RESPONSES.deniedDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
@@ -211,7 +225,7 @@ module.exports = {
         const parsedLink = parseMessageLink(messageLink);
 
         if (!parsedLink) {
-            const base = buildEmbed('Invalid Message Link', 'Provide a valid Discord message link.', 0xED4245);
+            const base = buildEmbed(RESPONSES.invalidLinkTitle, RESPONSES.invalidLinkDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
@@ -220,8 +234,8 @@ module.exports = {
         const payload = await parseDiscohookToMessagePayload(discohookLink);
         if (!payload) {
             return interaction.editReply(buildEmbed(
-                'Invalid Discohook Share Link',
-                'Could not extract a valid message payload (content/embeds/components) from that link.',
+                RESPONSES.invalidShareTitle,
+                RESPONSES.invalidShareDescription,
                 0xED4245
             ));
         }
@@ -229,16 +243,16 @@ module.exports = {
         try {
             const channel = await interaction.client.channels.fetch(parsedLink.channelId);
             if (!channel || !channel.isTextBased()) {
-                return interaction.editReply(buildEmbed('Channel Not Found', 'Could not access the target channel.', 0xED4245));
+                return interaction.editReply(buildEmbed(RESPONSES.channelMissingTitle, RESPONSES.channelMissingDescription, 0xED4245));
             }
 
             const message = await channel.messages.fetch(parsedLink.messageId);
             await message.edit(payload);
 
-            return interaction.editReply(buildEmbed('Embed Updated', `Updated message \`${parsedLink.messageId}\` from Discohook payload.`, 0x57F287));
+            return interaction.editReply(buildEmbed(RESPONSES.updatedTitle, RESPONSES.updatedDescription.replace('{messageId}', parsedLink.messageId), 0x57F287));
         } catch (error) {
             console.error('Error editing embed from Discohook:', error);
-            return interaction.editReply(buildEmbed('Edit Failed', 'Failed to edit that message. Check link access and bot permissions.', 0xED4245));
+            return interaction.editReply(buildEmbed(RESPONSES.failedTitle, RESPONSES.failedDescription, 0xED4245));
         }
     }
 };

@@ -19,6 +19,18 @@ const { resolveTranscriptsChannelId } = require('../utils/guild-defaults');
 
 const CLOSE_NOW_ID = 'closerequest_close_now';
 const CANCEL_ID = 'closerequest_cancel';
+const RESPONSES = {
+    invalidChannelTitle: 'Invalid Channel',
+    invalidChannelDescription: 'This command can only be used in ticket channels.',
+    noRequestTitle: 'No Active Request',
+    noRequestDescription: 'There is no active close request for this ticket.',
+    deniedTitle: 'Permission Denied',
+    deniedDescription: 'Only the ticket opener can action this close request.',
+    cancelledTitle: 'Close Request Cancelled',
+    cancelledDescription: 'The pending close request has been cancelled.',
+    closingNowTitle: 'Closing Ticket',
+    closingNowDescription: 'Closing now and generating transcript...'
+};
 
 function buildEmbed(title, description, color = 0x5865F2) {
     return buildV2FromTemplate(ticketStore, resolveEmbedByTitle, title, description, color);
@@ -201,7 +213,7 @@ module.exports = {
         const ticketChannel = interaction.channel;
 
         if (!ticketStore.getTicketByChannelId(ticketChannel.id)) {
-            const base = buildEmbed('Invalid Channel', 'This command can only be used in ticket channels.', 0xED4245);
+            const base = buildEmbed(RESPONSES.invalidChannelTitle, RESPONSES.invalidChannelDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
@@ -241,24 +253,24 @@ module.exports = {
         const ticket = ticketStore.getTicketByChannelId(ticketChannel.id);
 
         if (!request) {
-            const base = buildEmbed('No Active Request', 'There is no active close request for this ticket.', 0xED4245);
+            const base = buildEmbed(RESPONSES.noRequestTitle, RESPONSES.noRequestDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         if (ticket?.createdBy && ticket.createdBy !== interaction.user.id) {
-            const base = buildEmbed('Permission Denied', 'Only the ticket opener can action this close request.', 0xED4245);
+            const base = buildEmbed(RESPONSES.deniedTitle, RESPONSES.deniedDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         if (interaction.customId === CANCEL_ID) {
             ticketStore.removeCloseRequest(ticketChannel.id);
-            const base = buildEmbed('Close Request Cancelled', 'The pending close request has been cancelled.', 0x57F287);
+            const base = buildEmbed(RESPONSES.cancelledTitle, RESPONSES.cancelledDescription, 0x57F287);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         if (interaction.customId === CLOSE_NOW_ID) {
             {
-                const base = buildEmbed('Closing Ticket', 'Closing now and generating transcript...', 0xFEE75C);
+                const base = buildEmbed(RESPONSES.closingNowTitle, RESPONSES.closingNowDescription, 0xFEE75C);
                 await interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
             }
             await closeTicketWithTranscript(

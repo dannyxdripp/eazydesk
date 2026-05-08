@@ -5,6 +5,20 @@ const ticketHandler = require('../handlers/ticket-handler');
 const { buildV2FromTemplate } = require('../utils/components-v2-messages');
 const { resolveManagerRoleId } = require('../utils/guild-defaults');
 
+const RESPONSES = {
+    unavailableTitle: 'Unavailable',
+    unavailableDescription: 'This command can only be used in a server.',
+    deniedTitle: 'Permission Denied',
+    deniedDescriptionNoRole: 'Configure the manager role in the Setup page (or set `MANAGER_ROLE_ID` only for the test guild fallback).',
+    invalidSelectionTitle: 'Invalid Selection',
+    invalidSelectionDescription: 'Choose a specific ticket type when setting a status.',
+    invalidTypeTitle: 'Invalid Ticket Type',
+    invalidTypeDescription: 'Invalid ticket type selected.',
+    updatedTitle: 'Ticket Availability Updated',
+    currentTitle: 'Current Ticket Availability',
+    noTypesDescription: 'No ticket types found.'
+};
+
 const STATUS_CHOICES = [
     { name: 'Available', value: 'available' },
     { name: 'Increased Volume', value: 'increased_volume' },
@@ -72,7 +86,7 @@ module.exports = {
 
     async execute(interaction) {
         if (!interaction.inGuild()) {
-            const base = buildMessage('Unavailable', 'This command can only be used in a server.', 0xED4245);
+            const base = buildMessage(RESPONSES.unavailableTitle, RESPONSES.unavailableDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
@@ -80,8 +94,8 @@ module.exports = {
             const managerRoleId = resolveManagerRoleId(interaction.guildId);
             const details = managerRoleId
                 ? `You need the configured manager role (<@&${managerRoleId}>) or server management permissions.`
-                : 'Configure the manager role in the Setup page (or set `MANAGER_ROLE_ID` only for the test guild fallback).';
-            const base = buildMessage('Permission Denied', details, 0xED4245);
+                : RESPONSES.deniedDescriptionNoRole;
+            const base = buildMessage(RESPONSES.deniedTitle, details, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
@@ -94,7 +108,7 @@ module.exports = {
         if (selectedStatus) {
             if (selectedType === 'all') {
                 if (selectedStatus !== 'auto') {
-                    const base = buildMessage('Invalid Selection', 'Choose a specific ticket type when setting a status.', 0xED4245);
+                    const base = buildMessage(RESPONSES.invalidSelectionTitle, RESPONSES.invalidSelectionDescription, 0xED4245);
                     return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
                 }
 
@@ -106,14 +120,14 @@ module.exports = {
                 }
 
                 return interaction.reply(buildMessage(
-                    'Ticket Availability Updated',
+                    RESPONSES.updatedTitle,
                     'Cleared manual overrides for **all** ticket types. Status now follows automatic thresholds.'
                 ));
             }
 
             const ticketType = ticketStore.findTicketType(selectedType, guildId);
             if (!ticketType) {
-                const base = buildMessage('Invalid Ticket Type', 'Invalid ticket type selected.', 0xED4245);
+                const base = buildMessage(RESPONSES.invalidTypeTitle, RESPONSES.invalidTypeDescription, 0xED4245);
                 return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
             }
 
@@ -141,7 +155,7 @@ module.exports = {
             const updated = ticketHandler.getEffectiveAvailability(refreshedStorage, ticketType.name, guildId);
             const mode = updated.source === 'manual' ? 'Manual Override' : 'Automatic Threshold';
             return interaction.reply(buildMessage(
-                    'Ticket Availability Updated',
+                    RESPONSES.updatedTitle,
                     `Ticket type: **${ticketType.name}**\n` +
                     `Status: **${toStatusLabel(updated.status)}**\n` +
                     `Mode: **${mode}**\n` +
@@ -156,19 +170,19 @@ module.exports = {
                 return `**${type.name}**: ${toStatusLabel(result.status)} (${result.count} active, ${mode})`;
             });
 
-            return interaction.reply(buildMessage('Current Ticket Availability', lines.join('\n') || 'No ticket types found.'));
+            return interaction.reply(buildMessage(RESPONSES.currentTitle, lines.join('\n') || RESPONSES.noTypesDescription));
         }
 
         const ticketType = ticketStore.findTicketType(selectedType, interaction.guildId);
         if (!ticketType) {
-            const base = buildMessage('Invalid Ticket Type', 'Invalid ticket type selected.', 0xED4245);
+            const base = buildMessage(RESPONSES.invalidTypeTitle, RESPONSES.invalidTypeDescription, 0xED4245);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
         const result = ticketHandler.getEffectiveAvailability(activeStorage, ticketType.name, guildId);
         const mode = result.source === 'manual' ? 'Manual Override' : 'Automatic Threshold';
         return interaction.reply(buildMessage(
-            'Current Ticket Availability',
+            RESPONSES.currentTitle,
             `Ticket type: **${ticketType.name}**\n` +
             `Status: **${toStatusLabel(result.status)}**\n` +
             `Mode: **${mode}**\n` +

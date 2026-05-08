@@ -5,6 +5,21 @@ const { resolveEmbedByTitle } = require('../utils/embed-config');
 const { buildV2FromTemplate, buildV2Notice } = require('../utils/components-v2-messages');
 const { resolveManagerRoleId } = require('../utils/guild-defaults');
 
+const RESPONSES = {
+    invalidChannelTitle: 'Invalid Channel',
+    invalidChannelDescription: 'This command can only be used in ticket channels.',
+    alreadyClaimedTitle: 'Already Claimed',
+    alreadyClaimedDescription: 'This ticket has been claimed by <@{userId}>.',
+    notClaimedTitle: 'Not Claimed',
+    notClaimedDescription: 'This ticket is not currently claimed.',
+    deniedTitle: 'Permission Denied',
+    deniedDescription: 'Only the current assignee or a manager can unclaim this ticket.',
+    claimedDescription: 'Ticket claimed by <@{userId}>',
+    unclaimedDescription: 'Ticket unclaimed (previous assignee: <@{userId}>)',
+    errorTitle: 'Command Error',
+    errorDescription: 'Failed to process claim action. Please try again.'
+};
+
 function buildMessage(title, description, color = 0x5865F2) {
     return buildV2FromTemplate(ticketStore, resolveEmbedByTitle, title, description, color);
 }
@@ -61,22 +76,22 @@ module.exports = {
             const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
 
             if (!ticket) {
-                return interaction.editReply(buildMessage('Invalid Channel', 'This command can only be used in ticket channels.', 0xED4245));
+                return interaction.editReply(buildMessage(RESPONSES.invalidChannelTitle, RESPONSES.invalidChannelDescription, 0xED4245));
             }
 
             if (action === 'claim' && ticket.claimedBy) {
-                return interaction.editReply(buildMessage('Already Claimed', `This ticket is already claimed by <@${ticket.claimedBy}>.`, 0xFEE75C));
+                return interaction.editReply(buildMessage(RESPONSES.alreadyClaimedTitle, RESPONSES.alreadyClaimedDescription.replace('{userId}', ticket.claimedBy), 0xFEE75C));
             }
 
             if (action !== 'claim' && !ticket.claimedBy) {
-                return interaction.editReply(buildMessage('Not Claimed', 'This ticket is not currently claimed.', 0xFEE75C));
+                return interaction.editReply(buildMessage(RESPONSES.notClaimedTitle, RESPONSES.notClaimedDescription, 0xFEE75C));
             }
 
             if (action !== 'claim') {
                 const managerRoleId = resolveManagerRoleId(interaction.guildId);
                 const canUnclaim = ticket.claimedBy === interaction.user.id || (managerRoleId && interaction.member.roles.cache.has(managerRoleId));
                 if (!canUnclaim) {
-                    return interaction.editReply(buildMessage('Permission Denied', 'Only the current assignee or a manager can unclaim this ticket.', 0xED4245));
+                    return interaction.editReply(buildMessage(RESPONSES.deniedTitle, RESPONSES.deniedDescription, 0xED4245));
                 }
             }
 
@@ -89,7 +104,7 @@ module.exports = {
                 ticketStore.saveActiveStorage(activeStorage);
                 ticketStore.recordStaffStatsEvent('claimed', interaction.user.id, ticketChannel.id, ticket.createdBy || null, null, activeStorage);
 
-                await interaction.editReply(buildV2Notice('', `Ticket claimed by <@${interaction.user.id}>`, 0x5865F2));
+                await interaction.editReply(buildV2Notice('', RESPONSES.claimedDescription.replace('{userId}', interaction.user.id), 0x5865F2));
 
                 runDeferredTask(async () => {
                     await syncClaimerOverwrite(ticketChannel, ticket, interaction.guildId, interaction.user.id, rolePermanence);
@@ -104,7 +119,7 @@ module.exports = {
             touchTicket(ticket, interaction.user.id);
             ticketStore.saveActiveStorage(activeStorage);
 
-            await interaction.editReply(buildV2Notice('', `Ticket unclaimed (previous assignee: <@${previousAssignee}>)`, 0x5865F2));
+            await interaction.editReply(buildV2Notice('', RESPONSES.unclaimedDescription.replace('{userId}', previousAssignee), 0x5865F2));
 
             runDeferredTask(async () => {
                 await syncClaimerOverwrite(ticketChannel, ticket, interaction.guildId, previousAssignee, false);
@@ -115,9 +130,9 @@ module.exports = {
             console.error('Error running claim command:', error);
             if (error?.code === 10062) return null;
             if (interaction.deferred || interaction.replied) {
-                return interaction.editReply(buildMessage('Command Error', 'Failed to process claim action. Please try again.', 0xED4245)).catch(() => null);
+                return interaction.editReply(buildMessage(RESPONSES.errorTitle, RESPONSES.errorDescription, 0xED4245)).catch(() => null);
             }
-            return interaction.reply(buildMessage('Command Error', 'Failed to process claim action. Please try again.', 0xED4245)).catch(() => null);
+            return interaction.reply(buildMessage(RESPONSES.errorTitle, RESPONSES.errorDescription, 0xED4245)).catch(() => null);
         }
     }
 };

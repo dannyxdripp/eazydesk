@@ -3,6 +3,20 @@ const ticketStore = require('../utils/ticket-store');
 const { resolveEmbedByTitle } = require('../utils/embed-config');
 const { buildV2FromTemplate } = require('../utils/components-v2-messages');
 
+const RESPONSES = {
+    invalidChannelTitle: 'Invalid Channel',
+    invalidChannelDescription: 'This command can only be used in ticket channels.',
+    invalidTeamTitle: 'Invalid Team',
+    invalidTeamDescription: 'Invalid support team specified.',
+    configTitle: 'Configuration Error',
+    configDescription: 'That team does not have a valid role configured in JSON.',
+    transferredBody: '<:transfer:1487470747097104575> **Ticket Transferred**\n> Ticket type changed from **{from}** to **{to}**\n-# Action by {user}',
+    warningTitle: 'Transfer Warning',
+    warningDescription: 'Team permissions update is delayed. Please retry `/transfer` in a few seconds.',
+    errorTitle: 'Command Error',
+    errorDescription: 'Failed to transfer ticket. Please try again.'
+};
+
 function buildMessage(title, description, color = 0x5865F2) {
     return buildV2FromTemplate(ticketStore, resolveEmbedByTitle, title, description, color);
 }
@@ -60,19 +74,19 @@ module.exports = {
             const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
 
             if (!ticket) {
-                return interaction.editReply(buildMessage('Invalid Channel', 'This command can only be used in ticket channels.', 0xED4245));
+                return interaction.editReply(buildMessage(RESPONSES.invalidChannelTitle, RESPONSES.invalidChannelDescription, 0xED4245));
             }
 
             const ticketType = ticketStore.findTicketType(teamValue, interaction.guildId);
             if (!ticketType) {
-                return interaction.editReply(buildMessage('Invalid Team', 'Invalid support team specified.', 0xED4245));
+                return interaction.editReply(buildMessage(RESPONSES.invalidTeamTitle, RESPONSES.invalidTeamDescription, 0xED4245));
             }
 
             const teamData = ticketStore.findSupportTeamForTicketType(ticketType.name, interaction.guildId);
             const teamRoleIds = ticketStore.getSupportTeamRoleIds(teamData);
 
             if (!teamRoleIds.length) {
-                return interaction.editReply(buildMessage('Configuration Error', 'That team does not have a valid role configured in JSON.', 0xED4245));
+                return interaction.editReply(buildMessage(RESPONSES.configTitle, RESPONSES.configDescription, 0xED4245));
             }
 
             const previousType = ticket.ticketType;
@@ -82,7 +96,10 @@ module.exports = {
 
             const container = new ContainerBuilder().addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(
-                    `<:transfer:1487470747097104575> **Ticket Transferred**\n> Ticket type changed from **${previousType || 'Unknown'}** to **${ticketType.name}**\n-# Action by ${interaction.user}`
+                    RESPONSES.transferredBody
+                        .replace('{from}', previousType || 'Unknown')
+                        .replace('{to}', ticketType.name)
+                        .replace('{user}', String(interaction.user))
                 )
             );
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
@@ -97,7 +114,7 @@ module.exports = {
                         await sleep(250);
                     }
                 } catch (error) {
-                    await interaction.followUp(buildMessage('Transfer Warning', 'Team permissions update is delayed. Please retry `/transfer` in a few seconds.', 0xFEE75C)).catch(() => null);
+                    await interaction.followUp(buildMessage(RESPONSES.warningTitle, RESPONSES.warningDescription, 0xFEE75C)).catch(() => null);
                     throw error;
                 }
             });
@@ -105,9 +122,9 @@ module.exports = {
             console.error('Error running transfer command:', error);
             if (error?.code === 10062) return null;
             if (interaction.deferred || interaction.replied) {
-                return interaction.editReply(buildMessage('Command Error', 'Failed to transfer ticket. Please try again.', 0xED4245)).catch(() => null);
+                return interaction.editReply(buildMessage(RESPONSES.errorTitle, RESPONSES.errorDescription, 0xED4245)).catch(() => null);
             }
-            return interaction.reply(buildMessage('Command Error', 'Failed to transfer ticket. Please try again.', 0xED4245)).catch(() => null);
+            return interaction.reply(buildMessage(RESPONSES.errorTitle, RESPONSES.errorDescription, 0xED4245)).catch(() => null);
         }
     }
 };
