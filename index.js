@@ -338,9 +338,10 @@ async function handleOwnerPrefixCommand(message, input, activeStorage) {
         const host = String(process.env.DASHBOARD_HOST || (process.env.DASHBOARD_TOKEN ? '0.0.0.0' : '127.0.0.1')).trim();
         const localUrl = `http://localhost:${port}/overview`;
         const bindUrl = `http://${host}:${port}/overview`;
+        const dashboardUrl = `${baseUrl}/dashboard`;
         const controllerUrl = `${baseUrl}/controller`;
         const setupUrl = `${baseUrl}/setup`;
-        await send('Dashboard', `Local: ${localUrl}\nBind: ${bindUrl}\nController: ${controllerUrl}\nSetup: ${setupUrl}`, 0x5865F2);
+        await send('Dashboard', `Local: ${localUrl}\nBind: ${bindUrl}\nDashboard: ${dashboardUrl}\nController: ${controllerUrl}\nSetup: ${setupUrl}`, 0x5865F2);
         return true;
     }
 

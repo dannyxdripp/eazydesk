@@ -162,13 +162,14 @@ function safeNextPath(value) {
 
 function safeDashboardNextPath(value) {
     const next = String(value || '').trim();
-    if (!next) return '/overview';
-    if (!next.startsWith('/')) return '/overview';
-    if (next.startsWith('//')) return '/overview';
+    if (!next) return '/dashboard';
+    if (!next.startsWith('/')) return '/dashboard';
+    if (next.startsWith('//')) return '/dashboard';
 
     const basePath = next.split('?')[0].split('#')[0];
     const allowed = new Set([
         '/',
+        '/dashboard',
         '/overview',
         '/settings',
         '/availability',
@@ -186,7 +187,7 @@ function safeDashboardNextPath(value) {
 
     if (allowed.has(basePath)) return next;
     if (basePath.startsWith('/t/')) return next;
-    return '/overview';
+    return '/dashboard';
 }
 
 function createHomeHtml(options = {}) {
@@ -238,7 +239,7 @@ function createHomeHtml(options = {}) {
     </div>
     <nav class="nav">
       <a class="nav-link" href="/documentation">Documentation</a>
-      <a class="nav-link" href="/controller">Dashboard</a>
+      <a class="nav-link" href="/dashboard">Dashboard</a>
     </nav>
   </header>
 
@@ -250,7 +251,7 @@ function createHomeHtml(options = {}) {
         Manage all the things for your bot with our new and improved sleek dashboard, no more bulky commands or confusing setups. Get it all in one place, and back doing what you do best.
       </p>
       <div class="cta">
-        <a class="btn primary" href="/controller">Visit your Dashboard</a>
+        <a class="btn primary" href="/dashboard">Visit your Dashboard</a>
         <a class="btn ghost" href="/documentation">Documentation</a>
       </div>
       <div class="note">
@@ -327,6 +328,7 @@ function baseDashboardPage({ title, body, script = '' }) {
   <header class="top">
     <a class="brand" href="/"><img src="/assets/sync.png" alt="logo" /><div class="title">${String(title || 'Dashboard')}</div></a>
     <nav class="nav">
+      <a class="btn" href="/dashboard">Servers</a>
       <a class="btn" href="/overview">Dashboard</a>
       <a class="btn" href="/setup">Setup</a>
       <a class="btn" href="/logout">Logout</a>
@@ -366,6 +368,37 @@ function createControllerHtml() {
     `;
 
     return baseDashboardPage({ title: 'Controller', body, script });
+}
+
+function createServerPickerHtml() {
+    const body = `
+      <div class="card">
+        <h2 style="margin:0 0 6px">Server Access</h2>
+        <div class="muted">This shows the servers your Discord account is in, whether the bot is in them too, and what elevated permissions you have in each server.</div>
+        <div id="guildError" class="err" style="display:none;margin-top:12px"></div>
+        <div id="guildList" class="list"></div>
+      </div>
+    `;
+
+    const script = `
+      const list=document.getElementById('guildList');
+      const err=document.getElementById('guildError');
+      function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
+      async function api(path,opt){const r=await fetch(path,{credentials:'include',...(opt||{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+      function renderPerms(g){const tags=[];tags.push(g.botInServer?'<span class="pill">Bot in server</span>':'<span class="pill">Bot not in server</span>');tags.push(g.isOwner?'<span class="pill">Owner</span>':'');tags.push(g.isAdmin?'<span class="pill">Administrator</span>':'');tags.push(!g.isAdmin&&g.canManageGuild?'<span class="pill">Manage Server</span>':'');tags.push(!g.isAdmin&&!g.canManageGuild&&g.canManageChannels?'<span class="pill">Manage Channels</span>':'');return tags.filter(Boolean).join('')}
+      function renderAction(g){if(g.botInServer&&g.canAccessDashboard)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a>';if(g.botInServer)return '<span class="muted">No dashboard permissions</span>';return '<span class="muted">Bot is not in this server</span>'}
+      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:28px;height:28px;border-radius:10px" />':'';const detail=Array.isArray(g.permissionSummary)&&g.permissionSummary.length?g.permissionSummary.map(esc).join(' • '):'No elevated permissions';return '<div class="item">'+
+        '<div style="display:grid;gap:8px;min-width:0">'+
+          '<div class="row" style="gap:10px">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class="pill">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
+          '<div class="row">'+renderPerms(g)+'</div>'+
+          '<div class="muted">'+detail+'</div>'+
+        '</div>'+
+        '<div class="row">'+renderAction(g)+'</div>'+
+      '</div>'}
+      async function load(){try{const data=await api('/api/dashboard/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="muted">No servers found for this account.</div>'}catch(e){err.style.display='block';err.textContent=e.message}}load();
+    `;
+
+    return baseDashboardPage({ title: 'Servers', body, script });
 }
 
 function createSetupHtml() {
@@ -623,7 +656,7 @@ function isAuthed(req) {
 
     if (hasDiscordOAuthConfigured()) {
         const userId = getDashboardSessionUserId(req);
-        if (userId && isDashboardUserAllowed(userId)) return true;
+        if (userId) return true;
     }
 
     if (!dashboardToken && !ownerToken) {
@@ -731,24 +764,20 @@ function getTranscriptSessionUserId(req) {
     return String(entry.userId || '').trim() || null;
 }
 
-function isDashboardUserAllowed(userId) {
-    const allowed = getDashboardAllowedUserIds();
-    const normalized = String(userId || '').trim();
-    if (!/^\d{17,20}$/.test(normalized)) return false;
-
-    // If no allowlist is configured, allow any Discord user to sign in.
-    if (!allowed.length) return true;
-
-    const ownerId = getBotOwnerId();
-    if (ownerId && normalized === ownerId) return true;
-    return allowed.includes(normalized);
-}
-
-function setDashboardSession(res, userId, guildIds = []) {
+function setDashboardSession(res, userId, guildIds = [], oauthGuilds = []) {
     const sessionId = randomToken();
     dashboardSessions.set(sessionId, {
         userId: String(userId),
         guildIds: Array.isArray(guildIds) ? guildIds.map(String) : [],
+        oauthGuilds: Array.isArray(oauthGuilds)
+            ? oauthGuilds.map(g => ({
+                id: String(g?.id || '').trim(),
+                name: String(g?.name || '').trim(),
+                icon: String(g?.icon || '').trim() || null,
+                owner: Boolean(g?.owner),
+                permissions: String(g?.permissions || '0').trim() || '0'
+            })).filter(g => /^\d{17,20}$/.test(g.id))
+            : [],
         createdAt: Date.now()
     });
     const cookie = `${DASHBOARD_SESSION_COOKIE}=${encodeURIComponent(sessionId)}; ${cookieAttributes({
@@ -787,6 +816,44 @@ function getDashboardSessionGuildIds(req) {
     const entry = getDashboardSession(req);
     const list = Array.isArray(entry?.guildIds) ? entry.guildIds.map(String) : [];
     return [...new Set(list.filter(id => /^\d{17,20}$/.test(id)))];
+}
+
+function getDashboardSessionOauthGuilds(req) {
+    const entry = getDashboardSession(req);
+    const guilds = Array.isArray(entry?.oauthGuilds) ? entry.oauthGuilds : [];
+    return guilds
+        .map(g => ({
+            id: String(g?.id || '').trim(),
+            name: String(g?.name || '').trim(),
+            icon: String(g?.icon || '').trim() || null,
+            owner: Boolean(g?.owner),
+            permissions: String(g?.permissions || '0').trim() || '0'
+        }))
+        .filter(g => /^\d{17,20}$/.test(g.id));
+}
+
+function summarizeOauthGuildPermissions(guild) {
+    let permissions = 0n;
+    try { permissions = BigInt(String(guild?.permissions || '0').trim() || '0'); } catch {}
+    const isOwner = Boolean(guild?.owner);
+    const isAdmin = (permissions & BigInt(PermissionsBitField.Flags.Administrator)) === BigInt(PermissionsBitField.Flags.Administrator);
+    const canManageGuild = isOwner || isAdmin || ((permissions & BigInt(PermissionsBitField.Flags.ManageGuild)) === BigInt(PermissionsBitField.Flags.ManageGuild));
+    const canManageChannels = isOwner || isAdmin || ((permissions & BigInt(PermissionsBitField.Flags.ManageChannels)) === BigInt(PermissionsBitField.Flags.ManageChannels));
+    const permissionSummary = [];
+    if (isOwner) permissionSummary.push('Server owner');
+    if (isAdmin) permissionSummary.push('Administrator');
+    if (!isAdmin && canManageGuild) permissionSummary.push('Manage Server');
+    if (!isAdmin && !canManageGuild && canManageChannels) permissionSummary.push('Manage Channels');
+    if (!permissionSummary.length) permissionSummary.push('No elevated permissions');
+
+    return {
+        isOwner,
+        isAdmin,
+        canManageGuild,
+        canManageChannels,
+        permissionSummary,
+        canAccessDashboard: isOwner || isAdmin || canManageGuild
+    };
 }
 
 function getGuildSupportRoleIds(guildId, storage = null) {
@@ -1232,6 +1299,61 @@ async function handleApi(req, res, url, client) {
                 iconURL: typeof g.iconURL === 'function' ? g.iconURL({ extension: 'png', size: 64 }) : null
             }))
             .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+        sendJson(res, 200, { guilds });
+        return true;
+    }
+
+    if (method === 'GET' && pathname === '/api/dashboard/guilds') {
+        const userId = getDashboardSessionUserId(req);
+        if (!userId) {
+            sendJson(res, 401, { error: 'Unauthorized' });
+            return true;
+        }
+
+        const ownerId = getBotOwnerId();
+        const isOwner = Boolean(ownerId && userId === ownerId);
+        let guilds = [];
+
+        if (isOwner) {
+            guilds = [...(client?.guilds?.cache?.values?.() || [])]
+                .map(g => ({
+                    id: g.id,
+                    name: g.name,
+                    memberCount: g.memberCount ?? null,
+                    iconURL: typeof g.iconURL === 'function' ? g.iconURL({ extension: 'png', size: 64 }) : null,
+                    botInServer: true,
+                    isOwner: true,
+                    isAdmin: true,
+                    canManageGuild: true,
+                    canManageChannels: true,
+                    canAccessDashboard: true,
+                    permissionSummary: ['Bot owner']
+                }))
+                .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+        } else {
+            guilds = getDashboardSessionOauthGuilds(req)
+                .map(entry => {
+                    const sharedGuild = client?.guilds?.cache?.get(entry.id) || null;
+                    const perms = summarizeOauthGuildPermissions(entry);
+                    return {
+                        id: entry.id,
+                        name: entry.name || sharedGuild?.name || 'Unknown Server',
+                        memberCount: sharedGuild?.memberCount ?? null,
+                        iconURL: entry.icon
+                            ? `https://cdn.discordapp.com/icons/${entry.id}/${entry.icon}.png?size=64`
+                            : (typeof sharedGuild?.iconURL === 'function' ? sharedGuild.iconURL({ extension: 'png', size: 64 }) : null),
+                        botInServer: Boolean(sharedGuild),
+                        ...perms,
+                        canAccessDashboard: Boolean(sharedGuild) && perms.canAccessDashboard
+                    };
+                })
+                .sort((a, b) => {
+                    if (a.botInServer !== b.botInServer) return a.botInServer ? -1 : 1;
+                    if (a.canAccessDashboard !== b.canAccessDashboard) return a.canAccessDashboard ? -1 : 1;
+                    return String(a.name).localeCompare(String(b.name));
+                });
+        }
 
         sendJson(res, 200, { guilds });
         return true;
@@ -3333,6 +3455,21 @@ function startDashboard(client) {
                 return;
             }
 
+            if (pathname === '/dashboard') {
+                if (!isAuthed(req)) {
+                    if (hasDiscordOAuthConfigured()) {
+                        const next = encodeURIComponent('/dashboard' + (url.search || ''));
+                        res.writeHead(302, { Location: `/login?next=${next}`, 'Cache-Control': 'no-store' });
+                        res.end();
+                        return;
+                    }
+                    sendHtml(res, 401, '<h1>401</h1><p>Unauthorized</p>');
+                    return;
+                }
+                sendHtml(res, 200, createServerPickerHtml());
+                return;
+            }
+
             if (pathname === '/setup') {
                 if (!isAuthed(req)) {
                     if (hasDiscordOAuthConfigured()) {
@@ -3440,13 +3577,9 @@ function startDashboard(client) {
                         throw new Error('Invalid Discord user id.');
                     }
 
-                    if (!isDashboardUserAllowed(userId)) {
-                        sendHtml(res, 403, '<h1>403</h1><p>Your Discord account is not allowed to access this dashboard.</p>');
-                        return;
-                    }
-
                     const ownerId = getBotOwnerId();
                     let manageableGuildIds = [];
+                    let oauthGuilds = [];
 
                     // Owner gets global access automatically.
                     if (ownerId && userId === ownerId) {
@@ -3463,17 +3596,20 @@ function startDashboard(client) {
                         for (const g of guildsJson) {
                             const id = String(g?.id || '').trim();
                             if (!/^\d{17,20}$/.test(id)) continue;
+                            oauthGuilds.push({
+                                id,
+                                name: String(g?.name || '').trim(),
+                                icon: String(g?.icon || '').trim() || null,
+                                owner: Boolean(g?.owner),
+                                permissions: String(g?.permissions || '0').trim() || '0'
+                            });
                             if (!client.guilds.cache.has(id)) continue; // only guilds this bot is in
                             manageableGuildIds.push(id);
                         }
                         manageableGuildIds = [...new Set(manageableGuildIds)];
-                        if (!manageableGuildIds.length) {
-                            sendHtml(res, 403, '<h1>403</h1><p>No shared servers found for this account.</p>');
-                            return;
-                        }
                     }
 
-                    setDashboardSession(res, userId, manageableGuildIds);
+                    setDashboardSession(res, userId, manageableGuildIds, oauthGuilds);
                     res.writeHead(302, { Location: next, 'Cache-Control': 'no-store' });
                     res.end();
                     return;
