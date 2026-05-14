@@ -230,27 +230,27 @@ function createHomeHtml(options = {}) {
 
   <header class="top">
     <div class="brand">
-      <img src="/assets/sync.png" alt="Tickets Dashboard" />
+      <img src="/assets/sync.png" alt="eazyDesk" />
       <div class="brand-text">
-        <div class="brand-title">Tickets Dashboard</div>
-        <div class="brand-sub">Blue glow, clean control.</div>
+        <div class="brand-title">eazyDesk</div>
+        <div class="brand-sub">Support your customers with ease.</div>
       </div>
     </div>
     <nav class="nav">
-      <a class="nav-link" href="/documentation">Docs</a>
-      <a class="nav-link" href="/controller">Open Dashboard</a>
+      <a class="nav-link" href="/documentation">Documentation</a>
+      <a class="nav-link" href="/controller">Dashboard</a>
     </nav>
   </header>
 
   <main class="hero">
     <section class="hero-card">
       <div class="kicker">Support &bull; Tickets &bull; Automations</div>
-      <h1>Run support like a <span class="accent">pro</span>.</h1>
+      <h1>Run support like a <span class="accent">pro.</span></h1>
       <p>
-        Configure ticket types, tags, embeds, availability and more from a modern dashboard&mdash;built for fast iteration.
+        Manage all the things for your bot with our new and improved sleek dashboard, no more bulky commands or confusing setups. Get it all in one place, and back doing what you do best.
       </p>
       <div class="cta">
-        <a class="btn primary" href="/controller">Open Dashboard</a>
+        <a class="btn primary" href="/controller">Visit your Dashboard</a>
         <a class="btn ghost" href="/documentation">Documentation</a>
       </div>
       <div class="note">
