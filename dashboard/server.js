@@ -283,14 +283,29 @@ function createHomeHtml(options = {}) {
       <div class="muted">Tickets Dashboard</div>
     </div>
   </footer>
+  <script>
+    (function(){
+      try{
+        var key='dash_theme';
+        var value=(localStorage.getItem(key)||'dark').toLowerCase();
+        var allowed=['dark','light','ocean','sunset'];
+        document.body.dataset.theme=allowed.includes(value)?value:'dark';
+      }catch(e){
+        document.body.dataset.theme='dark';
+      }
+    })();
+  </script>
 </body>
 </html>`;
 }
 
-function baseDashboardPage({ title, body, script = '' }) {
+function baseDashboardPage({ title, body, script = '', ownerView = false }) {
     const css = `
-    :root{color-scheme:dark;--bg:#0b1020;--panel:rgba(17,20,36,.78);--tx:#f7f8ff;--mut:rgba(247,248,255,.66);--bd:rgba(255,255,255,.10);--acc:#38bdf8;--shadow:0 18px 50px rgba(0,0,0,.55)}
-    *{box-sizing:border-box}body{margin:0;background:radial-gradient(700px 380px at 20% 10%,rgba(56,189,248,.18),transparent 55%),radial-gradient(650px 360px at 78% 20%,rgba(37,99,235,.16),transparent 60%),var(--bg);color:var(--tx);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    :root{color-scheme:dark;--bg:#0b1020;--bg2:#090d1a;--panel:rgba(17,20,36,.78);--tx:#f7f8ff;--mut:rgba(247,248,255,.66);--bd:rgba(255,255,255,.10);--acc:#38bdf8;--acc2:#60a5fa;--shadow:0 18px 50px rgba(0,0,0,.55);--cardGlow:0 0 0 1px rgba(96,165,250,.12) inset,0 20px 50px rgba(8,15,35,.45);--cardOutline:rgba(96,165,250,.24)}
+    *{box-sizing:border-box}html,body{font-family:"Inter","Readex Pro","Segoe UI",system-ui,-apple-system,sans-serif}body{margin:0;background:radial-gradient(700px 380px at 20% 10%,rgba(56,189,248,.18),transparent 55%),radial-gradient(650px 360px at 78% 20%,rgba(37,99,235,.16),transparent 60%),linear-gradient(180deg,var(--bg),var(--bg2));color:var(--tx);font:14px/1.45 "Inter","Readex Pro","Segoe UI",system-ui,-apple-system,sans-serif}
+    body[data-theme="light"]{--bg:#f7f0e4;--bg2:#f3e6d0;--panel:rgba(255,250,243,.82);--tx:#111827;--mut:rgba(17,24,39,.66);--bd:rgba(17,24,39,.12);--acc:#2563eb;--acc2:#38bdf8;--shadow:0 16px 40px rgba(17,24,39,.12);--cardGlow:0 0 0 1px rgba(37,99,235,.10) inset,0 18px 38px rgba(17,24,39,.12);--cardOutline:rgba(37,99,235,.22);background:radial-gradient(700px 380px at 20% 10%,rgba(56,189,248,.14),transparent 55%),radial-gradient(650px 360px at 78% 20%,rgba(37,99,235,.12),transparent 60%),linear-gradient(180deg,var(--bg),var(--bg2))}
+    body[data-theme="ocean"]{--bg:#061421;--bg2:#071b2c;--panel:rgba(10,29,44,.80);--tx:#ecfeff;--mut:rgba(236,254,255,.68);--bd:rgba(125,211,252,.14);--acc:#22d3ee;--acc2:#14b8a6;--shadow:0 18px 44px rgba(3,10,22,.52);--cardGlow:0 0 0 1px rgba(34,211,238,.14) inset,0 22px 56px rgba(4,16,28,.50);--cardOutline:rgba(34,211,238,.28);background:radial-gradient(760px 420px at 16% 12%,rgba(34,211,238,.18),transparent 58%),radial-gradient(680px 360px at 82% 18%,rgba(20,184,166,.15),transparent 62%),linear-gradient(180deg,var(--bg),var(--bg2))}
+    body[data-theme="sunset"]{--bg:#1b1020;--bg2:#2a1422;--panel:rgba(43,19,31,.78);--tx:#fff7ed;--mut:rgba(255,247,237,.72);--bd:rgba(251,146,60,.16);--acc:#fb7185;--acc2:#fb923c;--shadow:0 18px 48px rgba(30,10,20,.52);--cardGlow:0 0 0 1px rgba(251,146,60,.14) inset,0 22px 54px rgba(31,10,18,.52);--cardOutline:rgba(251,146,60,.28);background:radial-gradient(720px 400px at 18% 10%,rgba(251,113,133,.18),transparent 58%),radial-gradient(650px 340px at 82% 18%,rgba(251,146,60,.15),transparent 62%),linear-gradient(180deg,var(--bg),var(--bg2))}
     a{color:inherit}
     .wrap{max-width:1050px;margin:0 auto;padding:18px}
     .top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--bd);backdrop-filter:blur(8px);position:sticky;top:0;background:rgba(8,10,20,.64);z-index:10}
@@ -298,20 +313,26 @@ function baseDashboardPage({ title, body, script = '' }) {
     .brand img{width:28px;height:28px}
     .title{font-size:18px;font-weight:800;letter-spacing:.2px}
     .nav{display:flex;gap:10px;flex-wrap:wrap}
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 12px;border-radius:14px;border:1px solid var(--bd);background:rgba(255,255,255,.03);text-decoration:none;cursor:pointer;transition:transform .15s ease,border-color .2s ease,background .2s ease}
-    .btn:hover{transform:translateY(-1px);border-color:rgba(56,189,248,.22);background:rgba(56,189,248,.10)}
-    .btn.primary{background:linear-gradient(180deg,rgba(56,189,248,.22),rgba(56,189,248,.12));border-color:rgba(56,189,248,.35)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 12px;border-radius:14px;border:1px solid var(--bd);background:rgba(255,255,255,.03);text-decoration:none;cursor:pointer;transition:transform .15s ease,border-color .2s ease,background .2s ease,box-shadow .2s ease;box-shadow:0 10px 24px rgba(0,0,0,.18),0 0 0 1px rgba(255,255,255,.02) inset}
+    .btn:hover{transform:translateY(-1px);border-color:var(--cardOutline);background:color-mix(in srgb,var(--acc) 12%, transparent);box-shadow:0 14px 28px rgba(0,0,0,.20),0 0 18px color-mix(in srgb,var(--acc) 24%, transparent)}
+    .btn.primary{background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 22%, transparent),color-mix(in srgb,var(--acc2) 12%, transparent));border-color:var(--cardOutline)}
     .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
     @media(max-width:860px){.grid{grid-template-columns:1fr}.nav{justify-content:flex-end}}
-    .card{border:1px solid var(--bd);background:linear-gradient(180deg,rgba(17,20,36,.78),rgba(11,14,28,.78));box-shadow:var(--shadow);border-radius:18px;padding:14px}
+    .card{border:1px solid var(--bd);background:linear-gradient(180deg,color-mix(in srgb,var(--panel) 95%, rgba(255,255,255,.02)),color-mix(in srgb,var(--panel) 85%, rgba(0,0,0,.10)));box-shadow:var(--cardGlow);border-radius:18px;padding:14px}
     .muted{color:var(--mut)}
     label{display:block;margin:10px 0 6px;color:rgba(247,248,255,.75);font-size:12px}
     select,input{width:100%;padding:10px 11px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(5,8,20,.78);color:var(--tx)}
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     .list{margin-top:12px;display:grid;gap:10px}
-    .item{border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03);border-radius:18px;padding:12px;display:flex;justify-content:space-between;gap:12px;align-items:center}
+    .item{border:1px solid rgba(255,255,255,.10);background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.03));border-radius:18px;padding:14px;display:flex;justify-content:space-between;gap:12px;align-items:center;box-shadow:0 0 0 1px rgba(255,255,255,.02) inset,0 0 24px color-mix(in srgb,var(--acc) 8%, transparent)}
+    .item.can-manage{border-color:var(--cardOutline);box-shadow:0 0 0 1px color-mix(in srgb,var(--acc) 10%, transparent) inset,0 0 26px color-mix(in srgb,var(--acc) 16%, transparent)}
     .item strong{font-size:14px}
-    .pill{padding:3px 10px;border-radius:999px;border:1px solid rgba(56,189,248,.25);background:rgba(56,189,248,.10);color:rgba(247,248,255,.92);font-size:12px}
+    .pill{padding:3px 10px;border-radius:999px;border:1px solid color-mix(in srgb,var(--acc) 35%, transparent);background:color-mix(in srgb,var(--acc) 12%, transparent);color:var(--tx);font-size:12px;box-shadow:0 0 16px color-mix(in srgb,var(--acc) 12%, transparent)}
+    .theme-nav{position:relative}
+    .theme-menu{position:absolute;right:0;top:calc(100% + 8px);display:none;min-width:180px;padding:8px;border-radius:16px;border:1px solid var(--bd);background:var(--panel);box-shadow:var(--cardGlow)}
+    .theme-nav.open .theme-menu{display:grid;gap:6px}
+    .theme-item{appearance:none;border:1px solid transparent;background:rgba(255,255,255,.03);color:var(--tx);padding:9px 10px;border-radius:12px;text-align:left;cursor:pointer}
+    .theme-item:hover,.theme-item.active{border-color:var(--cardOutline);background:color-mix(in srgb,var(--acc) 12%, transparent)}
     .err{color:#fecaca;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.10);padding:10px 12px;border-radius:14px}
     `;
 
@@ -329,12 +350,34 @@ function baseDashboardPage({ title, body, script = '' }) {
     <a class="brand" href="/"><img src="/assets/sync.png" alt="logo" /><div class="title">${String(title || 'Dashboard')}</div></a>
     <nav class="nav">
       <a class="btn" href="/dashboard">Servers</a>
-      <a class="btn" href="/overview">Dashboard</a>
+      ${ownerView ? '<a class="btn" href="/overview">Dashboard</a>' : ''}
       <a class="btn" href="/setup">Setup</a>
+      <div id="themeNav" class="theme-nav">
+        <button id="themeBtn" class="btn" type="button">Theme</button>
+        <div class="theme-menu">
+          <button class="theme-item" type="button" data-theme-item="dark">Dark</button>
+          <button class="theme-item" type="button" data-theme-item="light">Light</button>
+          <button class="theme-item" type="button" data-theme-item="ocean">Ocean</button>
+          <button class="theme-item" type="button" data-theme-item="sunset">Sunset</button>
+        </div>
+      </div>
       <a class="btn" href="/logout">Logout</a>
     </nav>
   </header>
   <main class="wrap">${body || ''}</main>
+  <script>
+    (function(){
+      const key='dash_theme';
+      const allowed=['dark','light','ocean','sunset'];
+      const normalise=v=>allowed.includes(String(v||'').toLowerCase())?String(v).toLowerCase():'dark';
+      const apply=v=>{document.body.dataset.theme=normalise(v);document.querySelectorAll('[data-theme-item]').forEach(btn=>btn.classList.toggle('active',btn.getAttribute('data-theme-item')===document.body.dataset.theme));};
+      try{apply(localStorage.getItem(key)||'dark')}catch{apply('dark')}
+      const nav=document.getElementById('themeNav');
+      const btn=document.getElementById('themeBtn');
+      if(btn&&nav){btn.onclick=(e)=>{e.stopPropagation();nav.classList.toggle('open')};document.addEventListener('click',()=>nav.classList.remove('open'))}
+      document.querySelectorAll('[data-theme-item]').forEach(item=>item.onclick=(e)=>{e.stopPropagation();const next=normalise(item.getAttribute('data-theme-item'));try{localStorage.setItem(key,next)}catch{}apply(next);if(nav)nav.classList.remove('open')});
+    })();
+  </script>
   <script>${script || ''}</script>
 </body>
 </html>`;
@@ -367,27 +410,34 @@ function createControllerHtml() {
       async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class=\"muted\">No guilds found. (Bot may not be ready yet.)</div>';for(const btn of document.querySelectorAll('[data-restart]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/controller/setup/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-restart')})});btn.textContent='Restarted';setTimeout(()=>{btn.textContent='Restart Setup';btn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
 
-    return baseDashboardPage({ title: 'Controller', body, script });
+    return baseDashboardPage({ title: 'Controller', body, script, ownerView: true });
 }
 
-function createServerPickerHtml() {
+function createServerPickerHtml(options = {}) {
+    const ownerView = Boolean(options.ownerView);
     const body = `
       <div class="card">
         <h2 style="margin:0 0 6px">Server Access</h2>
         <div class="muted">This shows the servers your Discord account is in, whether the bot is in them too, and what elevated permissions you have in each server.</div>
+        <div class="row" style="margin-top:12px">
+          <span class="pill">Glowing outline = you can edit</span>
+          <span class="pill">Dim card = view only</span>
+          <span class="pill">Bot not in server = no dashboard access</span>
+        </div>
         <div id="guildError" class="err" style="display:none;margin-top:12px"></div>
         <div id="guildList" class="list"></div>
       </div>
     `;
 
     const script = `
+      const ownerView=${JSON.stringify(ownerView)};
       const list=document.getElementById('guildList');
       const err=document.getElementById('guildError');
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
       async function api(path,opt){const r=await fetch(path,{credentials:'include',...(opt||{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function renderPerms(g){const tags=[];tags.push(g.botInServer?'<span class="pill">Bot in server</span>':'<span class="pill">Bot not in server</span>');tags.push(g.isOwner?'<span class="pill">Owner</span>':'');tags.push(g.isAdmin?'<span class="pill">Administrator</span>':'');tags.push(!g.isAdmin&&g.canManageGuild?'<span class="pill">Manage Server</span>':'');tags.push(!g.isAdmin&&!g.canManageGuild&&g.canManageChannels?'<span class="pill">Manage Channels</span>':'');return tags.filter(Boolean).join('')}
-      function renderAction(g){if(g.botInServer&&g.canAccessDashboard)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a>';if(g.botInServer)return '<span class="muted">No dashboard permissions</span>';return '<span class="muted">Bot is not in this server</span>'}
-      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:28px;height:28px;border-radius:10px" />':'';const detail=Array.isArray(g.permissionSummary)&&g.permissionSummary.length?g.permissionSummary.map(esc).join(' • '):'No elevated permissions';return '<div class="item">'+
+      function renderAction(g){if(ownerView&&g.botInServer)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a>';if(g.botInServer&&g.canAccessDashboard)return '<span class="pill">Can edit ticket config</span>';if(g.botInServer)return '<span class="muted">No dashboard permissions</span>';return '<span class="muted">Bot is not in this server</span>'}
+      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:34px;height:34px;border-radius:12px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=Array.isArray(g.permissionSummary)&&g.permissionSummary.length?g.permissionSummary.map(esc).join(' • '):'No elevated permissions';const cls='item'+(g.canAccessDashboard?' can-manage':'');return '<div class="'+cls+'">'+
         '<div style="display:grid;gap:8px;min-width:0">'+
           '<div class="row" style="gap:10px">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class="pill">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
           '<div class="row">'+renderPerms(g)+'</div>'+
@@ -398,7 +448,7 @@ function createServerPickerHtml() {
       async function load(){try{const data=await api('/api/dashboard/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="muted">No servers found for this account.</div>'}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
 
-    return baseDashboardPage({ title: 'Servers', body, script });
+    return baseDashboardPage({ title: 'Servers', body, script, ownerView });
 }
 
 function createSetupHtml() {
@@ -446,7 +496,7 @@ function createSetupHtml() {
               <div class="setup-title">Server Setup</div>
               <div class="muted setup-sub">Walk through the setup in a few clean steps. You can create the needed channels from here, enable a small tutorial, and keep claimer access stable with role permanence.</div>
             </div>
-            <a class="btn" id="setupOpenDashboardLink" href="/overview">Open Dashboard</a>
+            <a class="btn" id="setupOpenDashboardLink" href="/dashboard">Server Access</a>
           </div>
           <div class="setup-progress"><div id="setupProgressBar" class="setup-progress-bar"></div></div>
           <div id="setupStepPills" class="setup-steps">
@@ -592,7 +642,7 @@ function createSetupHtml() {
       function opt(id,label,selected){return '<option value=\"'+esc(id)+'\" '+(selected?'selected':'')+'>'+esc(label)+'</option>'}
       function fillSelect(el,items,emptyLabel,selected){const rows=['<option value=\"\">'+esc(emptyLabel)+'</option>'].concat(items.map(it=>opt(it.id,it.label||it.name||it.id,selected===it.id)));el.innerHTML=rows.join('')}
       let catalogs={ roles:[], channels:[], categories:[] };
-      function syncPageState(){if(guildSelect&&guildSelect.value)qs.set('guild',guildSelect.value);if(currentStep)qs.set('page',String(currentStep));history.replaceState(null,'','?'+qs.toString());if(dashboardLink)dashboardLink.href='/overview'+(guildSelect&&guildSelect.value?('?guild='+encodeURIComponent(guildSelect.value)):'');}
+      function syncPageState(){if(guildSelect&&guildSelect.value)qs.set('guild',guildSelect.value);if(currentStep)qs.set('page',String(currentStep));history.replaceState(null,'','?'+qs.toString());if(dashboardLink)dashboardLink.href='/dashboard';}
       function setLocked(locked){setupLocked=!!locked;for(const el of [parentCategoryId,appealsChannelId,transcriptsChannelId,managerRoleId,highEscalationRoleId,immediateEscalationRoleId,rolePermanence,tutorialEnabled]){if(el)el.disabled=setupLocked}for(const btn of document.querySelectorAll('[data-create-kind],#initTemplate,#saveChannels,#saveRoles,#saveSetup,#markComplete')){if(btn)btn.disabled=setupLocked}if(saveBtn)saveBtn.style.display=setupLocked?'none':'';if(doneBtn)doneBtn.style.display=setupLocked?'none':'';if(restartBtn)restartBtn.style.display=setupLocked?'':'none';}
       function gotoStep(step){const safe=Math.max(1,Math.min(4,Number(step)||1));currentStep=safe;stages.forEach(stage=>stage.classList.toggle('active',Number(stage.dataset.step)===safe));stepPills.forEach((pill,index)=>{const n=index+1;pill.classList.toggle('active',n===safe);pill.classList.toggle('done',n<safe)});if(progressBar)progressBar.style.width=(safe/4*100)+'%';syncPageState();renderSummary()}
       function configPayload(){return{guildId:guildSelect.value,parentCategoryId:parentCategoryId.value||null,appealsChannelId:appealsChannelId.value||null,transcriptsChannelId:transcriptsChannelId.value||null,managerRoleId:managerRoleId.value||null,escalationRoles:{high:highEscalationRoleId.value||null,immediate:immediateEscalationRoleId.value||null},rolePermanence:!!rolePermanence.checked,tutorialEnabled:!!tutorialEnabled.checked,setup:{step:currentStep}}}
@@ -1020,7 +1070,10 @@ function getDashboardGuild(client, req = null) {
     }
 
     if (Array.isArray(allowedGuildIds) && allowedGuildIds.length) {
-        return client.guilds.cache.get(allowedGuildIds[0]) || null;
+        if (ownerId && userId === ownerId) {
+            return client.guilds.cache.get(allowedGuildIds[0]) || null;
+        }
+        return null;
     }
 
     return client.guilds.cache.first() || null;
@@ -2215,7 +2268,6 @@ function getAllowedDashboardPages(access = {}) {
     if (access?.canManageSettings) pages.add('/setup');
     if (access?.canManageAvailability) pages.add('/availability');
     if (access?.canManageTicketTypes) {
-        pages.add('/overview');
         pages.add('/settings');
         pages.add('/commands/ticket-types');
     }
@@ -2555,6 +2607,48 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
  body[data-theme="light"] .checkbox-wrapper .checkmark{background:rgba(253,249,241,.78)}
  body[data-theme="light"] .mention{border-color:rgba(88,101,242,.22);background:rgba(88,101,242,.12);color:#1d2a6b}
 
+ body[data-theme="ocean"]{
+  --bg:#061421;--bg-alt:#071b2c;
+  --bd:rgba(125,211,252,.16);--tx:#ecfeff;--mt:rgba(236,254,255,.70);
+  --ac:#22d3ee;--ac-soft:#14b8a6;
+  --shadow:0 20px 62px rgba(2,10,20,.52);--shadow-soft:0 14px 40px rgba(2,10,20,.46);
+ }
+ body[data-theme="ocean"]{
+  background:
+   radial-gradient(1200px 700px at 100% 0%,rgba(34,211,238,.18),transparent 56%),
+   radial-gradient(1100px 720px at 0% 105%,rgba(20,184,166,.10),transparent 60%),
+   radial-gradient(900px 520px at 50% -12%,rgba(125,211,252,.08),transparent 60%),
+   linear-gradient(160deg,var(--bg),#05101b,var(--bg-alt));
+ }
+ body[data-theme="ocean"] .topbar{background:linear-gradient(180deg,rgba(5,24,36,.72),rgba(4,18,28,.48));border-color:rgba(34,211,238,.16)}
+ body[data-theme="ocean"] .card{background:linear-gradient(180deg,rgba(8,35,48,.82),rgba(5,21,31,.74));border-color:rgba(34,211,238,.16)}
+ body[data-theme="ocean"] .card:hover{border-color:rgba(34,211,238,.28)}
+ body[data-theme="ocean"] input,body[data-theme="ocean"] select,body[data-theme="ocean"] textarea{background:rgba(2,16,24,.52);border-color:rgba(34,211,238,.18)}
+ body[data-theme="ocean"] input:focus,body[data-theme="ocean"] select:focus,body[data-theme="ocean"] textarea:focus{border-color:rgba(34,211,238,.45);box-shadow:0 0 0 3px rgba(34,211,238,.16)}
+ body[data-theme="ocean"] .cs-menu,body[data-theme="ocean"] .ms-menu,body[data-theme="ocean"] .topnav-menu{background:rgba(5,19,28,.94);border-color:rgba(34,211,238,.16)}
+ body[data-theme="ocean"] .mention{border-color:rgba(34,211,238,.22);background:rgba(34,211,238,.12);color:var(--tx)}
+
+ body[data-theme="sunset"]{
+  --bg:#1b1020;--bg-alt:#2a1422;
+  --bd:rgba(251,146,60,.18);--tx:#fff7ed;--mt:rgba(255,247,237,.72);
+  --ac:#fb7185;--ac-soft:#fb923c;
+  --shadow:0 20px 62px rgba(30,10,18,.56);--shadow-soft:0 14px 40px rgba(30,10,18,.48);
+ }
+ body[data-theme="sunset"]{
+  background:
+   radial-gradient(1200px 700px at 100% 0%,rgba(251,113,133,.18),transparent 56%),
+   radial-gradient(1100px 720px at 0% 105%,rgba(251,146,60,.12),transparent 60%),
+   radial-gradient(900px 520px at 50% -12%,rgba(253,186,116,.10),transparent 60%),
+   linear-gradient(160deg,var(--bg),#1a0f19,var(--bg-alt));
+ }
+ body[data-theme="sunset"] .topbar{background:linear-gradient(180deg,rgba(45,18,26,.74),rgba(30,12,20,.52));border-color:rgba(251,146,60,.18)}
+ body[data-theme="sunset"] .card{background:linear-gradient(180deg,rgba(56,22,32,.80),rgba(31,13,20,.74));border-color:rgba(251,146,60,.18)}
+ body[data-theme="sunset"] .card:hover{border-color:rgba(251,146,60,.30)}
+ body[data-theme="sunset"] input,body[data-theme="sunset"] select,body[data-theme="sunset"] textarea{background:rgba(25,11,18,.54);border-color:rgba(251,146,60,.20)}
+ body[data-theme="sunset"] input:focus,body[data-theme="sunset"] select:focus,body[data-theme="sunset"] textarea:focus{border-color:rgba(251,146,60,.48);box-shadow:0 0 0 3px rgba(251,146,60,.16)}
+ body[data-theme="sunset"] .cs-menu,body[data-theme="sunset"] .ms-menu,body[data-theme="sunset"] .topnav-menu{background:rgba(30,12,20,.95);border-color:rgba(251,146,60,.18)}
+ body[data-theme="sunset"] .mention{border-color:rgba(251,146,60,.24);background:rgba(251,146,60,.12);color:var(--tx)}
+
  /* Theme toggle: hacker (hidden) */
  body[data-theme="hacker"]{
   --bg:#020607;--bg-alt:#000c08;
@@ -2721,12 +2815,12 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
  </style></head>
 <body>
  <div id="auth" class="auth"><div class="auth-card"><h3>Dashboard Login</h3><div class="muted" style="margin-bottom:10px">Sign in with Discord to continue.</div><a id="authDiscord" class="btn" href="/login" style="display:block;text-align:center;text-decoration:none">Sign in with Discord</a><div class="muted" style="margin:12px 0 6px">or use a token</div><label>Token</label><input id="authToken" type="password" /><div class="row" style="margin-top:10px"><button id="authLogin" class="btn">Login</button></div><div id="authMsg" class="notice danger"></div></div></div>
- <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">Navigate using the dropdowns to keep things tidy.</div></div></div><div class="topbar-right"><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-topnav-item data-value="/overview">Home <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/settings">Settings <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/availability">Availability <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/tickets">Tickets <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/transcripts">Transcripts <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/ticket-types">Ticket Types <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/tag">Tags <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/feedback">Feedback <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/statistics">Statistics <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/embed-editor">Embed Editor <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/documentation">Documentation <span class="tag">Content</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px">Refresh</button></div></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
+ <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">Navigate using the dropdowns to keep things tidy.</div></div></div><div class="topbar-right"><a class="btn-soft" href="/dashboard">Servers</a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-topnav-item data-value="/overview">Home <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/settings">Settings <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/availability">Availability <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/tickets">Tickets <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/transcripts">Transcripts <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/ticket-types">Ticket Types <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/tag">Tags <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/feedback">Feedback <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/statistics">Statistics <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/embed-editor">Embed Editor <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/documentation">Documentation <span class="tag">Content</span></button></div></div><div id="themeNav" class="topnav"><button id="themeBtn" class="btn-soft topnav-btn" type="button"><span id="themeLabel">Theme</span><span class="chev">v</span></button><div class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-theme-item="dark">Dark <span class="tag">Default</span></button><button type="button" class="topnav-item" data-theme-item="light">Light <span class="tag">Warm</span></button><button type="button" class="topnav-item" data-theme-item="ocean">Ocean <span class="tag">Cool</span></button><button type="button" class="topnav-item" data-theme-item="sunset">Sunset <span class="tag">Bold</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px">Refresh</button></div></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
 <script>
  let currentPath=${JSON.stringify(currentPath)},tokenKey='dashboard_token_ui',defaultEmbedTemplates=${JSON.stringify(DEFAULT_EMBED_TEMPLATES)};
 const app=document.getElementById('app'),notice=document.getElementById('notice'),auth=document.getElementById('auth'),authDiscord=document.getElementById('authDiscord'),authToken=document.getElementById('authToken'),authMsg=document.getElementById('authMsg');
  const themeKey='dash_theme';
- const inferTheme=()=>{try{const saved=localStorage.getItem(themeKey);if(saved==='light'||saved==='dark')return saved;return 'dark'}catch{return 'dark'}};
+ const inferTheme=()=>{try{const saved=String(localStorage.getItem(themeKey)||'dark').toLowerCase();return ['dark','light','ocean','sunset'].includes(saved)?saved:'dark'}catch{return 'dark'}};
  document.body.dataset.theme=inferTheme();
   let state=null;
   let ui=(()=>{try{const raw=sessionStorage.getItem('dash_ui');const parsed=raw?JSON.parse(raw):{};return parsed&&typeof parsed==='object'?parsed:{};}catch{return {}}})();
@@ -3143,16 +3237,16 @@ function wire(){
     if(menuOverlay)menuOverlay.onclick=()=>closeMenu();
     const navTitleForPath=(p)=>({ '/overview':'Home','/settings':'Settings','/availability':'Availability','/commands/ticket-types':'Ticket Types','/commands/tag':'Tags','/tickets':'Tickets','/transcripts':'Transcripts','/commands/feedback':'Feedback','/statistics':'Statistics','/embed-editor':'Embed Editor','/documentation':'Documentation'}[p]||'Dashboard');
      const groupForPath=(p)=>{if(p==='/overview'||p==='/settings'||p==='/availability')return 'general';if(p==='/commands/ticket-types'||p==='/commands/tag'||p==='/tickets'||p==='/transcripts')return 'tickets';return 'content'};
-     const allowedPages=()=>{const access=(state&&state.access)||{};const set=new Set(['/documentation']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>set.add(p));return set}if(access.canManageTicketTypes){set.add('/overview');set.add('/settings');set.add('/commands/ticket-types')}if(access.canManageAvailability)set.add('/availability');if(access.canViewTickets||access.canManageEscalations)set.add('/tickets');if(access.canViewTranscripts)set.add('/transcripts');return set};
+     const allowedPages=()=>{const access=(state&&state.access)||{};const set=new Set(['/documentation']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>set.add(p));return set}if(access.canManageTicketTypes){set.add('/settings');set.add('/commands/ticket-types')}if(access.canManageAvailability)set.add('/availability');if(access.canViewTickets||access.canManageEscalations)set.add('/tickets');if(access.canViewTranscripts)set.add('/transcripts');return set};
      let darkSecretCount=0;
-     const normaliseTheme=(t)=>{const v=String(t||'').trim();return (v==='light'||v==='dark')?v:'dark'};
-     const syncThemeUi=()=>{const cur=normaliseTheme(document.body.dataset.theme);if(themeLabel)themeLabel.textContent='Theme: '+(cur==='light'?'Light':'Dark');themeItems.forEach(btn=>{const v=btn.getAttribute('data-theme-item')||'';btn.classList.toggle('active',v===cur)})};
+     const normaliseTheme=(t)=>{const v=String(t||'').trim().toLowerCase();return ['dark','light','ocean','sunset'].includes(v)?v:'dark'};
+     const syncThemeUi=()=>{const cur=normaliseTheme(document.body.dataset.theme);const labels={dark:'Dark',light:'Light',ocean:'Ocean',sunset:'Sunset'};if(themeLabel)themeLabel.textContent='Theme: '+(labels[cur]||'Dark');themeItems.forEach(btn=>{const v=btn.getAttribute('data-theme-item')||'';btn.classList.toggle('active',v===cur)})};
      const applyTheme=(t)=>{document.body.dataset.theme=normaliseTheme(t);syncThemeUi()};
      const setTheme=(t)=>{const next=normaliseTheme(t);try{localStorage.setItem(themeKey,next)}catch{}applyTheme(next)};
      const registerDarkSecret=()=>false;
      applyTheme(document.body.dataset.theme||'dark');
      if(themeNav&&themeBtn){themeBtn.onclick=(ev)=>{ev.stopPropagation();const next=!themeNav.classList.contains('open');closePickers();if(next)themeNav.classList.add('open');else themeNav.classList.remove('open')}};
-     themeItems.forEach(btn=>{btn.onclick=()=>{const pick=btn.getAttribute('data-theme-item')||'';if(pick==='dark'){setTheme('dark')}else{setTheme('light')}closePickers()}});
+     themeItems.forEach(btn=>{btn.onclick=()=>{const pick=btn.getAttribute('data-theme-item')||'';setTheme(pick);closePickers()}});
      const closeTopNav=()=>{if(topNav)topNav.classList.remove('open')};
    const setTopNavValue=(p)=>{const next=String(p||'');if(topNav)topNav.dataset.value=next;if(topNavLabel)topNavLabel.textContent=navTitleForPath(next);topNavItems.forEach(b=>{const v=b.getAttribute('data-value')||'';b.classList.toggle('active',v===next)})};
    const syncNav=()=>{document.querySelectorAll('.nav-item').forEach(a=>{const p=a.getAttribute('data-nav')||a.getAttribute('href')||'';a.classList.toggle('active',p===currentPath)})};
@@ -3352,7 +3446,7 @@ function renderOverview(){
    (tags.length?tags.map(t=>'<div class="item"><div class="item-top"><strong>'+esc(t.name||'')+'</strong>'+pill(t.count)+'</div></div>').join(''):'<div class="muted">No tag usage yet.</div>')+
   '</div></div>'+
  '</div>'}
-function render(){const access=(state&&state.access)||{};const allowed=new Set(['/documentation']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>allowed.add(p))}else{if(access.canManageTicketTypes){allowed.add('/overview');allowed.add('/settings');allowed.add('/commands/ticket-types')}if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This section is not available for your role in the selected server.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderSettings();else if(currentPath==='/availability')html=renderAvailability();else if(currentPath==='/commands/ticket-types')html=renderTypes();else if(currentPath==='/commands/tag')html=renderTags();else if(currentPath==='/tickets')html=renderTickets();else if(currentPath==='/transcripts')html=renderTranscripts();else if(currentPath==='/commands/feedback')html=renderFeedback();else if(currentPath==='/commands/appeal')html=renderAppeal();else if(currentPath==='/statistics')html=renderStats();else if(currentPath==='/embed-editor')html=renderBranding();else html=renderDocs();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire()})})}
+function render(){const access=(state&&state.access)||{};const allowed=new Set(['/documentation']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>allowed.add(p))}else{if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types')}if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This section is not available for your role in the selected server.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderSettings();else if(currentPath==='/availability')html=renderAvailability();else if(currentPath==='/commands/ticket-types')html=renderTypes();else if(currentPath==='/commands/tag')html=renderTags();else if(currentPath==='/tickets')html=renderTickets();else if(currentPath==='/transcripts')html=renderTranscripts();else if(currentPath==='/commands/feedback')html=renderFeedback();else if(currentPath==='/commands/appeal')html=renderAppeal();else if(currentPath==='/statistics')html=renderStats();else if(currentPath==='/embed-editor')html=renderBranding();else html=renderDocs();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire()})})}
 async function boot(){state=await api('/api/state');render()}
 document.getElementById('refreshStateBtn').onclick=async()=>{try{await boot();note('Dashboard refreshed.','ok')}catch(e){note(e.message,'danger')}};
 document.getElementById('authLogin').onclick=async()=>{try{localStorage.setItem(tokenKey,authToken.value.trim());await api('/api/auth/login',{method:'POST',body:JSON.stringify({token:authToken.value.trim()})});auth.style.display='none';authMsg.textContent='';await boot()}catch(e){authMsg.textContent=e.message||'Login failed'}};
@@ -3466,7 +3560,7 @@ function startDashboard(client) {
                     sendHtml(res, 401, '<h1>401</h1><p>Unauthorized</p>');
                     return;
                 }
-                sendHtml(res, 200, createServerPickerHtml());
+                sendHtml(res, 200, createServerPickerHtml({ ownerView: isStrictOwnerViewer(req) }));
                 return;
             }
 

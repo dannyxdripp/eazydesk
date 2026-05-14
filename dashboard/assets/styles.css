@@ -26,6 +26,48 @@ body.home {
     overflow-x: hidden;
 }
 
+body.home[data-theme="light"] {
+    --bg0: #f7f0e4;
+    --bg1: #f2e5d0;
+    --text: rgba(17, 24, 39, 0.94);
+    --muted: rgba(17, 24, 39, 0.68);
+    --card: rgba(255, 255, 255, 0.58);
+    --card2: rgba(255, 255, 255, 0.74);
+    --border: rgba(17, 24, 39, 0.12);
+    --blue: #2563eb;
+    --blue2: #38bdf8;
+    --cyan: #06b6d4;
+    --shadow: rgba(37, 99, 235, 0.18);
+}
+
+body.home[data-theme="ocean"] {
+    --bg0: #061421;
+    --bg1: #071b2c;
+    --text: rgba(236, 254, 255, 0.94);
+    --muted: rgba(236, 254, 255, 0.72);
+    --card: rgba(12, 32, 45, 0.56);
+    --card2: rgba(14, 43, 58, 0.66);
+    --border: rgba(125, 211, 252, 0.14);
+    --blue: #22d3ee;
+    --blue2: #14b8a6;
+    --cyan: #67e8f9;
+    --shadow: rgba(34, 211, 238, 0.22);
+}
+
+body.home[data-theme="sunset"] {
+    --bg0: #1b1020;
+    --bg1: #2a1422;
+    --text: rgba(255, 247, 237, 0.95);
+    --muted: rgba(255, 247, 237, 0.74);
+    --card: rgba(63, 26, 37, 0.48);
+    --card2: rgba(82, 34, 42, 0.60);
+    --border: rgba(251, 146, 60, 0.14);
+    --blue: #fb7185;
+    --blue2: #fb923c;
+    --cyan: #fdba74;
+    --shadow: rgba(251, 146, 60, 0.20);
+}
+
 .bg { position: fixed; inset: 0; pointer-events: none; z-index: -1; }
 .bg .grid {
     position: absolute;
