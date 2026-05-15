@@ -26,6 +26,96 @@ const TRANSCRIPT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const dashboardOauthStates = new Map();
 const dashboardSessions = new Map();
 const DASHBOARD_SESSION_COOKIE = 'dashboard_session';
+const BRAND_NAME = 'eazyDesk';
+
+const DEFAULT_TUTORIALS = [
+    {
+        id: 'posting-your-first-panel',
+        title: 'Post Your First Panel',
+        summary: 'Place the opener, test the button, and confirm tickets land in the right place.',
+        badge: 'Getting Started',
+        coverImage: '',
+        steps: [
+            { title: 'Choose the right channel', body: 'Pick the public channel where members should see the ticket opener.', imageUrl: '' },
+            { title: 'Post the panel', body: 'Use the dashboard or `/set-panel` to publish the opener message.', imageUrl: '' },
+            { title: 'Test it once', body: 'Open a test ticket and verify the category, permissions, and transcript flow.', imageUrl: '' }
+        ]
+    },
+    {
+        id: 'claiming-and-handing-off',
+        title: 'Claiming And Handoffs',
+        summary: 'Keep ownership clear and make staff handoffs less messy.',
+        badge: 'Staff Flow',
+        coverImage: '',
+        steps: [
+            { title: 'Claim quickly', body: 'Have support members claim tickets as soon as they start actively helping.', imageUrl: '' },
+            { title: 'Use tags for repeat answers', body: 'Save time with tags for known fixes, policy reminders, or links.', imageUrl: '' },
+            { title: 'Escalate when needed', body: 'Loop in high or immediate escalation roles if the request needs senior eyes.', imageUrl: '' }
+        ]
+    },
+    {
+        id: 'closing-with-transcripts',
+        title: 'Closing With Transcripts',
+        summary: 'Close tickets cleanly so the archive stays useful later.',
+        badge: 'Operations',
+        coverImage: '',
+        steps: [
+            { title: 'Capture the reason', body: 'Use a clear close reason so trends in the statistics view actually mean something.', imageUrl: '' },
+            { title: 'Archive the history', body: 'Make sure the transcript channel is configured so every close leaves a record.', imageUrl: '' },
+            { title: 'Review follow-ups', body: 'If a ticket revealed a common issue, turn it into a tag or tutorial update.', imageUrl: '' }
+        ]
+    },
+    {
+        id: 'queue-health-and-availability',
+        title: 'Queue Health And Availability',
+        summary: 'Use availability states to set expectations when queues spike.',
+        badge: 'Queue Health',
+        coverImage: '',
+        steps: [
+            { title: 'Watch active counts', body: 'Keep an eye on active tickets and close reasons to catch bottlenecks early.', imageUrl: '' },
+            { title: 'Adjust availability', body: 'Set ticket types to increased volume or reduced assistance when staff load shifts.', imageUrl: '' },
+            { title: 'Communicate the change', body: 'Use announcements or panel copy to explain what users should expect.', imageUrl: '' }
+        ]
+    }
+];
+
+function createDocumentTitle(pageName = 'Home') {
+    const clean = String(pageName || 'Home').trim() || 'Home';
+    return `${BRAND_NAME} • ${clean}`;
+}
+
+function normalizeTutorials(input) {
+    const list = Array.isArray(input) ? input : DEFAULT_TUTORIALS;
+    return list
+        .map((tutorial, index) => {
+            const steps = Array.isArray(tutorial?.steps) ? tutorial.steps : [];
+            return {
+                id: String(tutorial?.id || `tutorial-${index + 1}`).trim() || `tutorial-${index + 1}`,
+                title: String(tutorial?.title || `Tutorial ${index + 1}`).trim().slice(0, 90),
+                summary: String(tutorial?.summary || '').trim().slice(0, 220),
+                badge: String(tutorial?.badge || '').trim().slice(0, 40),
+                coverImage: /^https?:\/\//i.test(String(tutorial?.coverImage || '').trim()) ? String(tutorial.coverImage).trim() : '',
+                steps: steps.map((step, stepIndex) => ({
+                    title: String(step?.title || `Step ${stepIndex + 1}`).trim().slice(0, 90),
+                    body: String(step?.body || '').trim().slice(0, 2000),
+                    imageUrl: /^https?:\/\//i.test(String(step?.imageUrl || '').trim()) ? String(step.imageUrl).trim() : ''
+                })).filter(step => step.title || step.body || step.imageUrl)
+            };
+        })
+        .filter(tutorial => tutorial.title && tutorial.steps.length)
+        .slice(0, 24);
+}
+
+function normalizeSiteAnnouncement(input) {
+    const raw = input && typeof input === 'object' ? input : {};
+    const link = String(raw.linkUrl || '').trim();
+    return {
+        enabled: Boolean(raw.enabled && String(raw.text || '').trim()),
+        text: String(raw.text || '').trim().slice(0, 240),
+        ctaLabel: String(raw.ctaLabel || '').trim().slice(0, 40),
+        linkUrl: /^https?:\/\//i.test(link) ? link : ''
+    };
+}
 
 function randomToken(bytes = 24) {
     return crypto.randomBytes(Math.max(16, Number(bytes) || 24)).toString('base64url');
@@ -173,6 +263,7 @@ function safeDashboardNextPath(value) {
         '/overview',
         '/settings',
         '/availability',
+        '/tutorials',
         '/tickets',
         '/transcripts',
         '/commands/ticket-types',
@@ -202,6 +293,10 @@ function createHomeHtml(options = {}) {
     const securityNote = protectedMode
         ? 'Dashboard access requires a token.'
         : 'Dashboard is running without a token (local-only by default).';
+    const siteAnnouncement = normalizeSiteAnnouncement(botConfig.siteAnnouncement);
+    const announcementHtml = siteAnnouncement.enabled
+        ? `<section class="hero-card" style="margin-bottom:14px;padding:18px 22px"><div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div><div class="kicker">Announcement</div><p style="margin-top:10px">${siteAnnouncement.text}</p></div>${siteAnnouncement.ctaLabel && siteAnnouncement.linkUrl ? `<a class="btn primary" href="${siteAnnouncement.linkUrl}" target="_blank" rel="noreferrer">${siteAnnouncement.ctaLabel}</a>` : ''}</div></section>`
+        : '';
 
     const gallery = safeImages.length
         ? `<section class="gallery">
@@ -217,7 +312,7 @@ function createHomeHtml(options = {}) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Tickets Dashboard</title>
+  <title>${createDocumentTitle('Home')}</title>
   <link rel="icon" href="/assets/sync.png" />
   <style>${getHomeCss()}</style>
 </head>
@@ -244,6 +339,7 @@ function createHomeHtml(options = {}) {
   </header>
 
   <main class="hero">
+    ${announcementHtml}
     <section class="hero-card">
       <div class="kicker">Support &bull; Tickets &bull; Automations</div>
       <h1>Run support like a <span class="accent">pro.</span></h1>
@@ -288,7 +384,7 @@ function createHomeHtml(options = {}) {
       try{
         var key='dash_theme';
         var value=(localStorage.getItem(key)||'dark').toLowerCase();
-        var allowed=['dark','light','ocean','sunset'];
+        var allowed=['dark','light','ocean','sunset','hacker'];
         document.body.dataset.theme=allowed.includes(value)?value:'dark';
       }catch(e){
         document.body.dataset.theme='dark';
@@ -300,12 +396,17 @@ function createHomeHtml(options = {}) {
 }
 
 function baseDashboardPage({ title, body, script = '', ownerView = false }) {
+    const siteAnnouncement = normalizeSiteAnnouncement(ticketStore.getBotConfig()?.siteAnnouncement);
+    const announcementHtml = siteAnnouncement.enabled
+        ? `<div class="wrap" style="padding-top:14px;padding-bottom:0"><div class="card" style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px"><div><strong>Announcement</strong><div class="muted">${siteAnnouncement.text}</div></div>${siteAnnouncement.ctaLabel && siteAnnouncement.linkUrl ? `<a class="btn primary" href="${siteAnnouncement.linkUrl}" target="_blank" rel="noreferrer">${siteAnnouncement.ctaLabel}</a>` : ''}</div></div>`
+        : '';
     const css = `
     :root{color-scheme:dark;--bg:#0b1020;--bg2:#090d1a;--panel:rgba(17,20,36,.78);--tx:#f7f8ff;--mut:rgba(247,248,255,.66);--bd:rgba(255,255,255,.10);--acc:#38bdf8;--acc2:#60a5fa;--shadow:0 18px 50px rgba(0,0,0,.55);--cardGlow:0 0 0 1px rgba(96,165,250,.12) inset,0 20px 50px rgba(8,15,35,.45);--cardOutline:rgba(96,165,250,.24)}
     *{box-sizing:border-box}html,body{font-family:"Inter","Readex Pro","Segoe UI",system-ui,-apple-system,sans-serif}body{margin:0;background:radial-gradient(700px 380px at 20% 10%,rgba(56,189,248,.18),transparent 55%),radial-gradient(650px 360px at 78% 20%,rgba(37,99,235,.16),transparent 60%),linear-gradient(180deg,var(--bg),var(--bg2));color:var(--tx);font:14px/1.45 "Inter","Readex Pro","Segoe UI",system-ui,-apple-system,sans-serif}
     body[data-theme="light"]{--bg:#f7f0e4;--bg2:#f3e6d0;--panel:rgba(255,250,243,.82);--tx:#111827;--mut:rgba(17,24,39,.66);--bd:rgba(17,24,39,.12);--acc:#2563eb;--acc2:#38bdf8;--shadow:0 16px 40px rgba(17,24,39,.12);--cardGlow:0 0 0 1px rgba(37,99,235,.10) inset,0 18px 38px rgba(17,24,39,.12);--cardOutline:rgba(37,99,235,.22);background:radial-gradient(700px 380px at 20% 10%,rgba(56,189,248,.14),transparent 55%),radial-gradient(650px 360px at 78% 20%,rgba(37,99,235,.12),transparent 60%),linear-gradient(180deg,var(--bg),var(--bg2))}
     body[data-theme="ocean"]{--bg:#061421;--bg2:#071b2c;--panel:rgba(10,29,44,.80);--tx:#ecfeff;--mut:rgba(236,254,255,.68);--bd:rgba(125,211,252,.14);--acc:#22d3ee;--acc2:#14b8a6;--shadow:0 18px 44px rgba(3,10,22,.52);--cardGlow:0 0 0 1px rgba(34,211,238,.14) inset,0 22px 56px rgba(4,16,28,.50);--cardOutline:rgba(34,211,238,.28);background:radial-gradient(760px 420px at 16% 12%,rgba(34,211,238,.18),transparent 58%),radial-gradient(680px 360px at 82% 18%,rgba(20,184,166,.15),transparent 62%),linear-gradient(180deg,var(--bg),var(--bg2))}
     body[data-theme="sunset"]{--bg:#1b1020;--bg2:#2a1422;--panel:rgba(43,19,31,.78);--tx:#fff7ed;--mut:rgba(255,247,237,.72);--bd:rgba(251,146,60,.16);--acc:#fb7185;--acc2:#fb923c;--shadow:0 18px 48px rgba(30,10,20,.52);--cardGlow:0 0 0 1px rgba(251,146,60,.14) inset,0 22px 54px rgba(31,10,18,.52);--cardOutline:rgba(251,146,60,.28);background:radial-gradient(720px 400px at 18% 10%,rgba(251,113,133,.18),transparent 58%),radial-gradient(650px 340px at 82% 18%,rgba(251,146,60,.15),transparent 62%),linear-gradient(180deg,var(--bg),var(--bg2))}
+    body[data-theme="hacker"]{--bg:#020607;--bg2:#010b07;--panel:rgba(0,12,7,.84);--tx:#d7ffe9;--mut:rgba(215,255,233,.72);--bd:rgba(0,255,136,.18);--acc:#00ff88;--acc2:#00e5ff;--shadow:0 18px 48px rgba(0,0,0,.62);--cardGlow:0 0 0 1px rgba(0,255,136,.14) inset,0 22px 54px rgba(0,0,0,.58);--cardOutline:rgba(0,255,136,.28);background:radial-gradient(720px 400px at 18% 10%,rgba(0,255,136,.16),transparent 58%),radial-gradient(650px 340px at 82% 18%,rgba(0,229,255,.12),transparent 62%),linear-gradient(180deg,var(--bg),var(--bg2));font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
     a{color:inherit}
     .wrap{max-width:1050px;margin:0 auto;padding:18px}
     .top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--bd);backdrop-filter:blur(8px);position:sticky;top:0;background:rgba(8,10,20,.64);z-index:10}
@@ -324,6 +425,11 @@ function baseDashboardPage({ title, body, script = '', ownerView = false }) {
     select,input{width:100%;padding:10px 11px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(5,8,20,.78);color:var(--tx)}
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     .list{margin-top:12px;display:grid;gap:10px}
+    .server-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .server-card{min-height:220px;align-items:stretch}
+    .server-card > .row:last-child{align-self:flex-end}
+    @media(max-width:1100px){.server-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:700px){.server-grid{grid-template-columns:1fr}.server-card{min-height:auto}}
     .item{border:1px solid rgba(255,255,255,.10);background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.03));border-radius:18px;padding:14px;display:flex;justify-content:space-between;gap:12px;align-items:center;box-shadow:0 0 0 1px rgba(255,255,255,.02) inset,0 0 24px color-mix(in srgb,var(--acc) 8%, transparent)}
     .item.can-manage{border-color:var(--cardOutline);box-shadow:0 0 0 1px color-mix(in srgb,var(--acc) 10%, transparent) inset,0 0 26px color-mix(in srgb,var(--acc) 16%, transparent)}
     .item strong{font-size:14px}
@@ -341,7 +447,7 @@ function baseDashboardPage({ title, body, script = '', ownerView = false }) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>${String(title || 'Dashboard')}</title>
+  <title>${createDocumentTitle(title || 'Dashboard')}</title>
   <link rel="icon" href="/assets/sync.png" />
   <style>${css}</style>
 </head>
@@ -359,16 +465,18 @@ function baseDashboardPage({ title, body, script = '', ownerView = false }) {
           <button class="theme-item" type="button" data-theme-item="light">Light</button>
           <button class="theme-item" type="button" data-theme-item="ocean">Ocean</button>
           <button class="theme-item" type="button" data-theme-item="sunset">Sunset</button>
+          <button class="theme-item" type="button" data-theme-item="hacker">Hacker</button>
         </div>
       </div>
       <a class="btn" href="/logout">Logout</a>
     </nav>
   </header>
+  ${announcementHtml}
   <main class="wrap">${body || ''}</main>
   <script>
     (function(){
       const key='dash_theme';
-      const allowed=['dark','light','ocean','sunset'];
+      const allowed=['dark','light','ocean','sunset','hacker'];
       const normalise=v=>allowed.includes(String(v||'').toLowerCase())?String(v).toLowerCase():'dark';
       const apply=v=>{document.body.dataset.theme=normalise(v);document.querySelectorAll('[data-theme-item]').forEach(btn=>btn.classList.toggle('active',btn.getAttribute('data-theme-item')===document.body.dataset.theme));};
       try{apply(localStorage.getItem(key)||'dark')}catch{apply('dark')}
@@ -419,13 +527,8 @@ function createServerPickerHtml(options = {}) {
       <div class="card">
         <h2 style="margin:0 0 6px">Server Access</h2>
         <div class="muted">This shows the servers your Discord account is in, whether the bot is in them too, and what elevated permissions you have in each server.</div>
-        <div class="row" style="margin-top:12px">
-          <span class="pill">Glowing outline = you can edit</span>
-          <span class="pill">Dim card = view only</span>
-          <span class="pill">Bot not in server = no dashboard access</span>
-        </div>
         <div id="guildError" class="err" style="display:none;margin-top:12px"></div>
-        <div id="guildList" class="list"></div>
+        <div id="guildList" class="list server-grid"></div>
       </div>
     `;
 
@@ -437,7 +540,7 @@ function createServerPickerHtml(options = {}) {
       async function api(path,opt){const r=await fetch(path,{credentials:'include',...(opt||{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function renderPerms(g){const tags=[];tags.push(g.botInServer?'<span class="pill">Bot in server</span>':'<span class="pill">Bot not in server</span>');tags.push(g.isOwner?'<span class="pill">Owner</span>':'');tags.push(g.isAdmin?'<span class="pill">Administrator</span>':'');tags.push(!g.isAdmin&&g.canManageGuild?'<span class="pill">Manage Server</span>':'');tags.push(!g.isAdmin&&!g.canManageGuild&&g.canManageChannels?'<span class="pill">Manage Channels</span>':'');return tags.filter(Boolean).join('')}
       function renderAction(g){if(ownerView&&g.botInServer)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a>';if(g.botInServer&&g.canAccessDashboard)return '<span class="pill">Can edit ticket config</span>';if(g.botInServer)return '<span class="muted">No dashboard permissions</span>';return '<span class="muted">Bot is not in this server</span>'}
-      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:34px;height:34px;border-radius:12px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=Array.isArray(g.permissionSummary)&&g.permissionSummary.length?g.permissionSummary.map(esc).join(' • '):'No elevated permissions';const cls='item'+(g.canAccessDashboard?' can-manage':'');return '<div class="'+cls+'">'+
+      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=Array.isArray(g.permissionSummary)&&g.permissionSummary.length?g.permissionSummary.map(esc).join(' • '):'No elevated permissions';const cls='item server-card'+(g.canAccessDashboard?' can-manage':'');return '<div class="'+cls+'">'+
         '<div style="display:grid;gap:8px;min-width:0">'+
           '<div class="row" style="gap:10px">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class="pill">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
           '<div class="row">'+renderPerms(g)+'</div>'+
@@ -468,7 +571,7 @@ function createSetupHtml() {
         .setup-step-pill.done{border-color:rgba(87,242,135,.35);background:rgba(87,242,135,.10)}
         .setup-step-no{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:rgba(247,248,255,.52)}
         .setup-step-name{font-weight:700;margin-top:4px}
-        .setup-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,.9fr);gap:16px}
+        .setup-grid{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(300px,.85fr);gap:16px}
         .setup-panel{min-height:480px;position:relative;overflow:hidden}
         .setup-panel::before{content:"";position:absolute;inset:auto -60px -90px auto;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,rgba(56,189,248,.20),transparent 70%);pointer-events:none}
         .setup-stage{display:none;animation:setupFade .28s ease}
@@ -485,16 +588,22 @@ function createSetupHtml() {
         .setup-inline{display:flex;gap:10px;flex-wrap:wrap}
         .setup-inline > *{flex:1 1 180px}
         .setup-hint-list{display:grid;gap:10px}
+        .setup-choice-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+        .setup-choice{border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:16px;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.03));box-shadow:0 18px 40px rgba(0,0,0,.18)}
+        .setup-choice strong{display:block;font-size:15px;margin-bottom:6px}
+        .setup-complete{display:none;margin-top:14px;padding:14px 16px;border-radius:18px;border:1px solid rgba(87,242,135,.26);background:rgba(87,242,135,.10)}
+        .setup-complete.show{display:block}
+        .setup-confetti{position:fixed;inset:0;pointer-events:none;z-index:999}
         @keyframes setupFade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
         @keyframes setupShimmer{0%{transform:translateX(-120%)}100%{transform:translateX(140%)}}
-        @media(max-width:940px){.setup-grid,.setup-steps{grid-template-columns:1fr}.setup-panel{min-height:auto}}
+        @media(max-width:940px){.setup-grid,.setup-steps,.setup-choice-grid{grid-template-columns:1fr}.setup-panel{min-height:auto}}
       </style>
       <div class="setup-shell">
         <div class="card setup-hero">
           <div class="setup-header">
             <div>
               <div class="setup-title">Server Setup</div>
-              <div class="muted setup-sub">Walk through the setup in a few clean steps. You can create the needed channels from here, enable a small tutorial, and keep claimer access stable with role permanence.</div>
+              <div class="muted setup-sub">A shorter onboarding flow for getting a server live. Pick the server, choose the channels, set the key roles, then finish once.</div>
             </div>
             <a class="btn" id="setupOpenDashboardLink" href="/dashboard">Server Access</a>
           </div>
@@ -512,12 +621,11 @@ function createSetupHtml() {
 
             <section class="setup-stage" data-step="1">
               <h3>Pick the server</h3>
-              <div class="muted">Choose the guild this setup should manage, then create or refresh its stored config.</div>
+              <div class="muted">Choose the guild this setup should manage. Once you finish setup, this flow locks for regular staff so it can’t be restarted by accident.</div>
               <label>Guild</label>
               <select id="guildSelect"></select>
               <div class="setup-inline" style="margin-top:12px">
                 <button id="initTemplate" class="btn primary" type="button">Create server config</button>
-                <button id="restartSetup" class="btn" type="button" style="display:none">Restart setup</button>
               </div>
               <div class="setup-actions">
                 <div class="row"></div>
@@ -527,7 +635,11 @@ function createSetupHtml() {
 
             <section class="setup-stage" data-step="2">
               <h3>Choose or create channels</h3>
-              <div class="muted">Set the ticket category plus your feedback and transcript archive channels. If they do not exist yet, the bot can create them for you.</div>
+              <div class="muted">Set the core channels for this server. If a channel does not exist yet, the bot can make it for you.</div>
+              <div class="setup-choice-grid">
+                <div class="setup-choice"><strong>Ticket Category</strong><div class="muted">Where new tickets should live.</div></div>
+                <div class="setup-choice"><strong>Archive Channels</strong><div class="muted">Where feedback and transcripts should be stored.</div></div>
+              </div>
               <label>Ticket Category</label>
               <select id="parentCategoryId"></select>
               <div class="setup-inline" style="margin-top:10px">
@@ -554,7 +666,7 @@ function createSetupHtml() {
 
             <section class="setup-stage" data-step="3">
               <h3>Roles and behaviour</h3>
-              <div class="muted">Choose the manager role and a couple of setup toggles for how the bot should behave.</div>
+              <div class="muted">Choose the manager role and a couple of behavior toggles, similar to a server onboarding checklist.</div>
               <label>Manager Role</label>
               <select id="managerRoleId"></select>
               <label>High Escalation Role</label>
@@ -572,8 +684,8 @@ function createSetupHtml() {
                 <label class="setup-toggle">
                   <input id="tutorialEnabled" type="checkbox" />
                   <div>
-                    <strong>Enable quick tutorial</strong>
-                    <div class="muted">Shows a short getting-started guide in the dashboard so new staff know the intended flow.</div>
+                    <strong>Show tutorial library</strong>
+                    <div class="muted">Lets staff open the tutorial cards page from the dashboard when they need a refresher.</div>
                   </div>
                 </label>
               </div>
@@ -588,8 +700,9 @@ function createSetupHtml() {
 
             <section class="setup-stage" data-step="4">
               <h3>Review and finish</h3>
-              <div class="muted">Check the summary below, save everything once more if needed, then mark setup complete.</div>
+              <div class="muted">Check the summary below, save everything once more if needed, then finish. After that this setup flow is locked for non-owners.</div>
               <div id="setupSummary" class="setup-summary"></div>
+              <div id="setupCompleteBanner" class="setup-complete"><strong>Setup finished.</strong><div class="muted">This onboarding flow is now locked for regular staff. Use the main dashboard for everyday changes.</div></div>
               <div class="setup-actions">
                 <div class="row"><button class="btn" type="button" data-go-step="3">Back</button></div>
                 <div class="row">
@@ -601,17 +714,19 @@ function createSetupHtml() {
           </div>
 
           <div class="card">
-            <h3 style="margin:0 0 6px">Tutorial</h3>
-            <div class="muted">Suggested flow after setup:</div>
+            <h3 style="margin:0 0 6px">After Setup</h3>
+            <div class="muted">Once you are live, keep the day-to-day flow simple:</div>
             <div class="setup-hint-list" style="margin-top:12px">
               <div class="item"><strong>1. Post a ticket panel</strong><div class="muted">Use the dashboard or \`/set-panel\` to place the opener in your chosen channel.</div></div>
               <div class="item"><strong>2. Claim tickets</strong><div class="muted">Support members use \`/claim\` to take ownership so stats and metadata stay clean.</div></div>
               <div class="item"><strong>3. Close with transcript</strong><div class="muted">Use \`/closerequest\` or the close button so the transcript archive stays complete.</div></div>
             </div>
+            <div class="setup-inline" style="margin-top:14px"><a class="btn primary" href="/tutorials">Open Tutorials</a></div>
             <div class="muted" style="margin-top:12px">If you do not see a guild yet, let the bot finish logging in and refresh this page.</div>
           </div>
         </div>
       </div>
+      <canvas id="setupConfetti" class="setup-confetti"></canvas>
     `;
 
     const script = `
@@ -631,7 +746,7 @@ function createSetupHtml() {
       const saveBtn=document.getElementById('saveSetup');
       const doneBtn=document.getElementById('markComplete');
       const initBtn=document.getElementById('initTemplate');
-      const restartBtn=document.getElementById('restartSetup');
+      const completeBanner=document.getElementById('setupCompleteBanner');
       const progressBar=document.getElementById('setupProgressBar');
       const stepPills=[...document.querySelectorAll('#setupStepPills .setup-step-pill')];
       const stages=[...document.querySelectorAll('.setup-stage')];
@@ -643,7 +758,8 @@ function createSetupHtml() {
       function fillSelect(el,items,emptyLabel,selected){const rows=['<option value=\"\">'+esc(emptyLabel)+'</option>'].concat(items.map(it=>opt(it.id,it.label||it.name||it.id,selected===it.id)));el.innerHTML=rows.join('')}
       let catalogs={ roles:[], channels:[], categories:[] };
       function syncPageState(){if(guildSelect&&guildSelect.value)qs.set('guild',guildSelect.value);if(currentStep)qs.set('page',String(currentStep));history.replaceState(null,'','?'+qs.toString());if(dashboardLink)dashboardLink.href='/dashboard';}
-      function setLocked(locked){setupLocked=!!locked;for(const el of [parentCategoryId,appealsChannelId,transcriptsChannelId,managerRoleId,highEscalationRoleId,immediateEscalationRoleId,rolePermanence,tutorialEnabled]){if(el)el.disabled=setupLocked}for(const btn of document.querySelectorAll('[data-create-kind],#initTemplate,#saveChannels,#saveRoles,#saveSetup,#markComplete')){if(btn)btn.disabled=setupLocked}if(saveBtn)saveBtn.style.display=setupLocked?'none':'';if(doneBtn)doneBtn.style.display=setupLocked?'none':'';if(restartBtn)restartBtn.style.display=setupLocked?'':'none';}
+      function setLocked(locked){setupLocked=!!locked;for(const el of [parentCategoryId,appealsChannelId,transcriptsChannelId,managerRoleId,highEscalationRoleId,immediateEscalationRoleId,rolePermanence,tutorialEnabled]){if(el)el.disabled=setupLocked}for(const btn of document.querySelectorAll('[data-create-kind],#initTemplate,#saveChannels,#saveRoles,#saveSetup,#markComplete')){if(btn)btn.disabled=setupLocked}if(saveBtn)saveBtn.style.display=setupLocked?'none':'';if(doneBtn)doneBtn.style.display=setupLocked?'none':'';if(completeBanner)completeBanner.classList.toggle('show',setupLocked);}
+      function fireConfetti(){const canvas=document.getElementById('setupConfetti');if(!canvas)return;const ctx=canvas.getContext('2d');if(!ctx)return;const dpr=Math.max(1,window.devicePixelRatio||1);const pieces=Array.from({length:120},(_,i)=>({x:Math.random()*window.innerWidth,y:-20-Math.random()*window.innerHeight*.2,vx:(Math.random()-.5)*5,vy:2+Math.random()*5,size:5+Math.random()*7,rot:Math.random()*Math.PI,color:['#57f287','#38bdf8','#fbbf24','#fb7185','#a78bfa'][i%5]}));canvas.width=Math.floor(window.innerWidth*dpr);canvas.height=Math.floor(window.innerHeight*dpr);canvas.style.width=window.innerWidth+'px';canvas.style.height=window.innerHeight+'px';ctx.scale(dpr,dpr);let frame=0;function tick(){ctx.clearRect(0,0,window.innerWidth,window.innerHeight);for(const p of pieces){p.x+=p.vx;p.y+=p.vy;p.rot+=0.08;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.color;ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*.65);ctx.restore();}frame+=1;if(frame<140){requestAnimationFrame(tick)}else{ctx.clearRect(0,0,window.innerWidth,window.innerHeight)}}tick()}
       function gotoStep(step){const safe=Math.max(1,Math.min(4,Number(step)||1));currentStep=safe;stages.forEach(stage=>stage.classList.toggle('active',Number(stage.dataset.step)===safe));stepPills.forEach((pill,index)=>{const n=index+1;pill.classList.toggle('active',n===safe);pill.classList.toggle('done',n<safe)});if(progressBar)progressBar.style.width=(safe/4*100)+'%';syncPageState();renderSummary()}
       function configPayload(){return{guildId:guildSelect.value,parentCategoryId:parentCategoryId.value||null,appealsChannelId:appealsChannelId.value||null,transcriptsChannelId:transcriptsChannelId.value||null,managerRoleId:managerRoleId.value||null,escalationRoles:{high:highEscalationRoleId.value||null,immediate:immediateEscalationRoleId.value||null},rolePermanence:!!rolePermanence.checked,tutorialEnabled:!!tutorialEnabled.checked,setup:{step:currentStep}}}
       function readLabel(selectEl){if(!selectEl)return 'Not set';const option=selectEl.options[selectEl.selectedIndex];return option&&option.value?option.text:'Not set'}
@@ -662,9 +778,8 @@ function createSetupHtml() {
       async function loadConfig(){const gid=guildSelect.value; if(!gid) return; const data=await api('/api/guild-config?guildId='+encodeURIComponent(gid)); const c=data.config||{}; parentCategoryId.value=c.parentCategoryId||''; appealsChannelId.value=c.appealsChannelId||''; transcriptsChannelId.value=c.transcriptsChannelId||''; managerRoleId.value=c.managerRoleId||''; highEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.high)||''; immediateEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.immediate)||''; rolePermanence.checked=c.rolePermanence!==false; tutorialEnabled.checked=!!c.tutorialEnabled; setLocked(Boolean(c&&c.setup&&c.setup.completed)); const requestedPage=Number(qs.get('page')||0); const configStep=Number(c&&c.setup&&c.setup.step)||1; gotoStep(c&&c.setup&&c.setup.completed?4:(requestedPage||configStep));}
       async function saveConfig(extra){const payload={...configPayload(),...(extra||{})};await api('/api/guild-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})}
       saveBtn.onclick=async()=>{try{err.style.display='none';await saveConfig();saveBtn.textContent='Saved';setTimeout(()=>saveBtn.textContent='Save all',1000)}catch(e){err.style.display='block';err.textContent=e.message}};
-      doneBtn.onclick=async()=>{try{err.style.display='none';await saveConfig({setupComplete:true,setup:{step:4}});doneBtn.textContent='Completed';setTimeout(()=>doneBtn.textContent='Mark complete',1200);await loadConfig()}catch(e){err.style.display='block';err.textContent=e.message}};
+      doneBtn.onclick=async()=>{try{err.style.display='none';await saveConfig({setupComplete:true,setup:{step:4}});fireConfetti();doneBtn.textContent='Completed';setTimeout(()=>doneBtn.textContent='Mark complete',1200);await loadConfig()}catch(e){err.style.display='block';err.textContent=e.message}};
       initBtn.onclick=async()=>{try{err.style.display='none';const gid=guildSelect.value;initBtn.disabled=true;await api('/api/guild-config/init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:gid})});await loadConfig();initBtn.textContent='Created';setTimeout(()=>{initBtn.textContent='Create server config';initBtn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;initBtn.disabled=false}};
-      restartBtn.onclick=async()=>{try{err.style.display='none';const gid=guildSelect.value;restartBtn.disabled=true;await api('/api/guild-config/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:gid})});await loadConfig();restartBtn.textContent='Restarted';setTimeout(()=>{restartBtn.textContent='Restart Setup';restartBtn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;restartBtn.disabled=false}};
       document.getElementById('saveChannels').onclick=async()=>{try{err.style.display='none';await saveConfig({setup:{step:2}})}catch(e){err.style.display='block';err.textContent=e.message}};
       document.getElementById('saveRoles').onclick=async()=>{try{err.style.display='none';await saveConfig({setup:{step:3}})}catch(e){err.style.display='block';err.textContent=e.message}};
       async function createChannel(kind){const gid=guildSelect.value;if(!gid)throw new Error('Pick a guild first.');const defaults={category:'Tickets',feedback:'ticket-feedback',transcripts:'ticket-transcripts'};const label=kind==='category'?'category':'channel';const name=prompt('Name for the new '+label+':',defaults[kind]||'tickets');if(name===null)return false;const trimmed=String(name||'').trim();if(!trimmed)throw new Error('A name is required.');await saveConfig({setup:{step:2}});const result=await api('/api/setup/create-channel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:gid,kind,name:trimmed,parentCategoryId:parentCategoryId.value||null})});await loadCatalogs();if(kind==='category')parentCategoryId.value=result.channel.id;else if(kind==='feedback')appealsChannelId.value=result.channel.id;else if(kind==='transcripts')transcriptsChannelId.value=result.channel.id;renderSummary();return true}
@@ -1274,6 +1389,8 @@ async function getDashboardState(client, req = null) {
         botConfig: {
             appealsChannelId: guildConfig?.appealsChannelId || null,
             homeImages: ownerView && Array.isArray(botConfig.homeImages) ? botConfig.homeImages : [],
+            tutorials: normalizeTutorials(botConfig.tutorials),
+            siteAnnouncement: normalizeSiteAnnouncement(botConfig.siteAnnouncement),
             embedTemplates: botConfig.embedTemplates && typeof botConfig.embedTemplates === 'object'
                 ? botConfig.embedTemplates
                 : DEFAULT_EMBED_TEMPLATES
@@ -1551,6 +1668,10 @@ async function handleApi(req, res, url, client) {
     }
 
     if (method === 'POST' && pathname === '/api/guild-config/restart') {
+        if (!isOwnerAuthed(req)) {
+            sendJson(res, 403, { error: 'Owner access required' });
+            return true;
+        }
         const body = await readBody(req);
         const guildId = String(body.guildId || '').trim();
         if (!/^\d{17,20}$/.test(guildId)) {
@@ -1692,6 +1813,8 @@ async function handleApi(req, res, url, client) {
         sendJson(res, 200, {
             appealsChannelId: botConfig.appealsChannelId || getDefaultAppealsChannelId(),
             homeImages: ownerView && Array.isArray(botConfig.homeImages) ? botConfig.homeImages : [],
+            tutorials: ownerView ? normalizeTutorials(botConfig.tutorials) : [],
+            siteAnnouncement: ownerView ? normalizeSiteAnnouncement(botConfig.siteAnnouncement) : normalizeSiteAnnouncement({}),
             embedTemplates: botConfig.embedTemplates && typeof botConfig.embedTemplates === 'object'
                 ? botConfig.embedTemplates
                 : DEFAULT_EMBED_TEMPLATES
@@ -1715,6 +1838,8 @@ async function handleApi(req, res, url, client) {
         const next = { appealsChannelId: appealsChannelId || getDefaultAppealsChannelId() };
         if (homeImages.length) next.homeImages = homeImages;
         else if (body.homeImages) next.homeImages = [];
+        if (Object.prototype.hasOwnProperty.call(body, 'tutorials')) next.tutorials = normalizeTutorials(body.tutorials);
+        if (Object.prototype.hasOwnProperty.call(body, 'siteAnnouncement')) next.siteAnnouncement = normalizeSiteAnnouncement(body.siteAnnouncement);
 
         const config = ticketStore.setBotConfig(next);
         sendJson(res, 200, { ok: true, config });
@@ -2260,9 +2385,9 @@ function navItem(path, label, currentPath) {
 }
 
 function getAllowedDashboardPages(access = {}) {
-    const pages = new Set(['/documentation']);
+    const pages = new Set(['/documentation', '/tutorials']);
     if (access?.canFullDashboard || access?.isOwner) {
-        ['/overview', '/settings', '/availability', '/commands/ticket-types', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/setup', '/controller'].forEach(page => pages.add(page));
+        ['/overview', '/settings', '/availability', '/commands/ticket-types', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/tutorials', '/setup', '/controller'].forEach(page => pages.add(page));
         return pages;
     }
     if (access?.canManageSettings) pages.add('/setup');
@@ -2281,6 +2406,7 @@ function pageTitleForPath(path) {
         '/overview': 'Home',
         '/settings': 'Settings',
         '/availability': 'Availability',
+        '/tutorials': 'Tutorials',
         '/commands/ticket-types': 'Ticket Types',
         '/commands/tag': 'Tags',
         '/tickets': 'Tickets',
@@ -2308,7 +2434,8 @@ function createUiHtml(currentPath) {
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-<title>Tickets Dashboard</title>
+<title>${createDocumentTitle(pageTitle)}</title>
+<link rel="icon" href="/assets/sync.png" />
 <style>
 :root{--bg:#07070a;--bg-alt:#0b1220;--card:rgba(255,255,255,.06);--card-strong:rgba(255,255,255,.09);--bd:rgba(255,255,255,.14);--tx:#f5f7ff;--mt:rgba(245,247,255,.72);--ac:#6366f1;--ac-soft:#a5b4fc;--ok:#57f287;--er:#ed4245}
 *{box-sizing:border-box}
@@ -2815,12 +2942,12 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
  </style></head>
 <body>
  <div id="auth" class="auth"><div class="auth-card"><h3>Dashboard Login</h3><div class="muted" style="margin-bottom:10px">Sign in with Discord to continue.</div><a id="authDiscord" class="btn" href="/login" style="display:block;text-align:center;text-decoration:none">Sign in with Discord</a><div class="muted" style="margin:12px 0 6px">or use a token</div><label>Token</label><input id="authToken" type="password" /><div class="row" style="margin-top:10px"><button id="authLogin" class="btn">Login</button></div><div id="authMsg" class="notice danger"></div></div></div>
- <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">Navigate using the dropdowns to keep things tidy.</div></div></div><div class="topbar-right"><a class="btn-soft" href="/dashboard">Servers</a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-topnav-item data-value="/overview">Home <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/settings">Settings <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/availability">Availability <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/tickets">Tickets <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/transcripts">Transcripts <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/ticket-types">Ticket Types <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/tag">Tags <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/feedback">Feedback <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/statistics">Statistics <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/embed-editor">Embed Editor <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/documentation">Documentation <span class="tag">Content</span></button></div></div><div id="themeNav" class="topnav"><button id="themeBtn" class="btn-soft topnav-btn" type="button"><span id="themeLabel">Theme</span><span class="chev">v</span></button><div class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-theme-item="dark">Dark <span class="tag">Default</span></button><button type="button" class="topnav-item" data-theme-item="light">Light <span class="tag">Warm</span></button><button type="button" class="topnav-item" data-theme-item="ocean">Ocean <span class="tag">Cool</span></button><button type="button" class="topnav-item" data-theme-item="sunset">Sunset <span class="tag">Bold</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px">Refresh</button></div></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
+ <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">Navigate using the dropdowns to keep things tidy.</div></div></div><div class="topbar-right"><a class="btn-soft" href="/dashboard">Servers</a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-topnav-item data-value="/overview">Home <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/settings">Settings <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/availability">Availability <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/tutorials">Tutorials <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/tickets">Tickets <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/transcripts">Transcripts <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/ticket-types">Ticket Types <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/tag">Tags <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/feedback">Feedback <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/statistics">Statistics <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/embed-editor">Embed Editor <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/documentation">Documentation <span class="tag">Content</span></button></div></div><div id="themeNav" class="topnav"><button id="themeBtn" class="btn-soft topnav-btn" type="button"><span id="themeLabel">Theme</span><span class="chev">v</span></button><div class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-theme-item="dark">Dark <span class="tag">Default</span></button><button type="button" class="topnav-item" data-theme-item="light">Light <span class="tag">Warm</span></button><button type="button" class="topnav-item" data-theme-item="ocean">Ocean <span class="tag">Cool</span></button><button type="button" class="topnav-item" data-theme-item="sunset">Sunset <span class="tag">Bold</span></button><button type="button" class="topnav-item" data-theme-item="hacker">Hacker <span class="tag">Secret</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px">Refresh</button></div></div><div id="announcementBar"></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
 <script>
  let currentPath=${JSON.stringify(currentPath)},tokenKey='dashboard_token_ui',defaultEmbedTemplates=${JSON.stringify(DEFAULT_EMBED_TEMPLATES)};
 const app=document.getElementById('app'),notice=document.getElementById('notice'),auth=document.getElementById('auth'),authDiscord=document.getElementById('authDiscord'),authToken=document.getElementById('authToken'),authMsg=document.getElementById('authMsg');
  const themeKey='dash_theme';
- const inferTheme=()=>{try{const saved=String(localStorage.getItem(themeKey)||'dark').toLowerCase();return ['dark','light','ocean','sunset'].includes(saved)?saved:'dark'}catch{return 'dark'}};
+ const inferTheme=()=>{try{const saved=String(localStorage.getItem(themeKey)||'dark').toLowerCase();return ['dark','light','ocean','sunset','hacker'].includes(saved)?saved:'dark'}catch{return 'dark'}};
  document.body.dataset.theme=inferTheme();
   let state=null;
   let ui=(()=>{try{const raw=sessionStorage.getItem('dash_ui');const parsed=raw?JSON.parse(raw):{};return parsed&&typeof parsed==='object'?parsed:{};}catch{return {}}})();
@@ -3175,7 +3302,21 @@ function renderFeedback(){return '<div class="card"><h3>Feedback Command Setting
 function renderAppeal(){return renderFeedback()}
 function renderStats(){const t=state.statistics&&state.statistics.totals?state.statistics.totals:{activeTickets:0,totalClaimed:0,totalClosed:0};return '<div class="grid"><div class="card"><h3>Numbers (14d)</h3><div class="row"><div class="item"><div class="muted">Active tickets</div><strong>'+t.activeTickets+'</strong></div><div class="item"><div class="muted">Claimed</div><strong>'+t.totalClaimed+'</strong></div><div class="item"><div class="muted">Closed</div><strong>'+t.totalClosed+'</strong></div></div><div class="muted" style="margin-top:8px">Claimed/Closed exclude self-opened tickets when that data is available.</div></div><div class="card"><h3>Support Member Lookup</h3><label>User (ID or mention)</label><input id="staffLookupQuery" placeholder="<@123> or 123..." /><div class="row" style="margin-top:10px"><button id="staffLookupBtn" class="btn">Lookup</button><button id="staffLookupClear" class="btn-soft">Clear</button></div><div id="staffLookupResult" class="list" style="margin-top:10px"></div></div></div>'}
 function renderBranding(){const templates=state.botConfig.embedTemplates||defaultEmbedTemplates;const keys=Object.keys(templates);const firstKey=keys[0]||'ticketClaimed';const first=templates[firstKey]||{title:'',description:'',color:'#5865F2'};return '<div class="grid"><div class="card"><h3>Visual Components V2 Template Editor</h3><p class="muted">Template workflow: pick a template, edit text, preview live, then save. These templates render into Components V2 containers (accent color applies only when the bot decides the message is success/error).</p><div class="item" style="margin-top:10px"><div class="muted">Separators: add <code>[[divider]]</code>, <code>[[divider:large]]</code>, <code>[[space]]</code>, or <code>[[space:large]]</code> on their own line inside <strong>Description</strong> to insert dividers/spacers.</div></div><div class="row"><div><label>Template</label><select id="brandingKey">'+keys.map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join('')+'</select></div><div><label>Accent Color</label><input id="brandingColor" value="'+esc(first.color||'#5865F2')+'" placeholder="#5865F2" /></div></div><label>Title</label><input id="brandingTitle" value="'+esc(first.title||'')+'" /><label>Description</label><textarea id="brandingDescription" style="min-height:160px">'+esc(first.description||'')+'</textarea><div class="row" style="margin-top:10px"><button id="applyBrandingTemplate" class="btn-soft">Apply to Template</button><button id="saveBranding" class="btn">Save Templates</button></div><div class="row" style="margin-top:10px"><button id="resetBrandingDefaults" class="btn-soft">Reset to Defaults</button><button id="formatBrandingJson" class="btn-soft">Format JSON</button></div></div><div class="card"><h3>Live Preview</h3><div class="preview-shell"><div class="preview-msg"><div class="preview-avatar"></div><div class="preview-content"><div class="preview-name">Tickets Bot <span class="preview-tag">BOT</span></div><div id="brandingPreviewEmbed" class="preview-embed"><div id="brandingPreviewBar" class="preview-bar"></div><div class="preview-main"><div id="brandingPreviewTitle" class="preview-title"></div><div id="brandingPreviewDesc" class="preview-desc"></div></div></div></div></div></div><label style="margin-top:14px">Advanced JSON</label><textarea id="brandingTemplates" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(templates,null,2))+'</textarea></div></div>'}
+function renderTutorials(){
+ const tutorials=Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[];
+ const cards=tutorials.map((tutorial,index)=>'<button type="button" class="card tutorialCard" data-tutorial-open="'+index+'" style="text-align:left;padding:0;overflow:hidden">'+
+   (tutorial.coverImage?'<div style="height:130px;background:#0b1020"><img src="'+esc(tutorial.coverImage)+'" alt="'+esc(tutorial.title)+'" style="width:100%;height:100%;object-fit:cover;display:block" loading="lazy" /></div>':'')+
+   '<div style="padding:16px"><div class="item-top"><strong>'+esc(tutorial.title)+'</strong>'+(tutorial.badge?'<span class="pill">'+esc(tutorial.badge)+'</span>':'')+'</div><div class="muted">'+esc(tutorial.summary||'')+'</div><div class="muted" style="margin-top:10px">'+(tutorial.steps||[]).length+' step(s)</div></div></button>').join('');
+ return '<div class="grid">'+
+  '<div class="card welcome"><p class="floaty">Tutorials for your <span class="accent">team workflow</span>.</p><p class="muted">Pick a card to open the walkthrough in a focused modal.</p></div>'+
+  '<div class="card" style="grid-column:1/-1"><div class="list" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">'+(cards||'<div class="muted">No tutorials configured yet.</div>')+'</div></div>'+
+  '<div id="tutorialOverlay" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,.72);backdrop-filter:blur(8px);z-index:50;padding:24px;align-items:center;justify-content:center"><div class="card" style="width:min(880px,100%);max-height:90vh;overflow:auto"><div class="item-top"><div><strong id="tutorialModalTitle">Tutorial</strong><div id="tutorialModalBadge" class="muted"></div></div><button type="button" class="btn-soft" id="tutorialClose">Close</button></div><div id="tutorialModalBody" style="margin-top:12px"></div><div class="row" style="grid-template-columns:1fr 1fr;gap:10px;margin-top:14px"><button type="button" class="btn-soft" id="tutorialPrev">Back</button><button type="button" class="btn" id="tutorialNext">Next</button></div></div></div>'+
+ '</div>';
+}
 function renderDocs(){
+ const isOwner=Boolean(state&&state.isOwner);
+ const tutorials=Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[];
+ const announcement=(state&&state.botConfig&&state.botConfig.siteAnnouncement)||{enabled:false,text:'',ctaLabel:'',linkUrl:''};
  const rows=[['{ticketType}','Ticket type name'],['{requester}','User mention'],['{username}','Requester username'],['{userId}','Requester ID'],['{reason}','Open reason'],['{timestamp}','Discord timestamp'],['{timestampIso}','ISO timestamp'],['{date}','Date YYYY-MM-DD'],['{time}','Time HH:mm:ss UTC'],['{channel}','Ticket channel mention'],['{channelId}','Ticket channel ID']];
  const embedExample=esc(JSON.stringify({content:'Optional message content',embeds:[{title:'Embed title',description:'Embed description',color:5793266,thumbnail:{url:'https://example.com/thumb.png'},image:{url:'https://example.com/image.png'},footer:{text:'Footer text'}}]},null,2));
  const attachmentExample=esc(JSON.stringify({content:'Image from attachment',embeds:[{title:'Proof',image:{url:'attachment://proof.png'}}]},null,2));
@@ -3202,6 +3343,7 @@ function renderDocs(){
    '<pre style="white-space:pre-wrap;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);padding:10px;border-radius:10px;margin-top:10px">'+sepExample+'</pre>'+
    '<div class="item" style="margin-top:10px"><div class="muted">Tip: keep accent colors minimal; the bot applies accent automatically for success/error notices.</div></div>'+
   '</div>'+
+  (isOwner?('<div class="card"><h3>Tutorial Library Content</h3><div class="muted">Edit tutorials here. Each tutorial supports a cover image plus per-step images. Save as JSON to update the modal cards.</div><textarea id="tutorialsJson" style="min-height:320px;font-family:Consolas,monospace;margin-top:10px">'+esc(JSON.stringify(tutorials,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="saveTutorials" class="btn">Save Tutorials</button><button id="formatTutorials" class="btn-soft" type="button">Format JSON</button></div></div><div class="card"><h3>Site-wide Announcement</h3><label>Enabled</label><select id="announcementEnabled"><option value="false"'+(!announcement.enabled?' selected':'')+'>Disabled</option><option value="true"'+(announcement.enabled?' selected':'')+'>Enabled</option></select><label>Text</label><input id="announcementText" value="'+esc(announcement.text||'')+'" placeholder="Important update for all dashboard users" /><label>CTA Label</label><input id="announcementCta" value="'+esc(announcement.ctaLabel||'')+'" placeholder="Read more" /><label>CTA URL</label><input id="announcementUrl" value="'+esc(announcement.linkUrl||'')+'" placeholder="https://..." /><div class="row" style="margin-top:10px"><button id="saveAnnouncement" class="btn">Save Announcement</button></div></div>'):'')+
  '</div>'}
 function selectedRoles(id){return Array.from(document.querySelectorAll('input[data-ms-check="'+id+'"]:checked')).map(el=>el.value)}
 function setRoleSelection(id,values){const selectedSet=new Set((values||[]).map(String));document.querySelectorAll('input[data-ms-check="'+id+'"]').forEach(el=>{el.checked=selectedSet.has(el.value)});updateRoleSelectionUi(id)}
@@ -3235,12 +3377,12 @@ function wire(){
     const closeMenu=()=>{try{document.body.classList.remove('menu-open')}catch{}};
     if(menuBtn)menuBtn.onclick=()=>{document.body.classList.toggle('menu-open')};
     if(menuOverlay)menuOverlay.onclick=()=>closeMenu();
-    const navTitleForPath=(p)=>({ '/overview':'Home','/settings':'Settings','/availability':'Availability','/commands/ticket-types':'Ticket Types','/commands/tag':'Tags','/tickets':'Tickets','/transcripts':'Transcripts','/commands/feedback':'Feedback','/statistics':'Statistics','/embed-editor':'Embed Editor','/documentation':'Documentation'}[p]||'Dashboard');
-     const groupForPath=(p)=>{if(p==='/overview'||p==='/settings'||p==='/availability')return 'general';if(p==='/commands/ticket-types'||p==='/commands/tag'||p==='/tickets'||p==='/transcripts')return 'tickets';return 'content'};
-     const allowedPages=()=>{const access=(state&&state.access)||{};const set=new Set(['/documentation']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>set.add(p));return set}if(access.canManageTicketTypes){set.add('/settings');set.add('/commands/ticket-types')}if(access.canManageAvailability)set.add('/availability');if(access.canViewTickets||access.canManageEscalations)set.add('/tickets');if(access.canViewTranscripts)set.add('/transcripts');return set};
+    const navTitleForPath=(p)=>({ '/overview':'Home','/settings':'Settings','/availability':'Availability','/tutorials':'Tutorials','/commands/ticket-types':'Ticket Types','/commands/tag':'Tags','/tickets':'Tickets','/transcripts':'Transcripts','/commands/feedback':'Feedback','/statistics':'Statistics','/embed-editor':'Embed Editor','/documentation':'Documentation'}[p]||'Dashboard');
+     const groupForPath=(p)=>{if(p==='/overview'||p==='/settings'||p==='/availability'||p==='/tutorials')return 'general';if(p==='/commands/ticket-types'||p==='/commands/tag'||p==='/tickets'||p==='/transcripts')return 'tickets';return 'content'};
+     const allowedPages=()=>{const access=(state&&state.access)||{};const set=new Set(['/documentation','/tutorials']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>set.add(p));return set}if(access.canManageTicketTypes){set.add('/settings');set.add('/commands/ticket-types')}if(access.canManageAvailability)set.add('/availability');if(access.canViewTickets||access.canManageEscalations)set.add('/tickets');if(access.canViewTranscripts)set.add('/transcripts');return set};
      let darkSecretCount=0;
-     const normaliseTheme=(t)=>{const v=String(t||'').trim().toLowerCase();return ['dark','light','ocean','sunset'].includes(v)?v:'dark'};
-     const syncThemeUi=()=>{const cur=normaliseTheme(document.body.dataset.theme);const labels={dark:'Dark',light:'Light',ocean:'Ocean',sunset:'Sunset'};if(themeLabel)themeLabel.textContent='Theme: '+(labels[cur]||'Dark');themeItems.forEach(btn=>{const v=btn.getAttribute('data-theme-item')||'';btn.classList.toggle('active',v===cur)})};
+     const normaliseTheme=(t)=>{const v=String(t||'').trim().toLowerCase();return ['dark','light','ocean','sunset','hacker'].includes(v)?v:'dark'};
+     const syncThemeUi=()=>{const cur=normaliseTheme(document.body.dataset.theme);const labels={dark:'Dark',light:'Light',ocean:'Ocean',sunset:'Sunset',hacker:'Hacker'};if(themeLabel)themeLabel.textContent='Theme: '+(labels[cur]||'Dark');themeItems.forEach(btn=>{const v=btn.getAttribute('data-theme-item')||'';btn.classList.toggle('active',v===cur)})};
      const applyTheme=(t)=>{document.body.dataset.theme=normaliseTheme(t);syncThemeUi()};
      const setTheme=(t)=>{const next=normaliseTheme(t);try{localStorage.setItem(themeKey,next)}catch{}applyTheme(next)};
      const registerDarkSecret=()=>false;
@@ -3251,14 +3393,14 @@ function wire(){
    const setTopNavValue=(p)=>{const next=String(p||'');if(topNav)topNav.dataset.value=next;if(topNavLabel)topNavLabel.textContent=navTitleForPath(next);topNavItems.forEach(b=>{const v=b.getAttribute('data-value')||'';b.classList.toggle('active',v===next)})};
    const syncNav=()=>{document.querySelectorAll('.nav-item').forEach(a=>{const p=a.getAttribute('data-nav')||a.getAttribute('href')||'';a.classList.toggle('active',p===currentPath)})};
    const syncGroups=()=>{const g=groupForPath(currentPath);document.querySelectorAll('[data-nav-group]').forEach(el=>{const name=el.getAttribute('data-nav-group');el.classList.toggle('open',name===g)})};
-   const navigate=(p)=>{const next=String(p||'').trim();if(!next||next===currentPath||!allowedPages().has(next))return;closeMenu();closeTopNav();history.pushState({},'',next);currentPath=next;if(pageTitleEl)pageTitleEl.textContent=navTitleForPath(currentPath);setTopNavValue(currentPath);render();syncNav();syncGroups();window.scrollTo({top:0,behavior:'smooth'})};
+   const navigate=(p)=>{const next=String(p||'').trim();if(!next||next===currentPath||!allowedPages().has(next))return;closeMenu();closeTopNav();history.pushState({},'',next);currentPath=next;if(pageTitleEl)pageTitleEl.textContent=navTitleForPath(currentPath);document.title=${JSON.stringify(createDocumentTitle('Dashboard'))}.replace('Dashboard',navTitleForPath(currentPath));setTopNavValue(currentPath);render();syncNav();syncGroups();window.scrollTo({top:0,behavior:'smooth'})};
    window.__dashNav={navTitleForPath,navigate,syncNav,syncGroups};
    document.querySelectorAll('[data-nav]').forEach(a=>{a.onclick=(ev)=>{ev.preventDefault();navigate(a.getAttribute('data-nav'))}});
    document.querySelectorAll('[data-nav-group-btn]').forEach(b=>{b.onclick=()=>{const g=b.getAttribute('data-nav-group-btn');if(!g)return;document.querySelectorAll('[data-nav-group]').forEach(el=>{el.classList.toggle('open',el.getAttribute('data-nav-group')===g && !el.classList.contains('open'))})}});
    if(topNav&&topNavBtn){topNavBtn.onclick=(ev)=>{ev.stopPropagation();const next=!topNav.classList.contains('open');closePickers();if(next)topNav.classList.add('open');else topNav.classList.remove('open')}};
    topNavItems.forEach(btn=>{const v=btn.getAttribute('data-value')||'';btn.style.display=allowedPages().has(v)?'flex':'none';btn.onclick=()=>{navigate(v)}});
     setTopNavValue(currentPath);
-    window.onpopstate=()=>{currentPath=location.pathname||'/overview';if(pageTitleEl)pageTitleEl.textContent=navTitleForPath(currentPath);setTopNavValue(currentPath);render();syncNav();syncGroups()};
+    window.onpopstate=()=>{currentPath=location.pathname||'/overview';if(pageTitleEl)pageTitleEl.textContent=navTitleForPath(currentPath);document.title=${JSON.stringify(createDocumentTitle('Dashboard'))}.replace('Dashboard',navTitleForPath(currentPath));setTopNavValue(currentPath);render();syncNav();syncGroups()};
     syncNav();syncGroups();
     window.addEventListener('keydown',(ev)=>{if(ev.key==='Escape'){closeMenu();closePickers();closeTopNav();}}, { passive: true });
  
@@ -3373,9 +3515,13 @@ wireCategorySelect('ttCategory','Use default ticket category');
 const saveTag=document.getElementById('saveTag');if(saveTag)saveTag.onclick=async()=>{try{await api('/api/tag/upsert',{method:'POST',body:JSON.stringify({name:tagName.value.trim(),kind:tagKind.value,title:tagTitle.value.trim(),description:tagDesc.value,keywords:tagKeys.value})});ui.selectedTag=tagName.value.trim();saveUi();note('Tag saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
 const resetTag=document.getElementById('resetTag');if(resetTag)resetTag.onclick=()=>{['tagName','tagTitle','tagDesc','tagKeys'].forEach(id=>document.getElementById(id).value='');if(document.getElementById('tagKind'))document.getElementById('tagKind').value='suggestion'};
 /* Dyno-style pick list handles tag selection/deletion */
-  document.querySelectorAll('.availSelect').forEach(sel=>{sel.onchange=async()=>{try{await api('/api/availability',{method:'POST',body:JSON.stringify({ticketType:sel.dataset.name,status:sel.value})});note('Availability updated.','ok');await boot()}catch(e){note(e.message,'danger')}}});
+ document.querySelectorAll('.availSelect').forEach(sel=>{sel.onchange=async()=>{try{await api('/api/availability',{method:'POST',body:JSON.stringify({ticketType:sel.dataset.name,status:sel.value})});note('Availability updated.','ok');await boot()}catch(e){note(e.message,'danger')}}});
  const staffLookupBtn=document.getElementById('staffLookupBtn');if(staffLookupBtn)staffLookupBtn.onclick=async()=>{try{const q=(document.getElementById('staffLookupQuery').value||'').trim();const r=await api('/api/staff/lookup',{method:'POST',body:JSON.stringify({query:q})});const box=document.getElementById('staffLookupResult');if(box){const tag=r.user&&r.user.tag?r.user.tag:('User '+esc(r.user.id));const mk=(label,val)=>'<div class="item"><div class="item-top"><strong>'+label+'</strong><span>'+val+'</span></div></div>';box.innerHTML=[mk('User',esc(tag)+' ('+esc(r.user.id)+')'),mk('Last 7d','Claimed '+(r.stats.days7.claimed||0)+' / Closed '+(r.stats.days7.closed||0)),mk('Last 14d','Claimed '+(r.stats.days14.claimed||0)+' / Closed '+(r.stats.days14.closed||0)),mk('Last 30d','Claimed '+(r.stats.days30.claimed||0)+' / Closed '+(r.stats.days30.closed||0))].join('')}note('Lookup complete.','ok')}catch(e){note(e.message,'danger')}};
  const staffLookupClear=document.getElementById('staffLookupClear');if(staffLookupClear)staffLookupClear.onclick=()=>{const q=document.getElementById('staffLookupQuery');const box=document.getElementById('staffLookupResult');if(q)q.value='';if(box)box.innerHTML='';note('', '')};
+ const formatTutorials=document.getElementById('formatTutorials');if(formatTutorials)formatTutorials.onclick=()=>{try{const box=document.getElementById('tutorialsJson');if(box)box.value=JSON.stringify(JSON.parse(box.value),null,2)}catch(e){note('Tutorial JSON is invalid.','danger')}};
+ const saveTutorials=document.getElementById('saveTutorials');if(saveTutorials)saveTutorials.onclick=async()=>{try{const box=document.getElementById('tutorialsJson');const tutorials=JSON.parse((box&&box.value)||'[]');await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:Array.isArray(state&&state.botConfig&&state.botConfig.homeImages)?state.botConfig.homeImages:[],tutorials,siteAnnouncement:(state&&state.botConfig&&state.botConfig.siteAnnouncement)||{}})});note('Tutorials saved.','ok');await boot()}catch(e){note(e.message||'Invalid tutorial JSON.','danger')}};
+ const saveAnnouncement=document.getElementById('saveAnnouncement');if(saveAnnouncement)saveAnnouncement.onclick=async()=>{try{const next={enabled:(document.getElementById('announcementEnabled')?.value||'false')==='true',text:document.getElementById('announcementText')?.value||'',ctaLabel:document.getElementById('announcementCta')?.value||'',linkUrl:document.getElementById('announcementUrl')?.value||''};await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:Array.isArray(state&&state.botConfig&&state.botConfig.homeImages)?state.botConfig.homeImages:[],tutorials:Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[],siteAnnouncement:next})});note('Announcement saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+ const tutorialCards=Array.from(document.querySelectorAll('[data-tutorial-open]'));if(tutorialCards.length){const tutorials=Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[];const overlay=document.getElementById('tutorialOverlay');const close=document.getElementById('tutorialClose');const title=document.getElementById('tutorialModalTitle');const badge=document.getElementById('tutorialModalBadge');const body=document.getElementById('tutorialModalBody');const prev=document.getElementById('tutorialPrev');const next=document.getElementById('tutorialNext');let ti=0,si=0;const draw=()=>{const tutorial=tutorials[ti]||null;const step=tutorial&&tutorial.steps?tutorial.steps[si]:null;if(!tutorial||!step)return;title.textContent=tutorial.title||'Tutorial';badge.textContent=(tutorial.badge?String(tutorial.badge)+' • ':'')+'Step '+(si+1)+' of '+tutorial.steps.length;body.innerHTML=(step.imageUrl?'<img src="'+esc(step.imageUrl)+'" alt="'+esc(step.title||tutorial.title||'Tutorial image')+'" style="width:100%;max-height:320px;object-fit:cover;border-radius:16px;border:1px solid rgba(255,255,255,.12);margin-bottom:12px" loading="lazy" />':'')+'<h3 style="margin:0 0 8px">'+esc(step.title||'Step')+'</h3><div class="muted" style="font-size:14px;line-height:1.7">'+esc(step.body||'')+'</div>';prev.disabled=si<=0;next.textContent=si>=tutorial.steps.length-1?'Done':'Next'};const open=(index)=>{ti=index;si=0;draw();if(overlay)overlay.style.display='flex'};const hide=()=>{if(overlay)overlay.style.display='none'};tutorialCards.forEach(btn=>btn.onclick=()=>open(Number(btn.getAttribute('data-tutorial-open')||0)));if(close)close.onclick=hide;if(overlay)overlay.onclick=(e)=>{if(e.target===overlay)hide()};if(prev)prev.onclick=()=>{if(si>0){si-=1;draw()}};if(next)next.onclick=()=>{const tutorial=tutorials[ti]||null;if(!tutorial)return hide();if(si<tutorial.steps.length-1){si+=1;draw()}else hide()};}
 }
 function renderOverview(){
  const totals=(state&&state.statistics&&state.statistics.totals)||{activeTickets:0,totalClaimed:0,totalClosed:0};
@@ -3407,10 +3553,7 @@ function renderOverview(){
     '</div>')
   : '';
  const tutorialCard=tutorialOn
-  ? ('<div class="card"><h3>Quick Tutorial</h3><div class="list" style="margin-top:10px">'+
-      '<div class="item"><div class="item-top"><strong>Openers</strong><span>'+(rolePermanent?'Role permanence on':'Role permanence off')+'</span></div><div class="muted">Post a panel, let users open tickets, then claim them to keep ownership clear.</div></div>'+
-      '<div class="item"><div class="item-top"><strong>Replies</strong><span>Suggested flow</span></div><div class="muted">Use tags for common answers, update availability when queues rise, and close with transcripts.</div></div>'+
-     '</div></div>')
+  ? ('<div class="card"><h3>Tutorial Library</h3><div class="muted">Open the tutorial cards for walkthroughs, screenshots, and step-by-step staff flows.</div><div class="row" style="grid-template-columns:1fr;gap:10px;margin-top:12px"><button type="button" class="btn qa" data-go="/tutorials">Open Tutorials</button></div><div class="muted" style="margin-top:10px">'+(rolePermanent?'Role permanence is enabled.':'Role permanence is disabled.')+'</div></div>')
   : '';
 
  return '<div class="grid">'+
@@ -3446,7 +3589,8 @@ function renderOverview(){
    (tags.length?tags.map(t=>'<div class="item"><div class="item-top"><strong>'+esc(t.name||'')+'</strong>'+pill(t.count)+'</div></div>').join(''):'<div class="muted">No tag usage yet.</div>')+
   '</div></div>'+
  '</div>'}
-function render(){const access=(state&&state.access)||{};const allowed=new Set(['/documentation']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>allowed.add(p))}else{if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types')}if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This section is not available for your role in the selected server.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderSettings();else if(currentPath==='/availability')html=renderAvailability();else if(currentPath==='/commands/ticket-types')html=renderTypes();else if(currentPath==='/commands/tag')html=renderTags();else if(currentPath==='/tickets')html=renderTickets();else if(currentPath==='/transcripts')html=renderTranscripts();else if(currentPath==='/commands/feedback')html=renderFeedback();else if(currentPath==='/commands/appeal')html=renderAppeal();else if(currentPath==='/statistics')html=renderStats();else if(currentPath==='/embed-editor')html=renderBranding();else html=renderDocs();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire()})})}
+function renderAnnouncementBar(){const box=document.getElementById('announcementBar');if(!box)return;const ann=(state&&state.botConfig&&state.botConfig.siteAnnouncement)||{};if(!ann.enabled||!ann.text){box.innerHTML='';return}box.innerHTML='<div class="card" style="margin-bottom:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px"><div><strong>Announcement</strong><div class="muted">'+esc(ann.text)+'</div></div>'+(ann.ctaLabel&&ann.linkUrl?'<a class="btn" href="'+esc(ann.linkUrl)+'" target="_blank" rel="noreferrer">'+esc(ann.ctaLabel)+'</a>':'')+'</div>'}
+function render(){const access=(state&&state.access)||{};const allowed=new Set(['/documentation','/tutorials']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>allowed.add(p))}else{if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types')}if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This section is not available for your role in the selected server.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderSettings();else if(currentPath==='/availability')html=renderAvailability();else if(currentPath==='/tutorials')html=renderTutorials();else if(currentPath==='/commands/ticket-types')html=renderTypes();else if(currentPath==='/commands/tag')html=renderTags();else if(currentPath==='/tickets')html=renderTickets();else if(currentPath==='/transcripts')html=renderTranscripts();else if(currentPath==='/commands/feedback')html=renderFeedback();else if(currentPath==='/commands/appeal')html=renderAppeal();else if(currentPath==='/statistics')html=renderStats();else if(currentPath==='/embed-editor')html=renderBranding();else html=renderDocs();document.title=${JSON.stringify(BRAND_NAME + ' • ')}+({"/overview":"Home","/settings":"Settings","/availability":"Availability","/tutorials":"Tutorials","/commands/ticket-types":"Ticket Types","/commands/tag":"Tags","/tickets":"Tickets","/transcripts":"Transcripts","/commands/feedback":"Feedback","/statistics":"Statistics","/embed-editor":"Embed Editor","/documentation":"Documentation"}[currentPath]||'Dashboard');renderAnnouncementBar();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire()})})}
 async function boot(){state=await api('/api/state');render()}
 document.getElementById('refreshStateBtn').onclick=async()=>{try{await boot();note('Dashboard refreshed.','ok')}catch(e){note(e.message,'danger')}};
 document.getElementById('authLogin').onclick=async()=>{try{localStorage.setItem(tokenKey,authToken.value.trim());await api('/api/auth/login',{method:'POST',body:JSON.stringify({token:authToken.value.trim()})});auth.style.display='none';authMsg.textContent='';await boot()}catch(e){authMsg.textContent=e.message||'Login failed'}};
@@ -3925,7 +4069,7 @@ function startDashboard(client) {
                 return;
             }
 
-            const pages = new Set(['/overview', '/settings', '/availability', '/commands/ticket-types', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/documentation']);
+            const pages = new Set(['/overview', '/settings', '/availability', '/tutorials', '/commands/ticket-types', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/documentation']);
             if (pages.has(pathname)) {
                 const access = await getDashboardAccess(client, req, requestedGuildId || getDashboardGuild(client, req)?.id || null);
                 const allowedPages = getAllowedDashboardPages(access);

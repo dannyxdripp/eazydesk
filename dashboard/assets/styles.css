@@ -31,8 +31,8 @@ body.home[data-theme="light"] {
     --bg1: #f2e5d0;
     --text: rgba(17, 24, 39, 0.94);
     --muted: rgba(17, 24, 39, 0.68);
-    --card: rgba(255, 255, 255, 0.58);
-    --card2: rgba(255, 255, 255, 0.74);
+    --card: rgba(255, 255, 255, 0.72);
+    --card2: rgba(255, 255, 255, 0.88);
     --border: rgba(17, 24, 39, 0.12);
     --blue: #2563eb;
     --blue2: #38bdf8;
@@ -66,6 +66,20 @@ body.home[data-theme="sunset"] {
     --blue2: #fb923c;
     --cyan: #fdba74;
     --shadow: rgba(251, 146, 60, 0.20);
+}
+
+body.home[data-theme="hacker"] {
+    --bg0: #020607;
+    --bg1: #010d09;
+    --text: rgba(215, 255, 233, 0.95);
+    --muted: rgba(215, 255, 233, 0.72);
+    --card: rgba(0, 14, 8, 0.54);
+    --card2: rgba(0, 18, 10, 0.72);
+    --border: rgba(0, 255, 136, 0.16);
+    --blue: #00ff88;
+    --blue2: #00e5ff;
+    --cyan: #86efac;
+    --shadow: rgba(0, 255, 136, 0.18);
 }
 
 .bg { position: fixed; inset: 0; pointer-events: none; z-index: -1; }
