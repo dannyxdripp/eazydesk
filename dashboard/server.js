@@ -38,8 +38,15 @@ const SENIOR_STAFF_ROLE_IDS = [
     '1016049847767420999',
     '1060975293424222288'
 ];
+const STAFF_ROLE_GROUPS = {
+    executive: ['1060974176413962350', '1183890711335161887'],
+    supportOperations: ['1183890337106759690', '1060975791120326666'],
+    qualityAssurance: ['1183890622852120636', '1016056762761216001'],
+    communityManagement: ['1016049847767420999', '1060975293424222288']
+};
 const GUILD_CATALOG_CACHE_TTL_MS = 20 * 1000;
 const guildCatalogCache = new Map();
+const staffActionRateLimits = new Map();
 
 const DEFAULT_TUTORIALS = [
     {
@@ -95,6 +102,24 @@ const DEFAULT_TUTORIALS = [
 function createDocumentTitle(pageName = 'Home') {
     const clean = String(pageName || 'Home').trim() || 'Home';
     return `${BRAND_NAME} • ${clean}`;
+}
+
+function dashboardIcon(name) {
+    const icons = {
+        servers: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M4 12h16M4 17.5h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        staff: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="7" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 8v6M17 11h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        owner: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 5.3 5.9.9-4.3 4.2 1 5.9L12 16.7 6.8 19.3l1-5.9L3.5 9.2l5.9-.9L12 3Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+        dashboard: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3v10Zm10 8h8V11h-8v10ZM3 21h8v-6H3v6Zm10-10h8V3h-8v8Z" fill="currentColor"/></svg>',
+        setup: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.7-.9 1 1 0 0 0-1.1.2l-.1.1a2 2 0 0 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.7 1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2h.1a1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .6.9h.1a1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1v.1a1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.6Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+        logout: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M16 17l5-5-5-5M21 12H9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        open: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3h7v7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10 14 21 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        invite: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12h8M12 8v8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+        remove: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M10 11v6M14 11v6M6 6l1 14h10l1-14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        repair: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.7 6.3 3 3L8 19H5v-3l9.7-9.7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m12 4 2-2 4 4-2 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+        restart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 2v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20.5 13a8.5 8.5 0 1 1-2.5-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        diagnostics: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m7 15 3-3 3 2 4-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    };
+    return icons[name] || icons.dashboard;
 }
 
 function normalizeTutorials(input) {
@@ -429,9 +454,12 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     .brand img{width:28px;height:28px}
     .title{font-size:18px;font-weight:800;letter-spacing:.2px}
     .nav{display:flex;gap:10px;flex-wrap:wrap}
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 12px;border-radius:14px;border:1px solid var(--bd);background:rgba(255,255,255,.03);text-decoration:none;cursor:pointer;transition:transform .15s ease,border-color .2s ease,background .2s ease,box-shadow .2s ease;box-shadow:0 10px 24px rgba(0,0,0,.18),0 0 0 1px rgba(255,255,255,.02) inset}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 12px;border-radius:14px;border:1px solid var(--bd);background:rgba(255,255,255,.03);text-decoration:none;cursor:pointer;transition:transform .15s ease,border-color .2s ease,background .2s ease,box-shadow .2s ease;box-shadow:0 10px 24px rgba(0,0,0,.18),0 0 0 1px rgba(255,255,255,.02) inset;font-weight:700}
     .btn:hover{transform:translateY(-1px);border-color:var(--cardOutline);background:color-mix(in srgb,var(--acc) 12%, transparent);box-shadow:0 14px 28px rgba(0,0,0,.20),0 0 18px color-mix(in srgb,var(--acc) 24%, transparent)}
     .btn.primary{background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 22%, transparent),color-mix(in srgb,var(--acc2) 12%, transparent));border-color:var(--cardOutline)}
+    .btn.nav-accent{background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 28%, transparent),color-mix(in srgb,var(--acc2) 18%, transparent));border-color:color-mix(in srgb,var(--acc) 40%, white 6%);box-shadow:0 14px 30px rgba(0,0,0,.22),0 0 24px color-mix(in srgb,var(--acc) 24%, transparent)}
+    .btn-icon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;opacity:.95}
+    .btn-icon svg{width:18px;height:18px;display:block}
     .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
     @media(max-width:860px){.grid{grid-template-columns:1fr}.nav{justify-content:flex-end}}
     .card{border:1px solid var(--bd);background:linear-gradient(180deg,color-mix(in srgb,var(--panel) 95%, rgba(255,255,255,.02)),color-mix(in srgb,var(--panel) 85%, rgba(0,0,0,.10)));box-shadow:var(--cardGlow);border-radius:18px;padding:14px}
@@ -470,13 +498,13 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
   <header class="top">
     <a class="brand" href="/"><img src="/assets/sync.png" alt="logo" /><div class="title">${String(title || 'Dashboard')}</div></a>
     <nav class="nav">
-      <a class="btn" href="/dashboard">Servers</a>
-      ${showStaffLink ? '<a class="btn" href="/staff">Staff</a>' : ''}
-      ${ownerView ? '<a class="btn" href="/owner">Owner</a>' : ''}
-      ${ownerView ? '<a class="btn" href="/overview">Dashboard</a>' : ''}
-      ${ownerView ? '<a class="btn" href="/setup">Setup</a>' : ''}
+      <a class="btn nav-accent" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Servers</span></a>
+      ${showStaffLink ? `<a class="btn" href="/staff"><span class="btn-icon">${dashboardIcon('staff')}</span><span>Staff</span></a>` : ''}
+      ${ownerView ? `<a class="btn" href="/owner"><span class="btn-icon">${dashboardIcon('owner')}</span><span>Owner</span></a>` : ''}
+      ${ownerView ? `<a class="btn" href="/overview"><span class="btn-icon">${dashboardIcon('dashboard')}</span><span>Dashboard</span></a>` : ''}
+      ${ownerView ? `<a class="btn" href="/setup"><span class="btn-icon">${dashboardIcon('setup')}</span><span>Setup</span></a>` : ''}
       <div id="themeNav" class="theme-nav">
-        <button id="themeBtn" class="btn" type="button">Theme</button>
+        <button id="themeBtn" class="btn" type="button"><span class="btn-icon">${dashboardIcon('diagnostics')}</span><span>Theme</span></button>
         <div class="theme-menu">
           <button class="theme-item" type="button" data-theme-item="dark">Dark</button>
           <button class="theme-item" type="button" data-theme-item="light">Light</button>
@@ -485,7 +513,7 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
           <button class="theme-item" type="button" data-theme-item="hacker">Hacker</button>
         </div>
       </div>
-      <a class="btn" href="/logout">Logout</a>
+      <a class="btn" href="/logout"><span class="btn-icon">${dashboardIcon('logout')}</span><span>Logout</span></a>
     </nav>
   </header>
   ${announcementHtml}
@@ -578,9 +606,10 @@ function createStaffHtml(options = {}) {
     const body = `
       <div class="card">
         <h2 style="margin:0 0 6px">Staff Operations</h2>
-        <div class="muted">Senior staff can manage bot-connected servers here, create invite links for handoffs, and remove the bot when a server should no longer be supported.</div>
+        <div class="muted">Senior staff can inspect guild health, run safe repairs, create handoff invites, and take restricted operational actions with audit logging and rate limits.</div>
         <div id="staffError" class="err" style="display:none;margin-top:12px"></div>
         <div id="staffSuccess" class="card" style="display:none;margin-top:12px;padding:12px 14px"></div>
+        <div id="staffSummary" class="grid" style="margin-top:12px"></div>
         <div id="staffList" class="list server-grid"></div>
       </div>
     `;
@@ -590,23 +619,39 @@ function createStaffHtml(options = {}) {
       const list=document.getElementById('staffList');
       const err=document.getElementById('staffError');
       const ok=document.getElementById('staffSuccess');
+      const summary=document.getElementById('staffSummary');
       const inviteMap={};
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
       async function api(path,opt){const r=await fetch(path,{credentials:'include',...(opt||{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function note(message){if(!ok)return;ok.style.display='block';ok.innerHTML='<strong>Done</strong><div class="muted" style="margin-top:4px">'+esc(message)+'</div>'}
-      function renderPerms(g){const tags=[];if(g.setupCompleted)tags.push('<span class="pill">Setup complete</span>');if(g.canAccessDashboard)tags.push('<span class="pill">Dashboard access</span>');if(g.sharedWithUser)tags.push('<span class="pill">User is in server</span>');if(g.userPermissionSummary)tags.push('<span class="pill">'+esc(g.userPermissionSummary)+'</span>');return tags.join('')}
-      function actionButtons(g){const buttons=[];if(g.canAccessDashboard)buttons.push('<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a>');if(g.canManageSetup&&!g.setupCompleted)buttons.push('<a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1">Open Setup</a>');buttons.push('<button class="btn" type="button" data-invite="'+esc(g.id)+'">Create Invite</button>');buttons.push('<button class="btn" type="button" data-leave="'+esc(g.id)+'" data-guild-name="'+esc(g.name)+'">Remove Bot</button>');return buttons.join('')}
-      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=(Array.isArray(g.highlights)&&g.highlights.length?g.highlights:['Bot is active in this server']).map(esc).join(' • ');const inviteUrl=inviteMap[g.id]||g.inviteUrl||'';return '<div class="item server-card can-manage">'+
+      function pill(text){return '<span class="pill">'+esc(text)+'</span>'}
+      function renderSummaryCards(cap){const groups=Array.isArray(cap&&cap.roleFamilies)?cap.roleFamilies:[];const cards=[
+        {title:'Support Operations',desc:'Config, diagnostics, permission sync, setup restarts, channel repair.',enabled:!!cap.canRunDiagnostics},
+        {title:'Quality Assurance',desc:'Transcript review, audit visibility, staff activity checks, compliance oversight.',enabled:!!cap.canViewTranscripts},
+        {title:'Community Management',desc:'Owner-facing health visibility, onboarding/help flows, invite handoffs.',enabled:!!cap.canContactOwners}
+      ];summary.innerHTML=cards.map(card=>'<div class="card"><strong>'+esc(card.title)+'</strong><div class="muted" style="margin-top:6px">'+esc(card.desc)+'</div><div class="row" style="margin-top:10px">'+(card.enabled?pill('Enabled for you'):pill('Read only / unavailable'))+'</div></div>').join('')+'<div class="card"><strong>Your active role families</strong><div class="muted" style="margin-top:6px">'+esc(groups.length?groups.join(' • '):'No senior role families detected')+'</div><div class="row" style="margin-top:10px">'+(groups.length?groups.map(pill).join(''):pill('No access'))+'</div></div>'}
+      function renderPerms(g){const tags=[];if(g.setupCompleted)tags.push(pill('Setup complete'));if(g.canAccessDashboard)tags.push(pill('Dashboard access'));if(g.sharedWithUser)tags.push(pill('User is in server'));if(g.userPermissionSummary)tags.push(pill(g.userPermissionSummary));if(g.health&&g.health.missingPermissions&&g.health.missingPermissions.length)tags.push(pill('Missing bot perms'));return tags.join('')}
+      function renderInfoList(title, values){const safe=Array.isArray(values)?values.filter(Boolean):[];return '<div class="card" style="padding:10px 12px"><div><strong>'+esc(title)+'</strong></div><div class="muted" style="margin-top:6px">'+(safe.length?safe.map(esc).join(' • '):'None detected')+'</div></div>'}
+      function actionButtons(g){const caps=g.staffCapabilities||{};const buttons=[];if(g.canAccessDashboard&&caps.canViewConfiguration)buttons.push('<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('open'))}+'</span><span>Open Dashboard</span></a>');if(g.canManageSetup&&!g.setupCompleted&&caps.canViewConfiguration)buttons.push('<a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('setup'))}+'</span><span>Open Setup</span></a>');if(caps.canCreateInvite)buttons.push('<button class="btn" type="button" data-invite="'+esc(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('invite'))}+'</span><span>Create Invite</span></button>');if(caps.canRestartSystems)buttons.push('<button class="btn" type="button" data-restart-setup="'+esc(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('restart'))}+'</span><span>Restart Setup</span></button>');if(caps.canSyncPermissions)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="sync-permissions"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('repair'))}+'</span><span>Sync Permissions</span></button>');if(caps.canRepairChannels)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="repair-channels"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('repair'))}+'</span><span>Repair Channels</span></button>');if(caps.canRunDiagnostics)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="diagnostics"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('diagnostics'))}+'</span><span>Run Diagnostics</span></button>');if(caps.canRemoveBot)buttons.push('<button class="btn" type="button" data-leave="'+esc(g.id)+'" data-guild-name="'+esc(g.name)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('remove'))}+'</span><span>Remove Bot</span></button>');return buttons.join('')}
+      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=(Array.isArray(g.highlights)&&g.highlights.length?g.highlights:['Bot is active in this server']).map(esc).join(' • ');const inviteUrl=inviteMap[g.id]||g.inviteUrl||'';const health=g.health||{};const runtime=g.runtime||{};const basic=g.basicInfo||{};const audits=Array.isArray(g.recentAuditLog)?g.recentAuditLog.slice(0,4):[];return '<div class="item server-card can-manage">'+
         '<div style="display:grid;gap:8px;min-width:0">'+
           '<div class="row" style="gap:10px">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class="pill">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
           '<div class="row">'+renderPerms(g)+'</div>'+
           '<div class="muted">'+detail+'</div>'+
+          '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">'+
+            renderInfoList('Basic Info',['Guild ID: '+(basic.guildId||'Unknown'),'Owner ID: '+(basic.ownerId||'Unknown'),'Bot Join: '+(basic.botJoinDate?new Date(basic.botJoinDate).toLocaleString():'Unknown'),'Shard: '+(basic.shardAssignment||'Unknown'),'Plan: '+(basic.subscriptionPlan||'Standard'),'Modules: '+((basic.enabledModules||[]).join(', ')||'Core Tickets')])+
+            renderInfoList('Ticket System Status',['Panels: '+(health.ticketPanelStatus||'Unknown'),'Transcripts: '+(health.transcriptStatus||'Unknown'),'Feedback: '+(health.feedbackStatus||'Unknown'),'Category: '+(health.categoryStatus||'Unknown'),'Button integrity: '+(health.buttonIntegrity||'Unknown'),'Webhook validity: '+(health.webhookValidity||'Unknown')])+
+            renderInfoList('Runtime Diagnostics',['API latency: '+String(runtime.apiLatencyMs||0)+'ms','Database latency: '+(runtime.databaseLatencyMs==null?'Unavailable':String(runtime.databaseLatencyMs)+'ms'),'Redis latency: '+(runtime.redisLatencyMs==null?'Unavailable':String(runtime.redisLatencyMs)+'ms'),'Command failures: '+String(runtime.commandFailures||0),'Worker: '+(runtime.workerStatus||'Unknown'),'Cache: '+String((runtime.cacheHealth&&runtime.cacheHealth.channels)||0)+' channels / '+String((runtime.cacheHealth&&runtime.cacheHealth.roles)||0)+' roles'])+
+            renderInfoList('Permission Scanner',[].concat((health.missingPermissions||[]).map(x=>'Missing '+x),health.hierarchyConflict?'Role hierarchy conflict detected':'',...(health.brokenChannels||[]),...(health.brokenPanels||[]).map(x=>'Broken panel channel '+x),...(health.brokenOverwrites||[])))+
+          '</div>'+
+          (audits.length?renderInfoList('Recent Audit Log',audits.map(entry=>(entry.createdAt||'')+' • '+(entry.action||'action')+' • '+(entry.status||'unknown')+(entry.detail?' • '+entry.detail:''))):'')+
           (inviteUrl?'<div class="card" style="padding:10px 12px"><div class="muted">Latest invite</div><a href="'+esc(inviteUrl)+'" target="_blank" rel="noreferrer">'+esc(inviteUrl)+'</a></div>':'')+
         '</div>'+
         '<div class="row">'+actionButtons(g)+'</div>'+
       '</div>'}
-      async function bindActions(){for(const btn of document.querySelectorAll('[data-invite]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-invite');const data=await api('/api/staff/guild-invite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});inviteMap[guildId]=data.inviteUrl||'';note('Invite ready for '+(data.guildName||'that server')+'.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-leave]')){btn.onclick=async()=>{const guildId=btn.getAttribute('data-leave');const guildName=btn.getAttribute('data-guild-name')||'this server';if(!confirm('Remove the bot from '+guildName+'?'))return;try{err.style.display='none';ok.style.display='none';btn.disabled=true;await api('/api/staff/guild-leave',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});delete inviteMap[guildId];note('The bot has been removed from '+guildName+'.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}}
-      async function load(){try{const data=await api('/api/staff/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="muted">No bot-connected servers found.</div>';await bindActions()}catch(e){err.style.display='block';err.textContent=e.message}}load();
+      async function postRepair(guildId,action){const data=await api('/api/staff/guild-repair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action})});return data}
+      async function bindActions(){for(const btn of document.querySelectorAll('[data-invite]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-invite');const data=await api('/api/staff/guild-invite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});inviteMap[guildId]=data.inviteUrl||'';note('Invite ready for '+(data.guildName||'that server')+'.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-restart-setup]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-restart-setup');await api('/api/staff/guild-restart-setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});note('Setup restart prepared for that server.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-repair]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-repair');const action=btn.getAttribute('data-repair-action');const data=await postRepair(guildId,action);note((data&&data.result&&data.result.message)||'Repair finished.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-leave]')){btn.onclick=async()=>{const guildId=btn.getAttribute('data-leave');const guildName=btn.getAttribute('data-guild-name')||'this server';if(!confirm('Remove the bot from '+guildName+'?'))return;try{err.style.display='none';ok.style.display='none';btn.disabled=true;await api('/api/staff/guild-leave',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});delete inviteMap[guildId];note('The bot has been removed from '+guildName+'.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}}
+      async function load(){try{const data=await api('/api/staff/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];renderSummaryCards(data.capabilities||{});list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="muted">No bot-connected servers found.</div>';await bindActions()}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
 
     return baseDashboardPage({ title: 'Staff', body, script, ownerView, staffView: true, showStaffLink: true });
@@ -941,6 +986,48 @@ function getSeniorStaffRoleIds() {
     return [...SENIOR_STAFF_ROLE_IDS];
 }
 
+function getStaffRoleGroups() {
+    return {
+        executive: [...STAFF_ROLE_GROUPS.executive],
+        supportOperations: [...STAFF_ROLE_GROUPS.supportOperations],
+        qualityAssurance: [...STAFF_ROLE_GROUPS.qualityAssurance],
+        communityManagement: [...STAFF_ROLE_GROUPS.communityManagement]
+    };
+}
+
+function resolveStaffCapabilities(matchedRoleIds = [], isOwner = false) {
+    const groups = getStaffRoleGroups();
+    const hasExecutive = isOwner || matchedRoleIds.some(id => groups.executive.includes(id));
+    const hasSupportOperations = hasExecutive || matchedRoleIds.some(id => groups.supportOperations.includes(id));
+    const hasQualityAssurance = hasExecutive || matchedRoleIds.some(id => groups.qualityAssurance.includes(id));
+    const hasCommunityManagement = hasExecutive || matchedRoleIds.some(id => groups.communityManagement.includes(id));
+    return {
+        roleFamilies: [
+            hasSupportOperations ? 'Support Operations' : '',
+            hasQualityAssurance ? 'Quality Assurance' : '',
+            hasCommunityManagement ? 'Community Management' : ''
+        ].filter(Boolean),
+        canViewConfiguration: hasSupportOperations || hasExecutive,
+        canViewStatistics: hasSupportOperations || hasQualityAssurance || hasExecutive,
+        canViewErrors: hasSupportOperations || hasExecutive,
+        canSyncPermissions: hasSupportOperations || hasExecutive,
+        canRestartSystems: hasSupportOperations || hasExecutive,
+        canRepairChannels: hasSupportOperations || hasExecutive,
+        canViewAuditLogs: hasSupportOperations || hasQualityAssurance || hasExecutive,
+        canManageModules: hasSupportOperations || hasExecutive,
+        canRunDiagnostics: hasSupportOperations || hasExecutive,
+        canViewTranscripts: hasQualityAssurance || hasExecutive,
+        canReviewSupport: hasQualityAssurance || hasExecutive,
+        canGenerateReports: hasQualityAssurance || hasExecutive,
+        canContactOwners: hasCommunityManagement || hasExecutive,
+        canSendAnnouncements: hasCommunityManagement || hasExecutive,
+        canViewHealth: hasCommunityManagement || hasSupportOperations || hasQualityAssurance || hasExecutive,
+        canManageOnboarding: hasCommunityManagement || hasExecutive,
+        canCreateInvite: hasCommunityManagement || hasSupportOperations || hasExecutive,
+        canRemoveBot: hasSupportOperations || hasExecutive
+    };
+}
+
 async function getSeniorStaffAccess(client, req) {
     if (isBotOwnerUser(req)) {
         return {
@@ -948,7 +1035,8 @@ async function getSeniorStaffAccess(client, req) {
             isOwner: true,
             userId: getDashboardSessionUserId(req),
             guildId: STAFF_COMMUNITY_GUILD_ID,
-            matchedRoleIds: getSeniorStaffRoleIds()
+            matchedRoleIds: getSeniorStaffRoleIds(),
+            capabilities: resolveStaffCapabilities(getSeniorStaffRoleIds(), true)
         };
     }
 
@@ -974,7 +1062,8 @@ async function getSeniorStaffAccess(client, req) {
         isOwner: false,
         userId,
         guildId: STAFF_COMMUNITY_GUILD_ID,
-        matchedRoleIds
+        matchedRoleIds,
+        capabilities: resolveStaffCapabilities(matchedRoleIds, false)
     };
 }
 
@@ -1349,6 +1438,140 @@ async function getCachedGuildCatalog(guild, kind, loader) {
     return value;
 }
 
+function getBotGuildMember(guild) {
+    return guild?.members?.me || guild?.members?.cache?.get?.(guild?.client?.user?.id) || null;
+}
+
+function getStaffAuditLog(storage = null) {
+    const activeStorage = storage || ticketStore.getActiveStorage();
+    const botConfig = ticketStore.getBotConfig(activeStorage);
+    if (!Array.isArray(botConfig.staffAuditLog)) botConfig.staffAuditLog = [];
+    return botConfig.staffAuditLog;
+}
+
+function appendStaffAuditLog(entry, storage = null) {
+    const activeStorage = storage || ticketStore.getActiveStorage();
+    const botConfig = ticketStore.getBotConfig(activeStorage);
+    const current = Array.isArray(botConfig.staffAuditLog) ? botConfig.staffAuditLog : [];
+    botConfig.staffAuditLog = [...current, entry].slice(-300);
+    if (typeof ticketStore.saveActiveStorage === 'function') ticketStore.saveActiveStorage(activeStorage);
+    return botConfig.staffAuditLog;
+}
+
+function recordStaffAuditEvent(req, entry = {}, storage = null) {
+    const item = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        createdAt: new Date().toISOString(),
+        userId: getDashboardSessionUserId(req) || null,
+        ip: String(req?.headers?.['x-forwarded-for'] || req?.socket?.remoteAddress || '').split(',')[0].trim() || null,
+        ...entry
+    };
+    appendStaffAuditLog(item, storage);
+    return item;
+}
+
+function enforceStaffRateLimit(req, actionKey, max = 8, windowMs = 60_000) {
+    const userId = getDashboardSessionUserId(req) || 'anonymous';
+    const key = `${userId}:${String(actionKey || 'staff')}`;
+    const now = Date.now();
+    const existing = staffActionRateLimits.get(key);
+    const fresh = existing && (now - existing.startedAt) < windowMs ? existing : { startedAt: now, count: 0 };
+    fresh.count += 1;
+    staffActionRateLimits.set(key, fresh);
+    return fresh.count <= max;
+}
+
+function describeGuildPermissionScan(guild) {
+    const member = getBotGuildMember(guild);
+    const permissions = member?.permissions;
+    const missing = [];
+    const required = [
+        ['Manage Channels', PermissionsBitField.Flags.ManageChannels],
+        ['Send Messages', PermissionsBitField.Flags.SendMessages],
+        ['View Channel', PermissionsBitField.Flags.ViewChannel],
+        ['Manage Webhooks', PermissionsBitField.Flags.ManageWebhooks],
+        ['Read Message History', PermissionsBitField.Flags.ReadMessageHistory]
+    ];
+    for (const [label, flag] of required) {
+        if (!permissions?.has?.(flag)) missing.push(label);
+    }
+    return missing;
+}
+
+function inspectGuildSystemHealth(guild, config = {}, storage = null) {
+    const activeStorage = storage || ticketStore.getActiveStorage();
+    const parentCategory = config?.parentCategoryId ? guild?.channels?.cache?.get?.(String(config.parentCategoryId)) : null;
+    const feedbackChannel = config?.appealsChannelId ? guild?.channels?.cache?.get?.(String(config.appealsChannelId)) : null;
+    const transcriptsChannel = config?.transcriptsChannelId ? guild?.channels?.cache?.get?.(String(config.transcriptsChannelId)) : null;
+    const panelEntries = config?.panels && typeof config.panels === 'object' ? Object.entries(config.panels) : [];
+    const missingPermissions = describeGuildPermissionScan(guild);
+    const brokenPanels = panelEntries.filter(([channelId]) => !guild?.channels?.cache?.has?.(String(channelId)));
+    const brokenChannels = [];
+    if (config?.parentCategoryId && !parentCategory) brokenChannels.push('Ticket category missing');
+    if (config?.appealsChannelId && !feedbackChannel) brokenChannels.push('Feedback channel missing');
+    if (config?.transcriptsChannelId && !transcriptsChannel) brokenChannels.push('Transcripts channel missing');
+    const botMember = getBotGuildMember(guild);
+    const hierarchyConflict = Boolean(config?.managerRoleId && guild?.roles?.cache?.has?.(String(config.managerRoleId)) && botMember?.roles?.highest && guild.roles.cache.get(String(config.managerRoleId))?.position >= botMember.roles.highest.position);
+    const activeTickets = (Array.isArray(activeStorage.tickets) ? activeStorage.tickets : []).filter(ticket => String(ticket?.guildId || '') === String(guild?.id || ''));
+    const transcriptArchives = (Array.isArray(activeStorage.transcriptArchives) ? activeStorage.transcriptArchives : []).filter(item => String(item?.guildId || '') === String(guild?.id || ''));
+    return {
+        activeTickets: activeTickets.length,
+        archivedTranscripts: transcriptArchives.length,
+        panelCount: panelEntries.length,
+        ticketPanelStatus: panelEntries.length ? (brokenPanels.length ? 'Needs repair' : 'Healthy') : 'No panels configured',
+        transcriptStatus: config?.transcriptsChannelId ? (transcriptsChannel ? 'Configured' : 'Broken') : 'Not configured',
+        feedbackStatus: config?.appealsChannelId ? (feedbackChannel ? 'Configured' : 'Broken') : 'Not configured',
+        categoryStatus: config?.parentCategoryId ? (parentCategory ? 'Configured' : 'Broken') : 'Not configured',
+        brokenChannels,
+        brokenPanels: brokenPanels.map(([channelId]) => String(channelId)),
+        missingPermissions,
+        hierarchyConflict,
+        webhookValidity: 'Unchecked',
+        buttonIntegrity: brokenPanels.length ? 'Broken panel references found' : 'No broken panel references detected',
+        failedAutomations: [],
+        brokenOverwrites: []
+    };
+}
+
+function getGuildEnabledModules(config = {}) {
+    const modules = [];
+    if (config?.parentCategoryId) modules.push('Ticket Categories');
+    if (config?.appealsChannelId) modules.push('Feedback');
+    if (config?.transcriptsChannelId) modules.push('Transcripts');
+    if (config?.tutorialEnabled) modules.push('Tutorials');
+    if (config?.rolePermanence !== false) modules.push('Role Permanence');
+    if (config?.panelConfig && Object.keys(config.panelConfig).length) modules.push('Custom Panel Copy');
+    return modules.length ? modules : ['Core Tickets'];
+}
+
+function getGuildRuntimeDiagnostics(client, guild, config = {}, storage = null) {
+    const activeStorage = storage || ticketStore.getActiveStorage();
+    const botConfig = ticketStore.getBotConfig(activeStorage);
+    const auditLog = getStaffAuditLog(activeStorage).filter(item => String(item?.guildId || '') === String(guild?.id || '')).slice(-12).reverse();
+    const recentErrors = auditLog.filter(item => item.status === 'error').slice(0, 12);
+    const shardIds = Array.isArray(client?.shard?.ids) ? client.shard.ids : [];
+    return {
+        guildId: guild?.id || null,
+        ownerId: guild?.ownerId || null,
+        botJoinDate: getBotGuildMember(guild)?.joinedAt ? new Date(getBotGuildMember(guild).joinedAt).toISOString() : null,
+        shardAssignment: shardIds.length ? `Shard ${shardIds.join(', ')}` : `Process ${process.pid}`,
+        subscriptionPlan: String(botConfig?.subscriptions?.[guild?.id]?.plan || botConfig?.defaultPlan || 'Standard'),
+        enabledModules: getGuildEnabledModules(config),
+        apiLatencyMs: Number(client?.ws?.ping || 0),
+        databaseLatencyMs: null,
+        redisLatencyMs: null,
+        commandFailures: recentErrors.length,
+        cacheHealth: {
+            channels: guild?.channels?.cache?.size || 0,
+            roles: guild?.roles?.cache?.size || 0,
+            membersCached: guild?.members?.cache?.size || 0
+        },
+        workerStatus: 'Primary worker online',
+        lastErrors: recentErrors,
+        auditLog
+    };
+}
+
 async function getRoleCatalog(client, req = null) {
     const guild = getDashboardGuild(client, req);
     if (!guild) return [];
@@ -1548,10 +1771,13 @@ function summarizeSharedUserGuild(client, req, guild) {
 
 async function buildStaffGuildList(client, req) {
     const activeStorage = ticketStore.getActiveStorage();
+    const staffAccess = await getSeniorStaffAccess(client, req);
     const guilds = [...(client?.guilds?.cache?.values?.() || [])]
         .map(guild => {
             const cfg = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(guild.id, activeStorage) : {};
             const shared = summarizeSharedUserGuild(client, req, guild);
+            const health = inspectGuildSystemHealth(guild, cfg, activeStorage);
+            const runtime = getGuildRuntimeDiagnostics(client, guild, cfg, activeStorage);
             const highlights = [];
             if (shared.sharedWithUser && shared.userPermissionSummary) highlights.push(shared.userPermissionSummary);
             if (cfg?.managerRoleId) highlights.push('Manager role configured');
@@ -1565,7 +1791,19 @@ async function buildStaffGuildList(client, req) {
                 setupCompleted: Boolean(cfg?.setup?.completed),
                 setupStep: Number(cfg?.setup?.step || 1),
                 ...shared,
-                highlights
+                highlights,
+                staffCapabilities: staffAccess.capabilities || {},
+                basicInfo: {
+                    guildId: guild.id,
+                    ownerId: guild.ownerId || null,
+                    botJoinDate: runtime.botJoinDate,
+                    shardAssignment: runtime.shardAssignment,
+                    subscriptionPlan: runtime.subscriptionPlan,
+                    enabledModules: runtime.enabledModules
+                },
+                health,
+                runtime,
+                recentAuditLog: runtime.auditLog
             };
         })
         .sort((a, b) => {
@@ -1593,6 +1831,73 @@ async function createGuildInviteForStaff(guild) {
         unique: true,
         reason: 'Senior staff dashboard invite generation'
     }).catch(() => null);
+}
+
+async function requireStaffCapability(client, req, capabilityKey, actionKey, options = {}) {
+    const staffAccess = await getSeniorStaffAccess(client, req);
+    if (!staffAccess.allowed) return { ok: false, status: 403, error: 'Senior staff only' };
+    const max = Number(options.max || 10);
+    const windowMs = Number(options.windowMs || 60_000);
+    if (!enforceStaffRateLimit(req, actionKey || capabilityKey || 'staff', max, windowMs)) {
+        recordStaffAuditEvent(req, { action: actionKey || capabilityKey || 'staff', status: 'rate_limited', guildId: options.guildId || null });
+        return { ok: false, status: 429, error: 'Too many staff actions right now. Please wait a moment and retry.' };
+    }
+    if (capabilityKey && !staffAccess.capabilities?.[capabilityKey]) {
+        recordStaffAuditEvent(req, { action: actionKey || capabilityKey, status: 'forbidden', guildId: options.guildId || null });
+        return { ok: false, status: 403, error: 'You do not have permission for this staff action.' };
+    }
+    return { ok: true, staffAccess };
+}
+
+async function syncGuildCategoryPermissions(guild, config = {}) {
+    const parentId = String(config?.parentCategoryId || '').trim();
+    if (!/^\d{17,20}$/.test(parentId)) return { ok: false, message: 'No ticket category is configured.' };
+    await guild.channels.fetch().catch(() => null);
+    const targets = guild.channels.cache.filter(channel => String(channel?.parentId || '') === parentId && typeof channel.lockPermissions === 'function');
+    let synced = 0;
+    for (const channel of targets.values()) {
+        const done = await channel.lockPermissions().then(() => true).catch(() => false);
+        if (done) synced += 1;
+    }
+    return { ok: true, message: synced ? `Synced permissions for ${synced} channel(s).` : 'No child channels were available to sync.' };
+}
+
+async function repairGuildChannels(guild, config = {}) {
+    const created = [];
+    const parentCategoryId = String(config?.parentCategoryId || '').trim();
+    const feedbackExists = config?.appealsChannelId && guild.channels.cache.has(String(config.appealsChannelId));
+    const transcriptsExists = config?.transcriptsChannelId && guild.channels.cache.has(String(config.transcriptsChannelId));
+    const updates = {};
+    if (!feedbackExists) {
+        const channel = await guild.channels.create({
+            name: 'ticket-feedback',
+            type: ChannelType.GuildText,
+            parent: /^\d{17,20}$/.test(parentCategoryId) ? parentCategoryId : null
+        }).catch(() => null);
+        if (channel) {
+            updates.appealsChannelId = channel.id;
+            created.push(`#${channel.name}`);
+        }
+    }
+    if (!transcriptsExists) {
+        const channel = await guild.channels.create({
+            name: 'ticket-transcripts',
+            type: ChannelType.GuildText,
+            parent: /^\d{17,20}$/.test(parentCategoryId) ? parentCategoryId : null
+        }).catch(() => null);
+        if (channel) {
+            updates.transcriptsChannelId = channel.id;
+            created.push(`#${channel.name}`);
+        }
+    }
+    if (Object.keys(updates).length && typeof ticketStore.setGuildConfig === 'function') {
+        ticketStore.setGuildConfig(guild.id, updates, ticketStore.getActiveStorage());
+    }
+    return {
+        ok: true,
+        message: created.length ? `Created ${created.join(' and ')}.` : 'No repairable missing channels were found.',
+        created
+    };
 }
 
 async function handleApi(req, res, url, client) {
@@ -1777,66 +2082,132 @@ async function handleApi(req, res, url, client) {
     }
 
     if (method === 'GET' && pathname === '/api/staff/guilds') {
-        const staffAccess = await getSeniorStaffAccess(client, req);
-        if (!staffAccess.allowed) {
-            sendJson(res, 403, { error: 'Senior staff only' });
+        const gate = await requireStaffCapability(client, req, null, 'staff.guilds', { max: 30 });
+        if (!gate.ok) {
+            sendJson(res, gate.status, { error: gate.error });
             return true;
         }
         const guilds = await buildStaffGuildList(client, req);
-        sendJson(res, 200, { guilds, staffGuildId: STAFF_COMMUNITY_GUILD_ID, matchedRoleIds: staffAccess.matchedRoleIds });
+        recordStaffAuditEvent(req, { action: 'staff.guilds', status: 'success' });
+        sendJson(res, 200, {
+            guilds,
+            staffGuildId: STAFF_COMMUNITY_GUILD_ID,
+            matchedRoleIds: gate.staffAccess.matchedRoleIds,
+            capabilities: gate.staffAccess.capabilities
+        });
         return true;
     }
 
     if (method === 'POST' && pathname === '/api/staff/guild-invite') {
-        const staffAccess = await getSeniorStaffAccess(client, req);
-        if (!staffAccess.allowed) {
-            sendJson(res, 403, { error: 'Senior staff only' });
-            return true;
-        }
         const body = await readBody(req);
         const guildId = String(body.guildId || '').trim();
+        const gate = await requireStaffCapability(client, req, 'canCreateInvite', 'staff.guild-invite', { guildId, max: 10 });
+        if (!gate.ok) {
+            sendJson(res, gate.status, { error: gate.error });
+            return true;
+        }
         if (!/^\d{17,20}$/.test(guildId)) {
+            recordStaffAuditEvent(req, { action: 'staff.guild-invite', status: 'error', guildId, detail: 'Invalid guildId' });
             sendJson(res, 400, { error: 'Invalid guildId' });
             return true;
         }
         const guild = client?.guilds?.cache?.get(guildId) || await client?.guilds?.fetch?.(guildId).catch(() => null);
         if (!guild) {
+            recordStaffAuditEvent(req, { action: 'staff.guild-invite', status: 'error', guildId, detail: 'Guild not found' });
             sendJson(res, 404, { error: 'Guild not found' });
             return true;
         }
         const invite = await createGuildInviteForStaff(guild);
         if (!invite?.url) {
+            recordStaffAuditEvent(req, { action: 'staff.guild-invite', status: 'error', guildId, detail: 'Invite creation failed' });
             sendJson(res, 500, { error: 'Could not create an invite for that server. Check bot permissions.' });
             return true;
         }
+        recordStaffAuditEvent(req, { action: 'staff.guild-invite', status: 'success', guildId, detail: invite.url });
         sendJson(res, 200, { ok: true, guildId, guildName: guild.name, inviteUrl: invite.url, code: invite.code || null });
         return true;
     }
 
     if (method === 'POST' && pathname === '/api/staff/guild-leave') {
-        const staffAccess = await getSeniorStaffAccess(client, req);
-        if (!staffAccess.allowed) {
-            sendJson(res, 403, { error: 'Senior staff only' });
-            return true;
-        }
         const body = await readBody(req);
         const guildId = String(body.guildId || '').trim();
+        const gate = await requireStaffCapability(client, req, 'canRemoveBot', 'staff.guild-leave', { guildId, max: 4 });
+        if (!gate.ok) {
+            sendJson(res, gate.status, { error: gate.error });
+            return true;
+        }
         if (!/^\d{17,20}$/.test(guildId)) {
+            recordStaffAuditEvent(req, { action: 'staff.guild-leave', status: 'error', guildId, detail: 'Invalid guildId' });
             sendJson(res, 400, { error: 'Invalid guildId' });
             return true;
         }
         const guild = client?.guilds?.cache?.get(guildId) || await client?.guilds?.fetch?.(guildId).catch(() => null);
         if (!guild) {
+            recordStaffAuditEvent(req, { action: 'staff.guild-leave', status: 'error', guildId, detail: 'Guild not found' });
             sendJson(res, 404, { error: 'Guild not found' });
             return true;
         }
         const guildName = guild.name;
         const left = await guild.leave().then(() => true).catch(() => false);
         if (!left) {
+            recordStaffAuditEvent(req, { action: 'staff.guild-leave', status: 'error', guildId, detail: 'Leave failed' });
             sendJson(res, 500, { error: 'The bot could not leave that server.' });
             return true;
         }
+        recordStaffAuditEvent(req, { action: 'staff.guild-leave', status: 'success', guildId, detail: guildName });
         sendJson(res, 200, { ok: true, guildId, guildName });
+        return true;
+    }
+
+    if (method === 'POST' && pathname === '/api/staff/guild-restart-setup') {
+        const body = await readBody(req);
+        const guildId = String(body.guildId || '').trim();
+        const gate = await requireStaffCapability(client, req, 'canRestartSystems', 'staff.guild-restart-setup', { guildId, max: 5 });
+        if (!gate.ok) {
+            sendJson(res, gate.status, { error: gate.error });
+            return true;
+        }
+        if (!/^\d{17,20}$/.test(guildId)) {
+            recordStaffAuditEvent(req, { action: 'staff.guild-restart-setup', status: 'error', guildId, detail: 'Invalid guildId' });
+            sendJson(res, 400, { error: 'Invalid guildId' });
+            return true;
+        }
+        const now = new Date().toISOString();
+        const updated = typeof ticketStore.setGuildConfig === 'function'
+            ? ticketStore.setGuildConfig(guildId, { setup: { completed: false, restartedAt: now, restartedBy: getDashboardSessionUserId(req) || null } }, ticketStore.getActiveStorage())
+            : null;
+        recordStaffAuditEvent(req, { action: 'staff.guild-restart-setup', status: 'success', guildId });
+        sendJson(res, 200, { ok: true, guildId, config: updated || {} });
+        return true;
+    }
+
+    if (method === 'POST' && pathname === '/api/staff/guild-repair') {
+        const body = await readBody(req);
+        const guildId = String(body.guildId || '').trim();
+        const repairAction = String(body.action || '').trim();
+        const gate = await requireStaffCapability(client, req, repairAction === 'diagnostics' ? 'canRunDiagnostics' : 'canRepairChannels', `staff.guild-repair.${repairAction || 'unknown'}`, { guildId, max: 8 });
+        if (!gate.ok) {
+            sendJson(res, gate.status, { error: gate.error });
+            return true;
+        }
+        const guild = client?.guilds?.cache?.get(guildId) || await client?.guilds?.fetch?.(guildId).catch(() => null);
+        if (!guild) {
+            recordStaffAuditEvent(req, { action: `staff.guild-repair.${repairAction}`, status: 'error', guildId, detail: 'Guild not found' });
+            sendJson(res, 404, { error: 'Guild not found' });
+            return true;
+        }
+        const config = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(guildId, ticketStore.getActiveStorage()) : {};
+        let result = null;
+        if (repairAction === 'sync-permissions') result = await syncGuildCategoryPermissions(guild, config);
+        else if (repairAction === 'repair-channels' || repairAction === 'repair-transcripts') result = await repairGuildChannels(guild, config);
+        else if (repairAction === 'diagnostics') result = { ok: true, message: 'Diagnostics refreshed.', diagnostics: getGuildRuntimeDiagnostics(client, guild, config, ticketStore.getActiveStorage()) };
+        else {
+            recordStaffAuditEvent(req, { action: `staff.guild-repair.${repairAction}`, status: 'error', guildId, detail: 'Unsupported repair action' });
+            sendJson(res, 400, { error: 'Unsupported repair action' });
+            return true;
+        }
+        recordStaffAuditEvent(req, { action: `staff.guild-repair.${repairAction}`, status: result?.ok ? 'success' : 'error', guildId, detail: result?.message || '' });
+        sendJson(res, 200, { ok: Boolean(result?.ok), guildId, result });
         return true;
     }
 
@@ -2773,7 +3144,9 @@ textarea{min-height:84px}button{cursor:pointer}
 .btn-danger{background:linear-gradient(135deg,#d93c42,#f04747);color:#fff;border:1px solid rgba(255,255,255,.2);box-shadow:0 8px 20px rgba(240,71,71,.28)}
  .btn,.btn-soft{border-radius:16px}
  .btn:active{transform:translateY(0)}
-.notice{min-height:20px;margin-bottom:10px}.ok{color:var(--ok)}.danger{color:var(--er)}.list{display:grid;gap:10px}.item{padding:10px;border:1px solid var(--bd);border-radius:12px;background:rgba(255,255,255,.03)}
+ .btn-icon{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px}
+ .btn-icon svg{width:16px;height:16px;display:block}
+ .notice{min-height:20px;margin-bottom:10px}.ok{color:var(--ok)}.danger{color:var(--er)}.list{display:grid;gap:10px}.item{padding:10px;border:1px solid var(--bd);border-radius:12px;background:rgba(255,255,255,.03)}
 .item-top{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px}.muted{font-size:12px;color:var(--mt)}
  .roles{display:flex;gap:6px;flex-wrap:wrap}.role{--c:#99AAB5;display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;border:1px solid color-mix(in srgb,var(--c) 45%,transparent);background:color-mix(in srgb,var(--c) 22%,transparent);font-size:12px}.pill{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);font-size:12px;font-weight:700}.pill.ok{border-color:rgba(87,242,135,.35);background:rgba(87,242,135,.12);color:#eafff2}.pill.warn{border-color:rgba(254,231,92,.38);background:rgba(254,231,92,.14);color:#fff9db}.pill.danger{border-color:rgba(237,66,69,.42);background:rgba(237,66,69,.14);color:#ffe9ea}
  .mention{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;border:1px solid rgba(88,101,242,.28);background:rgba(88,101,242,.18);color:#d7dcff;font-weight:800}
@@ -3240,7 +3613,7 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
  </style></head>
 <body>
  <div id="auth" class="auth"><div class="auth-card"><h3>Dashboard Login</h3><div class="muted" style="margin-bottom:10px">Sign in with Discord to continue.</div><a id="authDiscord" class="btn" href="/login" style="display:block;text-align:center;text-decoration:none">Sign in with Discord</a><div class="muted" style="margin:12px 0 6px">or use a token</div><label>Token</label><input id="authToken" type="password" /><div class="row" style="margin-top:10px"><button id="authLogin" class="btn">Login</button></div><div id="authMsg" class="notice danger"></div></div></div>
- <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">Navigate using the dropdowns to keep things tidy.</div></div></div><div class="topbar-right"><a class="btn-soft" href="/dashboard">Servers</a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-topnav-item data-value="/overview">Home <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/settings">Settings <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/availability">Availability <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/tutorials">Tutorials <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/tickets">Tickets <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/transcripts">Transcripts <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/ticket-types">Ticket Types <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/tag">Tags <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/feedback">Feedback <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/statistics">Statistics <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/embed-editor">Embed Editor <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/documentation">Documentation <span class="tag">Content</span></button></div></div><div id="themeNav" class="topnav"><button id="themeBtn" class="btn-soft topnav-btn" type="button"><span id="themeLabel">Theme</span><span class="chev">v</span></button><div class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-theme-item="dark">Dark <span class="tag">Default</span></button><button type="button" class="topnav-item" data-theme-item="light">Light <span class="tag">Warm</span></button><button type="button" class="topnav-item" data-theme-item="ocean">Ocean <span class="tag">Cool</span></button><button type="button" class="topnav-item" data-theme-item="sunset">Sunset <span class="tag">Bold</span></button><button type="button" class="topnav-item" data-theme-item="hacker">Hacker <span class="tag">Secret</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px">Refresh</button></div></div><div id="announcementBar"></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
+ <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">Navigate using the dropdowns to keep things tidy.</div></div></div><div class="topbar-right"><a class="btn-soft" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Servers</span></a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-topnav-item data-value="/overview">Home <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/settings">Settings <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/availability">Availability <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/tutorials">Tutorials <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/tickets">Tickets <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/transcripts">Transcripts <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/ticket-types">Ticket Types <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/tag">Tags <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/feedback">Feedback <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/statistics">Statistics <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/embed-editor">Embed Editor <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/documentation">Documentation <span class="tag">Content</span></button></div></div><div id="themeNav" class="topnav"><button id="themeBtn" class="btn-soft topnav-btn" type="button"><span id="themeLabel">Theme</span><span class="chev">v</span></button><div class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-theme-item="dark">Dark <span class="tag">Default</span></button><button type="button" class="topnav-item" data-theme-item="light">Light <span class="tag">Warm</span></button><button type="button" class="topnav-item" data-theme-item="ocean">Ocean <span class="tag">Cool</span></button><button type="button" class="topnav-item" data-theme-item="sunset">Sunset <span class="tag">Bold</span></button><button type="button" class="topnav-item" data-theme-item="hacker">Hacker <span class="tag">Secret</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px"><span class="btn-icon">${dashboardIcon('restart')}</span><span>Refresh</span></button></div></div><div id="announcementBar"></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
 <script>
  let currentPath=${JSON.stringify(currentPath)},tokenKey='dashboard_token_ui',defaultEmbedTemplates=${JSON.stringify(DEFAULT_EMBED_TEMPLATES)};
 const app=document.getElementById('app'),notice=document.getElementById('notice'),auth=document.getElementById('auth'),authDiscord=document.getElementById('authDiscord'),authToken=document.getElementById('authToken'),authMsg=document.getElementById('authMsg');
