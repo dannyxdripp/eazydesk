@@ -288,6 +288,24 @@ function isBasicRobloxIssue(reasonText) {
     return true;
 }
 
+async function notifyGuildOwnerTrialExpired(guild, aiAccess, storage) {
+    if (!guild?.id || !aiAccess?.expiredTrial || aiAccess?.notifiedTrialExpiredAt) return;
+    try {
+        const owner = await guild.fetchOwner().catch(() => null);
+        if (!owner?.user) return;
+        const lines = [
+            `AI support for **${guild.name}** has been paused because the free AI trial has ended.`,
+            '',
+            'Premium AI is required to keep automatic AI replies enabled for this server.'
+        ];
+        await owner.user.send({ content: lines.join('\n') }).catch(() => null);
+        ticketStore.setGuildAiAccess(guild.id, {
+            notifiedTrialExpiredAt: new Date().toISOString(),
+            enabled: false
+        }, storage);
+    } catch {}
+}
+
 async function sendAiPromptedResponse(channel, reasonText) {
     const activeStorage = ticketStore.getActiveStorage();
     const aiControl = ticketStore.getAiControl(activeStorage);
@@ -298,6 +316,13 @@ async function sendAiPromptedResponse(channel, reasonText) {
         if (!Number.isNaN(until) && Date.now() < until) return;
         ticketStore.setAiControl({ ...aiControl, rateLimitedUntil: null }, activeStorage);
     }
+
+    const guildAiAccess = ticketStore.getEffectiveGuildAiAccess(channel?.guild?.id || null, activeStorage);
+    if (guildAiAccess.expiredTrial) {
+        await notifyGuildOwnerTrialExpired(channel?.guild, guildAiAccess, activeStorage);
+        return;
+    }
+    if (!guildAiAccess.hasAccess) return;
 
     const safeReason = String(reasonText || '').trim();
     const matchedTags = collectTagMatches(safeReason, channel?.guild?.id || null);

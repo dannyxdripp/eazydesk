@@ -7,12 +7,14 @@ const ACTIVE_STORAGE_PATH = path.join(JSON_DIR, 'active-storage.json');
 const TICKET_TYPES_PATH = path.join(JSON_DIR, 'ticket-types.json');
 const SUPPORT_TEAMS_PATH = path.join(JSON_DIR, 'support-teams.json');
 const TAGS_PATH = path.join(JSON_DIR, 'tags.json');
+const BACKUP_DIR = path.join(JSON_DIR, 'backups');
 const guildConfigStore = require('./guild-config-store');
 
 ensureJsonFile(ACTIVE_STORAGE_PATH, path.join(BUNDLED_JSON_DIR, 'active-storage.json'), {});
 ensureJsonFile(TICKET_TYPES_PATH, path.join(BUNDLED_JSON_DIR, 'ticket-types.json'), { ticketTypes: [] });
 ensureJsonFile(SUPPORT_TEAMS_PATH, path.join(BUNDLED_JSON_DIR, 'support-teams.json'), { teams: [] });
 ensureJsonFile(TAGS_PATH, path.join(BUNDLED_JSON_DIR, 'tags.json'), { tags: [] });
+fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
 const jsonCache = new Map();
 
@@ -62,6 +64,34 @@ function writeJson(filePath, value) {
     fs.writeFileSync(filePath, JSON.stringify(value, null, 4));
 }
 
+function writeJsonAtomic(filePath, value) {
+    const resolved = path.resolve(filePath);
+    const dir = path.dirname(resolved);
+    const tempPath = path.join(dir, `.${path.basename(resolved)}.${process.pid}.${Date.now()}.tmp`);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(tempPath, JSON.stringify(value, null, 4), 'utf8');
+    fs.renameSync(tempPath, resolved);
+}
+
+function rotateBackups(prefix, keep = 10) {
+    const files = fs.readdirSync(BACKUP_DIR)
+        .filter(name => name.startsWith(`${prefix}-`) && name.endsWith('.json'))
+        .map(name => ({ name, time: fs.statSync(path.join(BACKUP_DIR, name)).mtimeMs }))
+        .sort((a, b) => b.time - a.time);
+    for (const file of files.slice(Math.max(0, keep))) {
+        try { fs.unlinkSync(path.join(BACKUP_DIR, file.name)); } catch {}
+    }
+}
+
+function snapshotJsonBackup(prefix, value) {
+    try {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupPath = path.join(BACKUP_DIR, `${prefix}-${timestamp}.json`);
+        writeJsonAtomic(backupPath, value);
+        rotateBackups(prefix, 10);
+    } catch {}
+}
+
 function readJsonCached(filePath, fallback) {
     const key = path.resolve(filePath);
     try {
@@ -80,7 +110,7 @@ function readJsonCached(filePath, fallback) {
 
 function writeJsonCached(filePath, value) {
     const key = path.resolve(filePath);
-    writeJson(key, value);
+    writeJsonAtomic(key, value);
     try {
         const stat = fs.statSync(key);
         jsonCache.set(key, { mtimeMs: stat.mtimeMs, value });
@@ -201,6 +231,9 @@ function getActiveStorage() {
     if (!data.botConfig || typeof data.botConfig !== 'object') {
         data.botConfig = {};
     }
+    if (!data.aiGuildAccess || typeof data.aiGuildAccess !== 'object') {
+        data.aiGuildAccess = {};
+    }
     if (!data.ticketNotes || typeof data.ticketNotes !== 'object') {
         data.ticketNotes = {};
     }
@@ -213,7 +246,8 @@ function getActiveStorage() {
 }
 
 function saveActiveStorage(storage) {
-    writeJson(ACTIVE_STORAGE_PATH, storage);
+    snapshotJsonBackup('active-storage', storage);
+    writeJsonAtomic(ACTIVE_STORAGE_PATH, storage);
 }
 
 function findTicketTypeBySelectValue(value, guildId = null, storage = null) {
@@ -337,6 +371,77 @@ function setAiControl(nextControl, storage = null) {
     };
     saveActiveStorage(activeStorage);
     return activeStorage.aiControl;
+}
+
+function getGuildAiAccess(guildId, storage = null) {
+    const id = String(guildId || '').trim();
+    if (!/^\d{17,20}$/.test(id)) {
+        return {
+            guildId: null,
+            plan: 'none',
+            enabled: false,
+            trialStartedAt: null,
+            trialEndsAt: null,
+            notifiedTrialExpiredAt: null,
+            grantedByOwnerId: null
+        };
+    }
+    const activeStorage = storage || getActiveStorage();
+    if (!activeStorage.aiGuildAccess || typeof activeStorage.aiGuildAccess !== 'object') {
+        activeStorage.aiGuildAccess = {};
+    }
+    const current = activeStorage.aiGuildAccess[id];
+    const normalized = current && typeof current === 'object' ? current : {};
+    return {
+        guildId: id,
+        plan: ['none', 'trial', 'premium'].includes(String(normalized.plan || '').trim()) ? String(normalized.plan).trim() : 'none',
+        enabled: Boolean(normalized.enabled),
+        trialStartedAt: normalized.trialStartedAt || null,
+        trialEndsAt: normalized.trialEndsAt || null,
+        notifiedTrialExpiredAt: normalized.notifiedTrialExpiredAt || null,
+        grantedByOwnerId: normalized.grantedByOwnerId ? String(normalized.grantedByOwnerId) : null
+    };
+}
+
+function setGuildAiAccess(guildId, patch, storage = null) {
+    const id = String(guildId || '').trim();
+    if (!/^\d{17,20}$/.test(id)) return null;
+    const activeStorage = storage || getActiveStorage();
+    if (!activeStorage.aiGuildAccess || typeof activeStorage.aiGuildAccess !== 'object') {
+        activeStorage.aiGuildAccess = {};
+    }
+    const current = getGuildAiAccess(id, activeStorage);
+    const incoming = patch && typeof patch === 'object' ? patch : {};
+    const next = {
+        ...current,
+        ...incoming,
+        guildId: id
+    };
+    next.plan = ['none', 'trial', 'premium'].includes(String(next.plan || '').trim()) ? String(next.plan).trim() : 'none';
+    next.enabled = Boolean(next.enabled);
+    next.trialStartedAt = next.trialStartedAt || null;
+    next.trialEndsAt = next.trialEndsAt || null;
+    next.notifiedTrialExpiredAt = next.notifiedTrialExpiredAt || null;
+    next.grantedByOwnerId = next.grantedByOwnerId ? String(next.grantedByOwnerId) : null;
+    activeStorage.aiGuildAccess[id] = next;
+    saveActiveStorage(activeStorage);
+    return next;
+}
+
+function getEffectiveGuildAiAccess(guildId, storage = null) {
+    const access = getGuildAiAccess(guildId, storage);
+    const now = Date.now();
+    const trialEndsAtMs = Date.parse(access.trialEndsAt || '');
+    const trialActive = access.plan === 'trial' && !Number.isNaN(trialEndsAtMs) && now < trialEndsAtMs;
+    const expiredTrial = access.plan === 'trial' && !Number.isNaN(trialEndsAtMs) && now >= trialEndsAtMs;
+    const premiumActive = access.plan === 'premium';
+    return {
+        ...access,
+        premiumActive,
+        trialActive,
+        expiredTrial,
+        hasAccess: Boolean(access.enabled && (premiumActive || trialActive))
+    };
 }
 
 function recordStaffStatsEvent(type, userId, channelId = null, createdBy = null, createdAt = null, storage = null) {
@@ -895,6 +1000,9 @@ module.exports = {
     popPendingUrgentReason,
     getAiControl,
     setAiControl,
+    getGuildAiAccess,
+    setGuildAiAccess,
+    getEffectiveGuildAiAccess,
     recordStaffStatsEvent,
     getStaffStatsForUserLastDays,
     recordCloseRequestReason,

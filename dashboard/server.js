@@ -136,8 +136,9 @@ function normalizeTutorials(input) {
                 steps: steps.map((step, stepIndex) => ({
                     title: String(step?.title || `Step ${stepIndex + 1}`).trim().slice(0, 90),
                     body: String(step?.body || '').trim().slice(0, 2000),
-                    imageUrl: /^https?:\/\//i.test(String(step?.imageUrl || '').trim()) ? String(step.imageUrl).trim() : ''
-                })).filter(step => step.title || step.body || step.imageUrl)
+                    imageUrl: /^https?:\/\//i.test(String(step?.imageUrl || '').trim()) ? String(step.imageUrl).trim() : '',
+                    videoUrl: /^https?:\/\//i.test(String(step?.videoUrl || '').trim()) ? String(step.videoUrl).trim() : ''
+                })).filter(step => step.title || step.body || step.imageUrl || step.videoUrl)
             };
         })
         .filter(tutorial => tutorial.title && tutorial.steps.length)
@@ -551,7 +552,8 @@ function createControllerHtml() {
       const list=document.getElementById('guildList');
       const err=document.getElementById('ctrlError');
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
-      async function api(path,opt){const r=await fetch(path,{credentials:'include',...(opt||{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+      const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
+      async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function item(g){const icon=g.iconURL?'<img src=\"'+esc(g.iconURL)+'\" style=\"width:28px;height:28px;border-radius:10px\" />':'';const status=g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Step '+esc(g.setupStep||1)+'</span>';return '<div class=\"item\">'+
         '<div class=\"row\" style=\"gap:10px\">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class=\"muted\">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+status+'</div>'+
         '<div class=\"row\">'+
@@ -584,7 +586,8 @@ function createServerPickerHtml(options = {}) {
       const list=document.getElementById('guildList');
       const err=document.getElementById('guildError');
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
-      async function api(path,opt){const r=await fetch(path,{credentials:'include',...(opt||{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+      const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
+      async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function renderPerms(g){const tags=[];tags.push(g.botInServer?'<span class="pill">Bot in server</span>':'<span class="pill">Bot not in server</span>');tags.push(g.isOwner?'<span class="pill">Owner</span>':'');tags.push(g.isAdmin?'<span class="pill">Administrator</span>':'');tags.push(!g.isAdmin&&g.canManageGuild?'<span class="pill">Manage Server</span>':'');tags.push(!g.isAdmin&&!g.canManageGuild&&g.canManageChannels?'<span class="pill">Manage Channels</span>':'');return tags.filter(Boolean).join('')}
       function renderAction(g){if(ownerView&&g.botInServer)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a>';if(g.botInServer&&g.canAccessDashboard)return '<span class="pill">Can edit ticket config</span>';if(g.botInServer)return '<span class="muted">No dashboard permissions</span>';return '<span class="muted">Bot is not in this server</span>'}
       function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=Array.isArray(g.permissionSummary)&&g.permissionSummary.length?g.permissionSummary.map(esc).join(' • '):'No elevated permissions';const cls='item server-card'+(g.canAccessDashboard?' can-manage':'');return '<div class="'+cls+'">'+
@@ -622,7 +625,8 @@ function createStaffHtml(options = {}) {
       const summary=document.getElementById('staffSummary');
       const inviteMap={};
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
-      async function api(path,opt){const r=await fetch(path,{credentials:'include',...(opt||{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+      const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
+      async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function note(message){if(!ok)return;ok.style.display='block';ok.innerHTML='<strong>Done</strong><div class="muted" style="margin-top:4px">'+esc(message)+'</div>'}
       function pill(text){return '<span class="pill">'+esc(text)+'</span>'}
       function renderSummaryCards(cap){const groups=Array.isArray(cap&&cap.roleFamilies)?cap.roleFamilies:[];const cards=[
@@ -872,7 +876,8 @@ function createSetupHtml() {
       let setupLocked=false;
       let setupCompleted=false;
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
-      async function api(path,opt){const r=await fetch(path,{credentials:'include',...(opt||{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+      const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
+      async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function opt(id,label,selected){return '<option value=\"'+esc(id)+'\" '+(selected?'selected':'')+'>'+esc(label)+'</option>'}
       function fillSelect(el,items,emptyLabel,selected){const rows=['<option value=\"\">'+esc(emptyLabel)+'</option>'].concat(items.map(it=>opt(it.id,it.label||it.name||it.id,selected===it.id)));el.innerHTML=rows.join('')}
       let catalogs={ roles:[], channels:[], categories:[] };
@@ -1141,6 +1146,7 @@ function setDashboardSession(res, userId, guildIds = [], oauthGuilds = []) {
     const sessionId = randomToken();
     dashboardSessions.set(sessionId, {
         userId: String(userId),
+        csrfToken: randomToken(18),
         guildIds: Array.isArray(guildIds) ? guildIds.map(String) : [],
         oauthGuilds: Array.isArray(oauthGuilds)
             ? oauthGuilds.map(g => ({
@@ -1177,6 +1183,10 @@ function getDashboardSession(req) {
         dashboardSessions.delete(sessionId);
         return null;
     }
+    if (!entry.csrfToken) {
+        entry.csrfToken = randomToken(18);
+        dashboardSessions.set(sessionId, entry);
+    }
     return entry && typeof entry === 'object' ? entry : null;
 }
 
@@ -1203,6 +1213,55 @@ function getDashboardSessionOauthGuilds(req) {
             permissions: String(g?.permissions || '0').trim() || '0'
         }))
         .filter(g => /^\d{17,20}$/.test(g.id));
+}
+
+function getDashboardSessionCsrfToken(req) {
+    const entry = getDashboardSession(req);
+    return String(entry?.csrfToken || '').trim() || null;
+}
+
+function hasDashboardTokenAuth(req) {
+    const headers = req?.headers || {};
+    const h = headers['x-dashboard-token'];
+    const headerToken = Array.isArray(h) ? h[0] : h;
+    const cookieToken = parseCookies(headers.cookie).dashboard_token;
+    const dashboardToken = getDashboardToken();
+    const ownerToken = getDashboardOwnerToken();
+    return Boolean(
+        (dashboardToken && (headerToken === dashboardToken || cookieToken === dashboardToken))
+        || (ownerToken && (headerToken === ownerToken || cookieToken === ownerToken))
+    );
+}
+
+function assertDashboardCsrf(req) {
+    if (hasDashboardTokenAuth(req)) return true;
+    const expected = getDashboardSessionCsrfToken(req);
+    if (!expected) return false;
+    const headerValue = req?.headers?.['x-csrf-token'];
+    const provided = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+    return String(provided || '').trim() === expected;
+}
+
+function getGuildAiUiState(guildId, storage = null) {
+    const access = ticketStore.getEffectiveGuildAiAccess(guildId, storage);
+    const trialEndsAtMs = Date.parse(access.trialEndsAt || '');
+    const trialRemainingMs = access.trialActive && !Number.isNaN(trialEndsAtMs)
+        ? Math.max(0, trialEndsAtMs - Date.now())
+        : 0;
+    const trialRemainingDays = trialRemainingMs
+        ? Math.max(0, Math.ceil(trialRemainingMs / (24 * 60 * 60 * 1000)))
+        : 0;
+    return {
+        ...access,
+        statusLabel: access.premiumActive
+            ? 'Premium AI active'
+            : access.trialActive
+                ? `Trial active • ${trialRemainingDays} day${trialRemainingDays === 1 ? '' : 's'} left`
+                : access.expiredTrial
+                    ? 'Trial expired'
+                    : 'No AI subscription',
+        trialRemainingDays
+    };
 }
 
 function summarizeOauthGuildPermissions(guild) {
@@ -1547,6 +1606,7 @@ function getGuildEnabledModules(config = {}) {
 function getGuildRuntimeDiagnostics(client, guild, config = {}, storage = null) {
     const activeStorage = storage || ticketStore.getActiveStorage();
     const botConfig = ticketStore.getBotConfig(activeStorage);
+    const guildAi = getGuildAiUiState(guild?.id || null, activeStorage);
     const auditLog = getStaffAuditLog(activeStorage).filter(item => String(item?.guildId || '') === String(guild?.id || '')).slice(-12).reverse();
     const recentErrors = auditLog.filter(item => item.status === 'error').slice(0, 12);
     const shardIds = Array.isArray(client?.shard?.ids) ? client.shard.ids : [];
@@ -1555,7 +1615,7 @@ function getGuildRuntimeDiagnostics(client, guild, config = {}, storage = null) 
         ownerId: guild?.ownerId || null,
         botJoinDate: getBotGuildMember(guild)?.joinedAt ? new Date(getBotGuildMember(guild).joinedAt).toISOString() : null,
         shardAssignment: shardIds.length ? `Shard ${shardIds.join(', ')}` : `Process ${process.pid}`,
-        subscriptionPlan: String(botConfig?.subscriptions?.[guild?.id]?.plan || botConfig?.defaultPlan || 'Standard'),
+        subscriptionPlan: guildAi.premiumActive ? 'Premium AI' : guildAi.trialActive ? 'AI Trial' : String(botConfig?.subscriptions?.[guild?.id]?.plan || botConfig?.defaultPlan || 'Standard'),
         enabledModules: getGuildEnabledModules(config),
         apiLatencyMs: Number(client?.ws?.ping || 0),
         databaseLatencyMs: null,
@@ -1669,6 +1729,7 @@ async function getDashboardState(client, req = null) {
     ]);
     const guildId = guild?.id || null;
     const guildConfig = guildId ? ticketStore.getGuildConfig(guildId, activeStorage) : {};
+    const aiAccess = guildId ? getGuildAiUiState(guildId, activeStorage) : getGuildAiUiState(null, activeStorage);
     const ticketTypes = ticketStore.getTicketTypesForGuild(guildId);
     const ticketPool = (Array.isArray(activeStorage.tickets) ? activeStorage.tickets : []);
     const tickets = (guild
@@ -1717,7 +1778,9 @@ async function getDashboardState(client, req = null) {
         }));
     return {
         guildId: guild?.id || null,
+        csrfToken: getDashboardSessionCsrfToken(req),
         access,
+        aiAccess,
         ticketTypes,
         tickets,
         supportTeams: ticketStore.getSupportTeamsForGuild(guildId),
@@ -1754,7 +1817,10 @@ async function getDashboardState(client, req = null) {
             embedTemplates: botConfig.embedTemplates && typeof botConfig.embedTemplates === 'object'
                 ? botConfig.embedTemplates
                 : DEFAULT_EMBED_TEMPLATES
-        }
+        },
+        ownerControls: ownerView && guildId ? {
+            aiAccess
+        } : null
     };
 }
 
@@ -1938,6 +2004,11 @@ async function handleApi(req, res, url, client) {
 
     if (!isAuthed(req)) {
         sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+    }
+
+    if (method === 'POST' && !assertDashboardCsrf(req)) {
+        sendJson(res, 403, { error: 'Security check failed. Refresh the dashboard and try again.' });
         return true;
     }
 
@@ -2531,6 +2602,67 @@ async function handleApi(req, res, url, client) {
         return true;
     }
 
+    if (method === 'POST' && pathname === '/api/owner/guild-ai') {
+        if (!isStrictOwnerViewer(req)) {
+            sendJson(res, 403, { error: 'Owner access required' });
+            return true;
+        }
+        const body = await readBody(req);
+        const guildId = String(body.guildId || '').trim();
+        const action = String(body.action || '').trim().toLowerCase();
+        if (!/^\d{17,20}$/.test(guildId)) {
+            sendJson(res, 400, { error: 'Invalid guildId' });
+            return true;
+        }
+        const activeStorage = ticketStore.getActiveStorage();
+        const current = ticketStore.getGuildAiAccess(guildId, activeStorage);
+        const ownerId = getDashboardSessionUserId(req) || getBotOwnerId() || null;
+        let nextPatch = {};
+
+        if (action === 'start-trial') {
+            const trialDays = Math.max(1, Math.min(30, Number(body.days || 7)));
+            const startedAt = new Date().toISOString();
+            const endsAt = new Date(Date.now() + (trialDays * 24 * 60 * 60 * 1000)).toISOString();
+            nextPatch = {
+                plan: 'trial',
+                enabled: true,
+                trialStartedAt: startedAt,
+                trialEndsAt: endsAt,
+                notifiedTrialExpiredAt: null,
+                grantedByOwnerId: ownerId
+            };
+        } else if (action === 'set-premium') {
+            nextPatch = {
+                plan: 'premium',
+                enabled: true,
+                trialStartedAt: current.trialStartedAt || null,
+                trialEndsAt: null,
+                notifiedTrialExpiredAt: null,
+                grantedByOwnerId: ownerId
+            };
+        } else if (action === 'disable') {
+            nextPatch = { enabled: false };
+        } else if (action === 'enable') {
+            nextPatch = { enabled: true };
+        } else if (action === 'clear') {
+            nextPatch = {
+                plan: 'none',
+                enabled: false,
+                trialStartedAt: null,
+                trialEndsAt: null,
+                notifiedTrialExpiredAt: null,
+                grantedByOwnerId: ownerId
+            };
+        } else {
+            sendJson(res, 400, { error: 'Unsupported action' });
+            return true;
+        }
+
+        const updated = ticketStore.setGuildAiAccess(guildId, nextPatch, activeStorage);
+        sendJson(res, 200, { ok: true, guildId, aiAccess: getGuildAiUiState(guildId, activeStorage), raw: updated });
+        return true;
+    }
+
     if (method === 'POST' && pathname === '/api/availability') {
         const body = await readBody(req);
         const dashboardGuildId = getDashboardGuild(client, req)?.id || null;
@@ -3089,6 +3221,41 @@ function pageTitleForPath(path) {
     return map[path] || 'Dashboard';
 }
 
+function pageDescriptionForPath(path) {
+    const map = {
+        '/overview': 'A cleaner snapshot of ticket activity, queue health, and the most common next actions.',
+        '/settings': 'Core server configuration, routing, and system behavior in one place.',
+        '/availability': 'Adjust queue expectations per ticket type without digging through commands.',
+        '/tutorials': 'Guides, walkthroughs, and internal onboarding material for your staff.',
+        '/commands/ticket-types': 'Shape each ticket flow, assign support coverage, and keep categories tidy.',
+        '/commands/tag': 'Store reusable answers and keep repeat support responses consistent.',
+        '/tickets': 'Review active conversations, add notes, and handle escalations quickly.',
+        '/transcripts': 'Browse saved transcripts and archive history without leaving the dashboard.',
+        '/commands/feedback': 'Control where feedback lands and how the flow is presented.',
+        '/statistics': 'Track recent performance, close reasons, and staff activity trends.',
+        '/embed-editor': 'Update reusable bot message templates with a simpler editing workflow.',
+        '/documentation': 'Reference placeholders, templates, and dashboard usage notes.'
+    };
+    return map[path] || 'Manage this part of the dashboard with a simpler, more focused layout.';
+}
+
+function topNavItem(path, label, group, description) {
+    return `<button type="button" class="topnav-item" data-topnav-item data-value="${path}"><span class="topnav-main"><span class="topnav-icon">${dashboardIcon(
+        path === '/overview' ? 'dashboard'
+            : path === '/settings' ? 'setup'
+                : path === '/availability' ? 'diagnostics'
+                    : path === '/tutorials' ? 'open'
+                        : path === '/tickets' ? 'servers'
+                            : path === '/transcripts' ? 'invite'
+                                : path === '/commands/ticket-types' ? 'setup'
+                                    : path === '/commands/tag' ? 'repair'
+                                        : path === '/commands/feedback' ? 'staff'
+                                            : path === '/statistics' ? 'diagnostics'
+                                                : path === '/embed-editor' ? 'open'
+                                                    : 'dashboard'
+    )}</span><span class="topnav-copy"><strong>${label}</strong><span>${description}</span></span></span><span class="tag">${group}</span></button>`;
+}
+
 function createUiHtml(currentPath) {
     const pageTitle = pageTitleForPath(currentPath);
     const activeGroup =
@@ -3331,9 +3498,11 @@ details.acc .acc-body{padding:12px 12px;border-top:1px solid rgba(255,255,255,.1
  /* Mobile-first navigation: drawer + big dropdown */
   #menuBtn{display:inline-flex}
   .topbar-right{justify-content:flex-start}
-  .topbar-right .topnav{min-width:0;width:100%}
+ .topbar-right .topnav{min-width:0;width:100%}
   .topnav-btn{min-width:0}
   .topnav-menu{left:0;right:0}
+  .stat-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .quick-grid{grid-template-columns:1fr}
   .sidebar{
    position:fixed;left:0;top:0;bottom:0;width:min(320px,92vw);
    transform:translateX(-105%);
@@ -3556,21 +3725,21 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
   .titles{display:flex;flex-direction:column;gap:2px;min-width:0}
   .topbar-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
   .topbar-right .topnav{width:auto;min-width:200px}
-  .topbar-right .theme-nav{min-width:160px}
+ .topbar-right .theme-nav{min-width:160px}
   .topbar-right .btn,.topbar-right .btn-soft{width:auto}
  
  /* Top navigation dropdown (smooth, animated) */
  .topnav{position:relative}
-  .topnav-btn{display:inline-flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-width:190px}
+  .topnav-btn{display:inline-flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-width:190px;border-radius:18px;padding:11px 14px}
   #topNav .topnav-btn{min-width:220px}
   #themeNav .topnav-btn{min-width:160px}
  .topnav-btn .chev{opacity:.78;transition:transform .18s ease}
  .topnav.open .topnav-btn .chev{transform:rotate(180deg)}
  .topnav-menu{
   position:absolute;right:0;top:calc(100% + 8px);
-  min-width:260px;max-height:60vh;overflow:auto;padding:8px;
+  min-width:290px;max-height:60vh;overflow:auto;padding:10px;
   background:rgba(10,14,30,.92);border:1px solid rgba(255,255,255,.12);
-  border-radius:16px;box-shadow:var(--shadow);backdrop-filter:blur(18px);
+  border-radius:20px;box-shadow:var(--shadow);backdrop-filter:blur(18px);
   opacity:0;transform:translateY(-6px) scale(.98);pointer-events:none;
   transition:opacity .16s ease,transform .18s ease
  }
@@ -3578,13 +3747,19 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
  #themeNav .topnav-menu{min-width:190px}
  .topnav-item{
   width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;
-  text-align:left;padding:10px 11px;border-radius:12px;
+  text-align:left;padding:12px 13px;border-radius:16px;
   background:transparent;border:1px solid transparent;color:rgba(247,248,255,.82);
   cursor:pointer;transition:background .18s ease,border-color .18s ease,transform .16s ease
  }
 .topnav-item:hover{background:rgba(255,255,255,.05);border-color:rgba(56,189,248,.22);transform:translateY(-1px)}
 .topnav-item.active{background:rgba(56,189,248,.14);border-color:rgba(56,189,248,.34);color:var(--tx)}
  .topnav-item .tag{font-size:11px;color:rgba(247,248,255,.55)}
+ .topnav-main{display:flex;align-items:center;gap:12px;min-width:0}
+ .topnav-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04)}
+ .topnav-icon svg{width:18px;height:18px;display:block}
+ .topnav-copy{display:grid;gap:2px;min-width:0}
+ .topnav-copy strong{font-size:13px;font-weight:800}
+ .topnav-copy span{font-size:11px;color:var(--mt)}
 #menuBtn{display:none}
 .overlay{display:none}
 .title{font-size:26px;font-weight:750;letter-spacing:.15px}
@@ -3606,6 +3781,18 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
 .list-btn:hover{transform:translateY(-1px);border-color:rgba(56,189,248,.22);background:rgba(56,189,248,.08)}
 .list-btn.active{border-color:rgba(56,189,248,.34);background:linear-gradient(180deg,rgba(56,189,248,.14),rgba(255,255,255,.03));box-shadow:inset 0 1px 0 rgba(255,255,255,.10)}
  .list-title{font-weight:800;font-size:13px;display:flex;align-items:center;gap:8px}
+ .page-shell{display:grid;gap:14px}
+ .page-hero{display:grid;gap:12px;padding:18px}
+ .page-hero-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+ .page-kicker{font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--mt)}
+ .page-hero h3{margin:0;font-size:28px;line-height:1.08}
+ .page-hero p{margin:0;max-width:760px;color:var(--mt)}
+ .page-pill-row{display:flex;gap:8px;flex-wrap:wrap}
+ .stat-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+ .stat-tile{padding:14px;border-radius:16px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03)}
+ .stat-tile strong{display:block;font-size:26px;line-height:1.05;margin-top:4px}
+ .quick-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ .module-stack{display:grid;gap:14px}
  .list-meta{margin-top:4px;font-size:12px;color:rgba(247,248,255,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  .help{margin-top:6px;font-size:12px;color:rgba(247,248,255,.60)}
  textarea{min-height:110px}
@@ -3613,7 +3800,7 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
  </style></head>
 <body>
  <div id="auth" class="auth"><div class="auth-card"><h3>Dashboard Login</h3><div class="muted" style="margin-bottom:10px">Sign in with Discord to continue.</div><a id="authDiscord" class="btn" href="/login" style="display:block;text-align:center;text-decoration:none">Sign in with Discord</a><div class="muted" style="margin:12px 0 6px">or use a token</div><label>Token</label><input id="authToken" type="password" /><div class="row" style="margin-top:10px"><button id="authLogin" class="btn">Login</button></div><div id="authMsg" class="notice danger"></div></div></div>
- <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">Navigate using the dropdowns to keep things tidy.</div></div></div><div class="topbar-right"><a class="btn-soft" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Servers</span></a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-topnav-item data-value="/overview">Home <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/settings">Settings <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/availability">Availability <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/tutorials">Tutorials <span class="tag">General</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/tickets">Tickets <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/transcripts">Transcripts <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/ticket-types">Ticket Types <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/tag">Tags <span class="tag">Tickets</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/commands/feedback">Feedback <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/statistics">Statistics <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/embed-editor">Embed Editor <span class="tag">Content</span></button><button type="button" class="topnav-item" data-topnav-item data-value="/documentation">Documentation <span class="tag">Content</span></button></div></div><div id="themeNav" class="topnav"><button id="themeBtn" class="btn-soft topnav-btn" type="button"><span id="themeLabel">Theme</span><span class="chev">v</span></button><div class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-theme-item="dark">Dark <span class="tag">Default</span></button><button type="button" class="topnav-item" data-theme-item="light">Light <span class="tag">Warm</span></button><button type="button" class="topnav-item" data-theme-item="ocean">Ocean <span class="tag">Cool</span></button><button type="button" class="topnav-item" data-theme-item="sunset">Sunset <span class="tag">Bold</span></button><button type="button" class="topnav-item" data-theme-item="hacker">Hacker <span class="tag">Secret</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px"><span class="btn-icon">${dashboardIcon('restart')}</span><span>Refresh</span></button></div></div><div id="announcementBar"></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
+ <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">${pageDescriptionForPath(currentPath)}</div></div></div><div class="topbar-right"><a class="btn-soft" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Servers</span></a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu">${topNavItem('/overview','Home','General','Snapshot and quick actions')}${topNavItem('/settings','Settings','General','Core config and routing')}${topNavItem('/availability','Availability','General','Queue status and overrides')}${topNavItem('/tutorials','Tutorials','General','Guides and walkthroughs')}${topNavItem('/tickets','Tickets','Tickets','Active queue management')}${topNavItem('/transcripts','Transcripts','Tickets','Saved conversation history')}${topNavItem('/commands/ticket-types','Ticket Types','Tickets','Flow design and coverage')}${topNavItem('/commands/tag','Tags','Tickets','Reusable staff replies')}${topNavItem('/commands/feedback','Feedback','Content','Feedback destination and flow')}${topNavItem('/statistics','Statistics','Content','Trends and activity')}${topNavItem('/embed-editor','Embed Editor','Content','Template visuals and copy')}${topNavItem('/documentation','Documentation','Content','Reference notes and placeholders')}</div></div><div id="themeNav" class="topnav"><button id="themeBtn" class="btn-soft topnav-btn" type="button"><span id="themeLabel">Theme</span><span class="chev">v</span></button><div class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-theme-item="dark">Dark <span class="tag">Default</span></button><button type="button" class="topnav-item" data-theme-item="light">Light <span class="tag">Warm</span></button><button type="button" class="topnav-item" data-theme-item="ocean">Ocean <span class="tag">Cool</span></button><button type="button" class="topnav-item" data-theme-item="sunset">Sunset <span class="tag">Bold</span></button><button type="button" class="topnav-item" data-theme-item="hacker">Hacker <span class="tag">Secret</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px"><span class="btn-icon">${dashboardIcon('restart')}</span><span>Refresh</span></button></div></div><div id="announcementBar"></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
 <script>
  let currentPath=${JSON.stringify(currentPath)},tokenKey='dashboard_token_ui',defaultEmbedTemplates=${JSON.stringify(DEFAULT_EMBED_TEMPLATES)};
 const app=document.getElementById('app'),notice=document.getElementById('notice'),auth=document.getElementById('auth'),authDiscord=document.getElementById('authDiscord'),authToken=document.getElementById('authToken'),authMsg=document.getElementById('authMsg');
@@ -3625,7 +3812,7 @@ const app=document.getElementById('app'),notice=document.getElementById('notice'
  const saveUi=()=>{try{sessionStorage.setItem('dash_ui',JSON.stringify(ui||{}))}catch{}};
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const note=(t,m='')=>{notice.textContent=t||'';notice.className='notice '+m};
-async function api(path,opt={}){const h={'Content-Type':'application/json',...(opt.headers||{})};const tok=localStorage.getItem(tokenKey);if(tok)h['x-dashboard-token']=tok;const r=await fetch(path,{credentials:'include',...opt,headers:h});if(r.status===401){const next=encodeURIComponent(location.pathname+location.search);window.location='/login?next='+next;throw new Error('Unauthorized')}const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+async function api(path,opt={}){const h={'Content-Type':'application/json',...(opt.headers||{})};const tok=localStorage.getItem(tokenKey);if(tok)h['x-dashboard-token']=tok;const csrf=(state&&state.csrfToken)||'';if(csrf&&String(opt.method||'GET').toUpperCase()!=='GET')h['x-csrf-token']=csrf;const r=await fetch(path,{credentials:'include',...opt,headers:h});if(r.status===401){const next=encodeURIComponent(location.pathname+location.search);window.location='/login?next='+next;throw new Error('Unauthorized')}const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
 function parseEmoji(raw){const s=String(raw||'').trim();if(!s)return null;const m=s.match(/^<(a?):([a-zA-Z0-9_]+):(\d{17,20})>$/);if(m)return{animated:m[1]==='a',name:m[2],id:m[3],raw:s};return{unicode:s,raw:s}}
 function emojiHtml(raw){const e=parseEmoji(raw);if(!e)return '';if(e.id){const ext=e.animated?'gif':'png';return '<span class="emoji-inline"><img src="https://cdn.discordapp.com/emojis/'+e.id+'.'+ext+'?size=64&quality=lossless" alt="'+esc(e.name||'emoji')+'" /></span>'}return '<span class="emoji-inline">'+esc(e.unicode)+'</span>'}
 function teamLabel(team){const src=team&&typeof team==='object'?team:{};const e=emojiHtml(src.emoji||'');return (e?e+' ':'')+esc(src.name||'')}
@@ -3636,7 +3823,9 @@ function channelSelect(id,selectedId,placeholder){const channels=Array.isArray(s
 function categoryLabel(categoryId,placeholder){const ch=(state.categoryCatalog||[]).find(c=>c.id===categoryId);return ch?(ch.name):(placeholder||'Select a category')}
 function categorySelect(id,selectedId,placeholder){const cats=Array.isArray(state.categoryCatalog)?state.categoryCatalog:[];return '<div class="custom-select" data-cs="'+id+'"><input id="'+id+'" type="hidden" value="'+esc(selectedId||'')+'" /><button type="button" class="cs-trigger" data-cs-trigger="'+id+'"><span class="cs-label" id="'+id+'Label">'+esc(categoryLabel(selectedId,placeholder))+'</span><span class="cs-caret">v</span></button><div class="cs-menu"><input class="cs-search" data-cs-search="'+id+'" placeholder="Search categories" /><div class="cs-list">'+['<button type="button" class="cs-opt '+(!selectedId?'active':'')+'" data-cs-opt="'+id+'" data-value="">'+esc(placeholder||'Use default ticket category')+'</button>'].concat(cats.map(ch=>'<button type="button" class="cs-opt '+(selectedId===ch.id?'active':'')+'" data-cs-opt="'+id+'" data-value="'+ch.id+'">'+esc(ch.name)+'</button>')).join('')+'</div></div></div>'}
  function renderSettings(){
-  const teams=Array.isArray(state.supportTeams)?state.supportTeams:[];
+ const teams=Array.isArray(state.supportTeams)?state.supportTeams:[];
+  const ai=state&&state.aiAccess?state.aiAccess:{plan:'none',enabled:false,statusLabel:'No AI subscription',trialRemainingDays:0};
+  const isOwner=Boolean(state&&state.access&&state.access.isOwner);
   const selectedName=(ui&&ui.selectedTeam)?String(ui.selectedTeam):'';
   const selectedTeam=teams.find(t=>t&&t.name===selectedName)||null;
   const list=teams
@@ -3673,6 +3862,28 @@ function categorySelect(id,selectedId,placeholder){const cats=Array.isArray(stat
     '<div style="margin-top:12px;display:flex;gap:10px">'+
       '<button id="savePanelConfig" class="btn" style="width:auto">Save Panel</button>'+
     '</div>'+
+   '</div>'+
+
+   '<div class="card">'+
+    '<h3>AI Access</h3>'+
+    '<div class="pill '+(ai.premiumActive?'ok':ai.trialActive?'warn':ai.expiredTrial?'danger':'')+'">'+esc(ai.statusLabel||'No AI subscription')+'</div>'+
+    '<p class="muted" style="margin-top:10px">'+(isOwner
+      ? 'Control AI availability for this server, including trials and premium access.'
+      : (ai.hasAccess
+        ? 'AI suggested replies are enabled for this server.'
+        : 'This server does not own a premium AI subscription. Ask the bot owner for access or a trial.'))+'</p>'+
+    (isOwner
+      ? (
+        '<div class="row" style="margin-top:12px;grid-template-columns:1fr 1fr">'+
+          '<button id="aiStartTrial" class="btn">Start 7-Day Trial</button>'+
+          '<button id="aiSetPremium" class="btn-soft">Enable Premium</button>'+
+        '</div>'+
+        '<div class="row" style="margin-top:10px;grid-template-columns:1fr 1fr">'+
+          '<button id="aiToggleEnabled" class="btn-soft">'+(ai.enabled?'Disable AI':'Enable AI')+'</button>'+
+          '<button id="aiClear" class="btn-danger">Clear Access</button>'+
+        '</div>'
+      )
+      : '<div style="margin-top:12px"><button id="aiUpsell" class="btn-soft" type="button">Learn About AI Access</button></div>')+
    '</div>'+
   '</div>'+
 
@@ -3981,7 +4192,22 @@ function renderTutorials(){
  return '<div class="grid">'+
   '<div class="card welcome"><p class="floaty">Tutorials for your <span class="accent">team workflow</span>.</p><p class="muted">Pick a card to open the walkthrough in a focused modal.</p></div>'+
   '<div class="card" style="grid-column:1/-1"><div class="list" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">'+(cards||'<div class="muted">No tutorials configured yet.</div>')+'</div></div>'+
-  '<div id="tutorialOverlay" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,.72);backdrop-filter:blur(8px);z-index:50;padding:24px;align-items:center;justify-content:center"><div class="card" style="width:min(880px,100%);max-height:90vh;overflow:auto"><div class="item-top"><div><strong id="tutorialModalTitle">Tutorial</strong><div id="tutorialModalBadge" class="muted"></div></div><button type="button" class="btn-soft" id="tutorialClose">Close</button></div><div id="tutorialModalBody" style="margin-top:12px"></div><div class="row" style="grid-template-columns:1fr 1fr;gap:10px;margin-top:14px"><button type="button" class="btn-soft" id="tutorialPrev">Back</button><button type="button" class="btn" id="tutorialNext">Next</button></div></div></div>'+
+  '<div id="tutorialOverlay" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,.96);backdrop-filter:blur(18px);z-index:90;padding:18px;align-items:center;justify-content:center">'+
+   '<canvas id="tutorialConfetti" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas>'+
+   '<div class="card" id="tutorialModalShell" style="position:relative;width:min(1080px,100%);max-height:96vh;overflow:hidden;padding:0">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:flex-start;justify-content:space-between;gap:12px">'+
+      '<div><strong id="tutorialModalTitle" style="font-size:24px">Tutorial</strong><div id="tutorialModalBadge" class="muted" style="margin-top:6px"></div></div><button type="button" class="btn-soft" id="tutorialClose">Close</button>'+
+    '</div>'+
+    '<div id="tutorialTransitionText" class="muted" style="position:absolute;left:50%;top:72px;transform:translateX(-50%);opacity:0;pointer-events:none;font-weight:800;letter-spacing:.08em;text-transform:uppercase;transition:opacity .35s ease,transform .35s ease"></div>'+
+    '<div id="tutorialModalBody" style="padding:18px;min-height:60vh;overflow:auto;transition:opacity .28s ease,transform .28s ease"></div>'+
+    '<div style="padding:14px 18px 18px;border-top:1px solid rgba(255,255,255,.08)">'+
+      '<div id="tutorialProgressRow" style="display:grid;gap:10px">'+
+        '<div style="height:10px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden"><div id="tutorialProgressBar" style="height:100%;width:0%;border-radius:inherit;background:linear-gradient(90deg,rgba(56,189,248,.95),rgba(96,165,250,.78));box-shadow:0 0 30px rgba(56,189,248,.30);transition:width .32s ease"></div></div>'+
+        '<div class="row" style="grid-template-columns:1fr 1fr;gap:10px"><button type="button" class="btn-soft" id="tutorialPrev">Back</button><button type="button" class="btn" id="tutorialNext">Next</button></div>'+
+      '</div>'+
+    '</div>'+
+   '</div>'+
+  '</div>'+
  '</div>';
 }
 function renderDocs(){
@@ -4014,7 +4240,7 @@ function renderDocs(){
    '<pre style="white-space:pre-wrap;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);padding:10px;border-radius:10px;margin-top:10px">'+sepExample+'</pre>'+
    '<div class="item" style="margin-top:10px"><div class="muted">Tip: keep accent colors minimal; the bot applies accent automatically for success/error notices.</div></div>'+
   '</div>'+
-  (isOwner?('<div class="card"><h3>Tutorial Library Content</h3><div class="muted">Edit tutorials here. Each tutorial supports a cover image plus per-step images. Save as JSON to update the modal cards.</div><textarea id="tutorialsJson" style="min-height:320px;font-family:Consolas,monospace;margin-top:10px">'+esc(JSON.stringify(tutorials,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="saveTutorials" class="btn">Save Tutorials</button><button id="formatTutorials" class="btn-soft" type="button">Format JSON</button></div></div><div class="card"><h3>Site-wide Announcement</h3><label>Enabled</label><select id="announcementEnabled"><option value="false"'+(!announcement.enabled?' selected':'')+'>Disabled</option><option value="true"'+(announcement.enabled?' selected':'')+'>Enabled</option></select><label>Text</label><input id="announcementText" value="'+esc(announcement.text||'')+'" placeholder="Important update for all dashboard users" /><label>CTA Label</label><input id="announcementCta" value="'+esc(announcement.ctaLabel||'')+'" placeholder="Read more" /><label>CTA URL</label><input id="announcementUrl" value="'+esc(announcement.linkUrl||'')+'" placeholder="https://..." /><div class="row" style="margin-top:10px"><button id="saveAnnouncement" class="btn">Save Announcement</button></div></div>'):'')+
+  (isOwner?('<div class="card"><h3>Tutorial Library Content</h3><div class="muted">Edit tutorials here. Each tutorial supports a cover image plus per-step <code>imageUrl</code> or <code>videoUrl</code>. Save as JSON to update the modal cards.</div><textarea id="tutorialsJson" style="min-height:320px;font-family:Consolas,monospace;margin-top:10px">'+esc(JSON.stringify(tutorials,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="saveTutorials" class="btn">Save Tutorials</button><button id="formatTutorials" class="btn-soft" type="button">Format JSON</button></div></div><div class="card"><h3>Site-wide Announcement</h3><label>Enabled</label><select id="announcementEnabled"><option value="false"'+(!announcement.enabled?' selected':'')+'>Disabled</option><option value="true"'+(announcement.enabled?' selected':'')+'>Enabled</option></select><label>Text</label><input id="announcementText" value="'+esc(announcement.text||'')+'" placeholder="Important update for all dashboard users" /><label>CTA Label</label><input id="announcementCta" value="'+esc(announcement.ctaLabel||'')+'" placeholder="Read more" /><label>CTA URL</label><input id="announcementUrl" value="'+esc(announcement.linkUrl||'')+'" placeholder="https://..." /><div class="row" style="margin-top:10px"><button id="saveAnnouncement" class="btn">Save Announcement</button></div></div>'):'')+
  '</div>'}
 function selectedRoles(id){return Array.from(document.querySelectorAll('input[data-ms-check="'+id+'"]:checked')).map(el=>el.value)}
 function setRoleSelection(id,values){const selectedSet=new Set((values||[]).map(String));document.querySelectorAll('input[data-ms-check="'+id+'"]').forEach(el=>{el.checked=selectedSet.has(el.value)});updateRoleSelectionUi(id)}
@@ -4049,6 +4275,7 @@ function wire(){
     if(menuBtn)menuBtn.onclick=()=>{document.body.classList.toggle('menu-open')};
     if(menuOverlay)menuOverlay.onclick=()=>closeMenu();
     const navTitleForPath=(p)=>({ '/overview':'Home','/settings':'Settings','/availability':'Availability','/tutorials':'Tutorials','/commands/ticket-types':'Ticket Types','/commands/tag':'Tags','/tickets':'Tickets','/transcripts':'Transcripts','/commands/feedback':'Feedback','/statistics':'Statistics','/embed-editor':'Embed Editor','/documentation':'Documentation'}[p]||'Dashboard');
+    const pageDescForPath=(p)=>({ '/overview':'A cleaner snapshot of ticket activity, queue health, and the most common next actions.','/settings':'Core server configuration, routing, and system behavior in one place.','/availability':'Adjust queue expectations per ticket type without digging through commands.','/tutorials':'Guides, walkthroughs, and internal onboarding material for your staff.','/commands/ticket-types':'Shape each ticket flow, assign support coverage, and keep categories tidy.','/commands/tag':'Store reusable answers and keep repeat support responses consistent.','/tickets':'Review active conversations, add notes, and handle escalations quickly.','/transcripts':'Browse saved transcripts and archive history without leaving the dashboard.','/commands/feedback':'Control where feedback lands and how the flow is presented.','/statistics':'Track recent performance, close reasons, and staff activity trends.','/embed-editor':'Update reusable bot message templates with a simpler editing workflow.','/documentation':'Reference placeholders, templates, and dashboard usage notes.'}[p]||'Manage this part of the dashboard with a simpler, more focused layout.');
      const groupForPath=(p)=>{if(p==='/overview'||p==='/settings'||p==='/availability'||p==='/tutorials')return 'general';if(p==='/commands/ticket-types'||p==='/commands/tag'||p==='/tickets'||p==='/transcripts')return 'tickets';return 'content'};
      const allowedPages=()=>{const access=(state&&state.access)||{};const set=new Set(['/documentation','/tutorials']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>set.add(p));return set}if(access.canManageTicketTypes){set.add('/settings');set.add('/commands/ticket-types')}if(access.canManageAvailability)set.add('/availability');if(access.canViewTickets||access.canManageEscalations)set.add('/tickets');if(access.canViewTranscripts)set.add('/transcripts');return set};
      let darkSecretCount=0;
@@ -4064,14 +4291,14 @@ function wire(){
    const setTopNavValue=(p)=>{const next=String(p||'');if(topNav)topNav.dataset.value=next;if(topNavLabel)topNavLabel.textContent=navTitleForPath(next);topNavItems.forEach(b=>{const v=b.getAttribute('data-value')||'';b.classList.toggle('active',v===next)})};
    const syncNav=()=>{document.querySelectorAll('.nav-item').forEach(a=>{const p=a.getAttribute('data-nav')||a.getAttribute('href')||'';a.classList.toggle('active',p===currentPath)})};
    const syncGroups=()=>{const g=groupForPath(currentPath);document.querySelectorAll('[data-nav-group]').forEach(el=>{const name=el.getAttribute('data-nav-group');el.classList.toggle('open',name===g)})};
-   const navigate=(p)=>{const next=String(p||'').trim();if(!next||next===currentPath||!allowedPages().has(next))return;closeMenu();closeTopNav();history.pushState({},'',next);currentPath=next;if(pageTitleEl)pageTitleEl.textContent=navTitleForPath(currentPath);document.title=${JSON.stringify(createDocumentTitle('Dashboard'))}.replace('Dashboard',navTitleForPath(currentPath));setTopNavValue(currentPath);render();syncNav();syncGroups();window.scrollTo({top:0,behavior:'smooth'})};
+   const navigate=(p)=>{const next=String(p||'').trim();if(!next||next===currentPath||!allowedPages().has(next))return;closeMenu();closeTopNav();history.pushState({},'',next);currentPath=next;if(pageTitleEl)pageTitleEl.textContent=navTitleForPath(currentPath);const pageHintEl=document.getElementById('pageHint');if(pageHintEl)pageHintEl.textContent=pageDescForPath(currentPath);document.title=${JSON.stringify(createDocumentTitle('Dashboard'))}.replace('Dashboard',navTitleForPath(currentPath));setTopNavValue(currentPath);render();syncNav();syncGroups();window.scrollTo({top:0,behavior:'smooth'})};
    window.__dashNav={navTitleForPath,navigate,syncNav,syncGroups};
    document.querySelectorAll('[data-nav]').forEach(a=>{a.onclick=(ev)=>{ev.preventDefault();navigate(a.getAttribute('data-nav'))}});
    document.querySelectorAll('[data-nav-group-btn]').forEach(b=>{b.onclick=()=>{const g=b.getAttribute('data-nav-group-btn');if(!g)return;document.querySelectorAll('[data-nav-group]').forEach(el=>{el.classList.toggle('open',el.getAttribute('data-nav-group')===g && !el.classList.contains('open'))})}});
    if(topNav&&topNavBtn){topNavBtn.onclick=(ev)=>{ev.stopPropagation();const next=!topNav.classList.contains('open');closePickers();if(next)topNav.classList.add('open');else topNav.classList.remove('open')}};
    topNavItems.forEach(btn=>{const v=btn.getAttribute('data-value')||'';btn.style.display=allowedPages().has(v)?'flex':'none';btn.onclick=()=>{navigate(v)}});
     setTopNavValue(currentPath);
-    window.onpopstate=()=>{currentPath=location.pathname||'/overview';if(pageTitleEl)pageTitleEl.textContent=navTitleForPath(currentPath);document.title=${JSON.stringify(createDocumentTitle('Dashboard'))}.replace('Dashboard',navTitleForPath(currentPath));setTopNavValue(currentPath);render();syncNav();syncGroups()};
+    window.onpopstate=()=>{currentPath=location.pathname||'/overview';if(pageTitleEl)pageTitleEl.textContent=navTitleForPath(currentPath);const pageHintEl=document.getElementById('pageHint');if(pageHintEl)pageHintEl.textContent=pageDescForPath(currentPath);document.title=${JSON.stringify(createDocumentTitle('Dashboard'))}.replace('Dashboard',navTitleForPath(currentPath));setTopNavValue(currentPath);render();syncNav();syncGroups()};
     syncNav();syncGroups();
     window.addEventListener('keydown',(ev)=>{if(ev.key==='Escape'){closeMenu();closePickers();closeTopNav();}}, { passive: true });
  
@@ -4084,6 +4311,11 @@ function wire(){
  document.querySelectorAll('.copyPH').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText(b.dataset.v||'');note('Placeholder copied.','ok')});
  const saveConfig=document.getElementById('saveConfig');if(saveConfig)saveConfig.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,appealsChannelId:feedbackId.value||null,setup:{step:4}})});note('Settings saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const savePanelConfig=document.getElementById('savePanelConfig');if(savePanelConfig)savePanelConfig.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,panelConfig:{title:(document.getElementById('panelTitle')?.value||'').trim(),description:document.getElementById('panelDescription')?.value||'',advisory:document.getElementById('panelAdvisory')?.value||''},setup:{step:4}})});note('Panel saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+ const aiUpsell=document.getElementById('aiUpsell');if(aiUpsell)aiUpsell.onclick=()=>{alert('This server does not own a premium AI subscription yet. The bot owner can enable premium AI or start a free trial for this server.')};
+ const aiStartTrial=document.getElementById('aiStartTrial');if(aiStartTrial)aiStartTrial.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'start-trial',days:7})});note('AI free trial started for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
+ const aiSetPremium=document.getElementById('aiSetPremium');if(aiSetPremium)aiSetPremium.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'set-premium'})});note('Premium AI enabled for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
+ const aiToggleEnabled=document.getElementById('aiToggleEnabled');if(aiToggleEnabled)aiToggleEnabled.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:(state&&state.aiAccess&&state.aiAccess.enabled)?'disable':'enable'})});note('AI access updated.','ok');await boot()}catch(e){note(e.message,'danger')}};
+ const aiClear=document.getElementById('aiClear');if(aiClear)aiClear.onclick=async()=>{try{const confirmed=prompt('Type CLEAR to remove AI access for this server.');if(confirmed!=='CLEAR')return;await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'clear'})});note('AI access cleared.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const saveHomeImages=document.getElementById('saveHomeImages');if(saveHomeImages)saveHomeImages.onclick=async()=>{try{const urls=[document.getElementById('homeImg1')?.value||'',document.getElementById('homeImg2')?.value||'',document.getElementById('homeImg3')?.value||''].map(s=>String(s||'').trim()).filter(Boolean);await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:urls})});note('Home images saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const clearHomeImages=document.getElementById('clearHomeImages');if(clearHomeImages)clearHomeImages.onclick=async()=>{try{await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:[]})});note('Home images cleared.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const saveFeedback=document.getElementById('saveFeedback');if(saveFeedback)saveFeedback.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,appealsChannelId:feedbackConfigId.value||null,setup:{step:4}})});note('Feedback settings saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
@@ -4192,7 +4424,7 @@ const resetTag=document.getElementById('resetTag');if(resetTag)resetTag.onclick=
  const formatTutorials=document.getElementById('formatTutorials');if(formatTutorials)formatTutorials.onclick=()=>{try{const box=document.getElementById('tutorialsJson');if(box)box.value=JSON.stringify(JSON.parse(box.value),null,2)}catch(e){note('Tutorial JSON is invalid.','danger')}};
  const saveTutorials=document.getElementById('saveTutorials');if(saveTutorials)saveTutorials.onclick=async()=>{try{const box=document.getElementById('tutorialsJson');const tutorials=JSON.parse((box&&box.value)||'[]');await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:Array.isArray(state&&state.botConfig&&state.botConfig.homeImages)?state.botConfig.homeImages:[],tutorials,siteAnnouncement:(state&&state.botConfig&&state.botConfig.siteAnnouncement)||{}})});note('Tutorials saved.','ok');await boot()}catch(e){note(e.message||'Invalid tutorial JSON.','danger')}};
  const saveAnnouncement=document.getElementById('saveAnnouncement');if(saveAnnouncement)saveAnnouncement.onclick=async()=>{try{const next={enabled:(document.getElementById('announcementEnabled')?.value||'false')==='true',text:document.getElementById('announcementText')?.value||'',ctaLabel:document.getElementById('announcementCta')?.value||'',linkUrl:document.getElementById('announcementUrl')?.value||''};await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:Array.isArray(state&&state.botConfig&&state.botConfig.homeImages)?state.botConfig.homeImages:[],tutorials:Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[],siteAnnouncement:next})});note('Announcement saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
- const tutorialCards=Array.from(document.querySelectorAll('[data-tutorial-open]'));if(tutorialCards.length){const tutorials=Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[];const overlay=document.getElementById('tutorialOverlay');const close=document.getElementById('tutorialClose');const title=document.getElementById('tutorialModalTitle');const badge=document.getElementById('tutorialModalBadge');const body=document.getElementById('tutorialModalBody');const prev=document.getElementById('tutorialPrev');const next=document.getElementById('tutorialNext');let ti=0,si=0;const draw=()=>{const tutorial=tutorials[ti]||null;const step=tutorial&&tutorial.steps?tutorial.steps[si]:null;if(!tutorial||!step)return;title.textContent=tutorial.title||'Tutorial';badge.textContent=(tutorial.badge?String(tutorial.badge)+' • ':'')+'Step '+(si+1)+' of '+tutorial.steps.length;body.innerHTML=(step.imageUrl?'<img src="'+esc(step.imageUrl)+'" alt="'+esc(step.title||tutorial.title||'Tutorial image')+'" style="width:100%;max-height:320px;object-fit:cover;border-radius:16px;border:1px solid rgba(255,255,255,.12);margin-bottom:12px" loading="lazy" />':'')+'<h3 style="margin:0 0 8px">'+esc(step.title||'Step')+'</h3><div class="muted" style="font-size:14px;line-height:1.7">'+esc(step.body||'')+'</div>';prev.disabled=si<=0;next.textContent=si>=tutorial.steps.length-1?'Done':'Next'};const open=(index)=>{ti=index;si=0;draw();if(overlay)overlay.style.display='flex'};const hide=()=>{if(overlay)overlay.style.display='none'};tutorialCards.forEach(btn=>btn.onclick=()=>open(Number(btn.getAttribute('data-tutorial-open')||0)));if(close)close.onclick=hide;if(overlay)overlay.onclick=(e)=>{if(e.target===overlay)hide()};if(prev)prev.onclick=()=>{if(si>0){si-=1;draw()}};if(next)next.onclick=()=>{const tutorial=tutorials[ti]||null;if(!tutorial)return hide();if(si<tutorial.steps.length-1){si+=1;draw()}else hide()};}
+ const tutorialCards=Array.from(document.querySelectorAll('[data-tutorial-open]'));if(tutorialCards.length){const tutorials=Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[];const overlay=document.getElementById('tutorialOverlay');const close=document.getElementById('tutorialClose');const title=document.getElementById('tutorialModalTitle');const badge=document.getElementById('tutorialModalBadge');const body=document.getElementById('tutorialModalBody');const prev=document.getElementById('tutorialPrev');const next=document.getElementById('tutorialNext');const progressBar=document.getElementById('tutorialProgressBar');const transitionText=document.getElementById('tutorialTransitionText');const confettiCanvas=document.getElementById('tutorialConfetti');let ti=0,si=0;let confettiFrame=0;let confettiPieces=[];const stopConfetti=()=>{confettiFrame=9999;try{const ctx=confettiCanvas&&confettiCanvas.getContext?confettiCanvas.getContext('2d'):null;if(ctx)ctx.clearRect(0,0,confettiCanvas.width||0,confettiCanvas.height||0)}catch{}};const fireConfetti=()=>{if(!confettiCanvas||!confettiCanvas.getContext)return;const ctx=confettiCanvas.getContext('2d');if(!ctx)return;const dpr=Math.max(1,window.devicePixelRatio||1);confettiCanvas.width=Math.floor(window.innerWidth*dpr);confettiCanvas.height=Math.floor(window.innerHeight*dpr);confettiCanvas.style.width=window.innerWidth+'px';confettiCanvas.style.height=window.innerHeight+'px';ctx.setTransform(dpr,0,0,dpr,0,0);confettiPieces=Array.from({length:220},(_,i)=>({x:Math.random()*window.innerWidth,y:-20-Math.random()*window.innerHeight*.35,vx:(Math.random()-.5)*7,vy:3+Math.random()*6,size:6+Math.random()*10,rot:Math.random()*Math.PI,color:['#57f287','#38bdf8','#fbbf24','#fb7185','#a78bfa','#f97316'][i%6]}));confettiFrame=0;(function tick(){ctx.clearRect(0,0,window.innerWidth,window.innerHeight);for(const p of confettiPieces){p.x+=p.vx;p.y+=p.vy;p.rot+=0.08;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.color;ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*.7);ctx.restore();}confettiFrame+=1;if(confettiFrame<220&&overlay&&overlay.style.display==='flex'){requestAnimationFrame(tick)}else{ctx.clearRect(0,0,window.innerWidth,window.innerHeight)}})()};const flashText=(text)=>{if(!transitionText)return;transitionText.textContent=text;transitionText.style.opacity='1';transitionText.style.transform='translateX(-50%) translateY(0)';setTimeout(()=>{if(transitionText){transitionText.style.opacity='0';transitionText.style.transform='translateX(-50%) translateY(-6px)'}},900)};const media=(step,tutorial)=>{if(step.videoUrl){return '<div style="margin-bottom:14px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.24)"><video src="'+esc(step.videoUrl)+'" controls playsinline style="width:100%;max-height:52vh;display:block;background:#020617"></video></div>'}if(step.imageUrl){return '<div style="margin-bottom:14px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.24)"><img src="'+esc(step.imageUrl)+'" alt="'+esc(step.title||tutorial.title||'Tutorial media')+'" style="width:100%;max-height:52vh;object-fit:cover;display:block" loading="lazy" /></div>'}return ''};const draw=()=>{const tutorial=tutorials[ti]||null;const step=tutorial&&tutorial.steps?tutorial.steps[si]:null;if(!tutorial||!step)return;const total=tutorial.steps.length||1;const percent=Math.max(0,Math.min(100,((si+1)/total)*100));title.textContent=tutorial.title||'Tutorial';badge.textContent=(tutorial.badge?String(tutorial.badge)+' • ':'')+'Step '+(si+1)+' of '+total;body.style.opacity='0';body.style.transform='translateY(10px)';setTimeout(()=>{body.innerHTML='<div style="display:grid;gap:14px"><div class="pill" style="width:max-content">'+esc(si+1===total?'Final step':'Guided step')+'</div>'+media(step,tutorial)+'<div><h3 style="margin:0 0 10px;font-size:28px">'+esc(step.title||'Step')+'</h3><div class="muted" style="font-size:15px;line-height:1.8;white-space:pre-wrap">'+esc(step.body||'')+'</div></div></div>';body.style.opacity='1';body.style.transform='translateY(0)'},120);if(progressBar)progressBar.style.width=percent+'%';prev.disabled=si<=0;next.textContent=si>=total-1?'Finish':'Next';if(si===total-2)flashText('Almost done!')};const open=(index)=>{ti=index;si=0;stopConfetti();draw();if(overlay)overlay.style.display='flex'};const hide=()=>{stopConfetti();if(overlay)overlay.style.display='none'};tutorialCards.forEach(btn=>btn.onclick=()=>open(Number(btn.getAttribute('data-tutorial-open')||0)));if(close)close.onclick=hide;if(overlay)overlay.onclick=(e)=>{if(e.target===overlay)hide()};if(prev)prev.onclick=()=>{if(si>0){si-=1;draw()}};if(next)next.onclick=()=>{const tutorial=tutorials[ti]||null;if(!tutorial)return hide();if(si<tutorial.steps.length-1){si+=1;draw()}else{flashText('Completed!');fireConfetti();setTimeout(()=>hide(),1300)}};window.addEventListener('resize',()=>{if(overlay&&overlay.style.display==='flex'&&confettiFrame>0&&confettiFrame<220)fireConfetti()},{passive:true});}
 }
 function renderOverview(){
  const totals=(state&&state.statistics&&state.statistics.totals)||{activeTickets:0,totalClaimed:0,totalClosed:0};
@@ -4227,23 +4459,19 @@ function renderOverview(){
   ? ('<div class="card"><h3>Tutorial Library</h3><div class="muted">Open the tutorial cards for walkthroughs, screenshots, and step-by-step staff flows.</div><div class="row" style="grid-template-columns:1fr;gap:10px;margin-top:12px"><button type="button" class="btn qa" data-go="/tutorials">Open Tutorials</button></div><div class="muted" style="margin-top:10px">'+(rolePermanent?'Role permanence is enabled.':'Role permanence is disabled.')+'</div></div>')
   : '';
 
- return '<div class="grid">'+
-  '<div class="card welcome"><p class="floaty">'+greet+', welcome to <span class="accent">Sync Development</span>.</p><p class="muted">Use the sidebar or dropdown to jump between sections.</p></div>'+
-
-  '<div class="card"><h3>At a Glance</h3><div class="row" style="margin-top:10px">'+
-   '<div class="item"><div class="muted">Active Tickets</div><div style="font-size:28px;font-weight:850;margin-top:2px">'+Number(totals.activeTickets||0)+'</div></div>'+
-   '<div class="item"><div class="muted">Closed (14d)</div><div style="font-size:28px;font-weight:850;margin-top:2px">'+Number(totals.totalClosed||0)+'</div></div>'+
-  '</div><div class="row" style="margin-top:10px">'+
-   '<div class="item"><div class="muted">Limited Types</div><div style="font-size:28px;font-weight:850;margin-top:2px">'+limited+'</div></div>'+
-   '<div class="item"><div class="muted">Reduced Types</div><div style="font-size:28px;font-weight:850;margin-top:2px">'+reduced+'</div></div>'+
-  '</div></div>'+
-
-  '<div class="card"><h3>Quick Actions</h3><p class="muted">Keep it simple: jump to common pages.</p>'+
-   '<div class="row" style="grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">'+
+ return '<div class="page-shell">'+
+  '<div class="card page-hero welcome"><div class="page-hero-head"><div><div class="page-kicker">Overview</div><h3>'+greet+', welcome back.</h3><p>Keep an eye on queue pressure, jump into the right module quickly, and only surface the things that need attention.</p></div><div class="page-pill-row">'+pill(totals.activeTickets||0)+' '+pill(limited)+' '+pill(reduced)+'</div></div></div>'+
+  '<div class="stat-strip">'+
+   '<div class="stat-tile"><div class="muted">Active tickets</div><strong>'+Number(totals.activeTickets||0)+'</strong></div>'+
+   '<div class="stat-tile"><div class="muted">Closed (14d)</div><strong>'+Number(totals.totalClosed||0)+'</strong></div>'+
+   '<div class="stat-tile"><div class="muted">Limited types</div><strong>'+limited+'</strong></div>'+
+   '<div class="stat-tile"><div class="muted">Reduced types</div><strong>'+reduced+'</strong></div>'+
+  '</div>'+
+  '<div class="grid">'+
+  '<div class="card"><h3>Quick Actions</h3><p class="muted">Open the next place you are likely to need without digging through menus.</p>'+
+   '<div class="quick-grid" style="margin-top:10px">'+
     '<button type="button" class="btn-soft qa" data-go="/tickets">View Tickets</button>'+
     '<button type="button" class="btn-soft qa" data-go="/commands/ticket-types">Ticket Types</button>'+
-   '</div>'+
-   '<div class="row" style="grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">'+
     '<button type="button" class="btn-soft qa" data-go="/availability">Availability</button>'+
     '<button type="button" class="btn-soft qa" data-go="/embed-editor">Embed Editor</button>'+
    '</div>'+
@@ -4259,9 +4487,20 @@ function renderOverview(){
   '<div class="card"><h3>Popular Tags</h3><div class="list" style="margin-top:10px">'+
    (tags.length?tags.map(t=>'<div class="item"><div class="item-top"><strong>'+esc(t.name||'')+'</strong>'+pill(t.count)+'</div></div>').join(''):'<div class="muted">No tag usage yet.</div>')+
   '</div></div>'+
- '</div>'}
+ '</div></div>'}
 function renderAnnouncementBar(){const box=document.getElementById('announcementBar');if(!box)return;const ann=(state&&state.botConfig&&state.botConfig.siteAnnouncement)||{};if(!ann.enabled||!ann.text){box.innerHTML='';return}box.innerHTML='<div class="card" style="margin-bottom:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px"><div><strong>Announcement</strong><div class="muted">'+esc(ann.text)+'</div></div>'+(ann.ctaLabel&&ann.linkUrl?'<a class="btn" href="'+esc(ann.linkUrl)+'" target="_blank" rel="noreferrer">'+esc(ann.ctaLabel)+'</a>':'')+'</div>'}
-function render(){const access=(state&&state.access)||{};const allowed=new Set(['/documentation','/tutorials']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>allowed.add(p))}else{if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types')}if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This section is not available for your role in the selected server.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderSettings();else if(currentPath==='/availability')html=renderAvailability();else if(currentPath==='/tutorials')html=renderTutorials();else if(currentPath==='/commands/ticket-types')html=renderTypes();else if(currentPath==='/commands/tag')html=renderTags();else if(currentPath==='/tickets')html=renderTickets();else if(currentPath==='/transcripts')html=renderTranscripts();else if(currentPath==='/commands/feedback')html=renderFeedback();else if(currentPath==='/commands/appeal')html=renderAppeal();else if(currentPath==='/statistics')html=renderStats();else if(currentPath==='/embed-editor')html=renderBranding();else html=renderDocs();document.title=${JSON.stringify(BRAND_NAME + ' • ')}+({"/overview":"Home","/settings":"Settings","/availability":"Availability","/tutorials":"Tutorials","/commands/ticket-types":"Ticket Types","/commands/tag":"Tags","/tickets":"Tickets","/transcripts":"Transcripts","/commands/feedback":"Feedback","/statistics":"Statistics","/embed-editor":"Embed Editor","/documentation":"Documentation"}[currentPath]||'Dashboard');renderAnnouncementBar();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire()})})}
+function renderPageHero(path){
+ const title=navTitleForPath(path);
+ const desc=pageDescriptionForPath(path);
+ const access=(state&&state.access)||{};
+ const chips=[];
+ if(state&&state.guildId)chips.push('<span class="pill">Guild '+esc(state.guildId)+'</span>');
+ if(access.isOwner)chips.push('<span class="pill">Owner access</span>');
+ else if(access.isManager)chips.push('<span class="pill">Manager access</span>');
+ else if(access.isStaff)chips.push('<span class="pill">Staff access</span>');
+ return '<div class="card page-hero"><div class="page-hero-head"><div><div class="page-kicker">Module</div><h3>'+esc(title)+'</h3><p>'+esc(desc)+'</p></div><div class="page-pill-row">'+chips.join('')+'</div></div></div>';
+}
+function render(){const access=(state&&state.access)||{};const allowed=new Set(['/documentation','/tutorials']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>allowed.add(p))}else{if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types')}if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This section is not available for your role in the selected server.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderPageHero(currentPath)+renderSettings();else if(currentPath==='/availability')html=renderPageHero(currentPath)+renderAvailability();else if(currentPath==='/tutorials')html=renderPageHero(currentPath)+renderTutorials();else if(currentPath==='/commands/ticket-types')html=renderPageHero(currentPath)+renderTypes();else if(currentPath==='/commands/tag')html=renderPageHero(currentPath)+renderTags();else if(currentPath==='/tickets')html=renderPageHero(currentPath)+renderTickets();else if(currentPath==='/transcripts')html=renderPageHero(currentPath)+renderTranscripts();else if(currentPath==='/commands/feedback')html=renderPageHero(currentPath)+renderFeedback();else if(currentPath==='/commands/appeal')html=renderPageHero(currentPath)+renderAppeal();else if(currentPath==='/statistics')html=renderPageHero(currentPath)+renderStats();else if(currentPath==='/embed-editor')html=renderPageHero(currentPath)+renderBranding();else html=renderPageHero(currentPath)+renderDocs();document.title=${JSON.stringify(BRAND_NAME + ' • ')}+({"/overview":"Home","/settings":"Settings","/availability":"Availability","/tutorials":"Tutorials","/commands/ticket-types":"Ticket Types","/commands/tag":"Tags","/tickets":"Tickets","/transcripts":"Transcripts","/commands/feedback":"Feedback","/statistics":"Statistics","/embed-editor":"Embed Editor","/documentation":"Documentation"}[currentPath]||'Dashboard');renderAnnouncementBar();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire()})})}
 async function boot(){state=await api('/api/state');render()}
 document.getElementById('refreshStateBtn').onclick=async()=>{try{await boot();note('Dashboard refreshed.','ok')}catch(e){note(e.message,'danger')}};
 document.getElementById('authLogin').onclick=async()=>{try{localStorage.setItem(tokenKey,authToken.value.trim());await api('/api/auth/login',{method:'POST',body:JSON.stringify({token:authToken.value.trim()})});auth.style.display='none';authMsg.textContent='';await boot()}catch(e){authMsg.textContent=e.message||'Login failed'}};
