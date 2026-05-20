@@ -260,6 +260,8 @@ function safeDashboardNextPath(value) {
     const allowed = new Set([
         '/',
         '/dashboard',
+        '/staff',
+        '/owner',
         '/overview',
         '/settings',
         '/availability',
@@ -357,16 +359,16 @@ function createHomeHtml(options = {}) {
 
     <section class="feature-grid">
       <div class="feature">
-        <div class="feature-title">Glassy UI</div>
-        <div class="feature-desc">A dark, blue-accented look with subtle glow&mdash;easy on the eyes.</div>
+        <div class="feature-title">Simple UI</div>
+        <div class="feature-desc">Enjoy our pristiene, modern UI with various themes to suit you. Access tickets and manage them without the hassle.</div>
       </div>
       <div class="feature">
         <div class="feature-title">Safer by default</div>
-        <div class="feature-desc">When no token is set, the dashboard binds to localhost only.</div>
+        <div class="feature-desc">Our tickets bot continually adds security updates to ensure the protection of your server's data..</div>
       </div>
       <div class="feature">
-        <div class="feature-title">Config-first</div>
-        <div class="feature-desc">Make changes quickly without redeploying frontends.</div>
+        <div class="feature-title">Free AI Support Agents</div>
+        <div class="feature-desc">Quickly respond to tickets and engage with your customers, even if nobodies online.</div>
       </div>
     </section>
 
@@ -375,8 +377,8 @@ function createHomeHtml(options = {}) {
 
   <footer class="footer">
     <div class="footer-inner">
-      <div class="muted">&copy; ${year} ${COPYRIGHT_NAME} &mdash; Build ${new Date().toISOString()} &mdash; PID ${process.pid}</div>
-      <div class="muted">Tickets Dashboard</div>
+      <div class="muted">&copy; ${year} ${COPYRIGHT_NAME}</div>
+      <div class="muted">eazyDesk, a product under Sync Development</div>
     </div>
   </footer>
   <script>
@@ -457,7 +459,7 @@ function baseDashboardPage({ title, body, script = '', ownerView = false }) {
     <nav class="nav">
       <a class="btn" href="/dashboard">Servers</a>
       ${ownerView ? '<a class="btn" href="/overview">Dashboard</a>' : ''}
-      <a class="btn" href="/setup">Setup</a>
+      ${ownerView ? '<a class="btn" href="/setup">Setup</a>' : ''}
       <div id="themeNav" class="theme-nav">
         <button id="themeBtn" class="btn" type="button">Theme</button>
         <div class="theme-menu">
@@ -594,6 +596,10 @@ function createSetupHtml() {
         .setup-complete{display:none;margin-top:14px;padding:14px 16px;border-radius:18px;border:1px solid rgba(87,242,135,.26);background:rgba(87,242,135,.10)}
         .setup-complete.show{display:block}
         .setup-confetti{position:fixed;inset:0;pointer-events:none;z-index:999}
+        .setup-finish-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(2,6,23,.78);backdrop-filter:blur(8px);z-index:1000;padding:20px}
+        .setup-finish-overlay.show{display:flex}
+        .setup-finish-card{max-width:520px;width:100%;text-align:center;padding:28px 24px}
+        .setup-finish-card h3{margin:0 0 8px;font-size:28px}
         @keyframes setupFade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
         @keyframes setupShimmer{0%{transform:translateX(-120%)}100%{transform:translateX(140%)}}
         @media(max-width:940px){.setup-grid,.setup-steps,.setup-choice-grid{grid-template-columns:1fr}.setup-panel{min-height:auto}}
@@ -727,6 +733,15 @@ function createSetupHtml() {
         </div>
       </div>
       <canvas id="setupConfetti" class="setup-confetti"></canvas>
+      <div id="setupFinishOverlay" class="setup-finish-overlay">
+        <div class="card setup-finish-card">
+          <h3>Setup complete</h3>
+          <div class="muted">This server is now fully configured. Use the main dashboard for future updates instead of re-running setup.</div>
+          <div class="setup-inline" style="margin-top:18px;justify-content:center">
+            <button id="setupFinishDone" class="btn primary" type="button">Finished</button>
+          </div>
+        </div>
+      </div>
     `;
 
     const script = `
@@ -747,18 +762,23 @@ function createSetupHtml() {
       const doneBtn=document.getElementById('markComplete');
       const initBtn=document.getElementById('initTemplate');
       const completeBanner=document.getElementById('setupCompleteBanner');
+      const finishOverlay=document.getElementById('setupFinishOverlay');
+      const finishDoneBtn=document.getElementById('setupFinishDone');
       const progressBar=document.getElementById('setupProgressBar');
       const stepPills=[...document.querySelectorAll('#setupStepPills .setup-step-pill')];
       const stages=[...document.querySelectorAll('.setup-stage')];
       let currentStep=1;
       let setupLocked=false;
+      let setupCompleted=false;
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
       async function api(path,opt){const r=await fetch(path,{credentials:'include',...(opt||{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function opt(id,label,selected){return '<option value=\"'+esc(id)+'\" '+(selected?'selected':'')+'>'+esc(label)+'</option>'}
       function fillSelect(el,items,emptyLabel,selected){const rows=['<option value=\"\">'+esc(emptyLabel)+'</option>'].concat(items.map(it=>opt(it.id,it.label||it.name||it.id,selected===it.id)));el.innerHTML=rows.join('')}
       let catalogs={ roles:[], channels:[], categories:[] };
       function syncPageState(){if(guildSelect&&guildSelect.value)qs.set('guild',guildSelect.value);if(currentStep)qs.set('page',String(currentStep));history.replaceState(null,'','?'+qs.toString());if(dashboardLink)dashboardLink.href='/dashboard';}
-      function setLocked(locked){setupLocked=!!locked;for(const el of [parentCategoryId,appealsChannelId,transcriptsChannelId,managerRoleId,highEscalationRoleId,immediateEscalationRoleId,rolePermanence,tutorialEnabled]){if(el)el.disabled=setupLocked}for(const btn of document.querySelectorAll('[data-create-kind],#initTemplate,#saveChannels,#saveRoles,#saveSetup,#markComplete')){if(btn)btn.disabled=setupLocked}if(saveBtn)saveBtn.style.display=setupLocked?'none':'';if(doneBtn)doneBtn.style.display=setupLocked?'none':'';if(completeBanner)completeBanner.classList.toggle('show',setupLocked);}
+      function setLocked(locked){setupLocked=!!locked;for(const el of [guildSelect,parentCategoryId,appealsChannelId,transcriptsChannelId,managerRoleId,highEscalationRoleId,immediateEscalationRoleId,rolePermanence,tutorialEnabled]){if(el)el.disabled=setupLocked}for(const btn of document.querySelectorAll('[data-create-kind],#initTemplate,#saveChannels,#saveRoles,#saveSetup,#markComplete,#stepNext1,#stepNext2,#stepNext3')){if(btn)btn.disabled=setupLocked}if(saveBtn)saveBtn.style.display=setupLocked?'none':'';if(doneBtn)doneBtn.style.display=setupLocked?'none':'';if(completeBanner)completeBanner.classList.toggle('show',setupLocked);}
+      function showFinishOverlay(){if(finishOverlay)finishOverlay.classList.add('show')}
+      function hideFinishOverlay(){if(finishOverlay)finishOverlay.classList.remove('show')}
       function fireConfetti(){const canvas=document.getElementById('setupConfetti');if(!canvas)return;const ctx=canvas.getContext('2d');if(!ctx)return;const dpr=Math.max(1,window.devicePixelRatio||1);const pieces=Array.from({length:120},(_,i)=>({x:Math.random()*window.innerWidth,y:-20-Math.random()*window.innerHeight*.2,vx:(Math.random()-.5)*5,vy:2+Math.random()*5,size:5+Math.random()*7,rot:Math.random()*Math.PI,color:['#57f287','#38bdf8','#fbbf24','#fb7185','#a78bfa'][i%5]}));canvas.width=Math.floor(window.innerWidth*dpr);canvas.height=Math.floor(window.innerHeight*dpr);canvas.style.width=window.innerWidth+'px';canvas.style.height=window.innerHeight+'px';ctx.scale(dpr,dpr);let frame=0;function tick(){ctx.clearRect(0,0,window.innerWidth,window.innerHeight);for(const p of pieces){p.x+=p.vx;p.y+=p.vy;p.rot+=0.08;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.color;ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*.65);ctx.restore();}frame+=1;if(frame<140){requestAnimationFrame(tick)}else{ctx.clearRect(0,0,window.innerWidth,window.innerHeight)}}tick()}
       function gotoStep(step){const safe=Math.max(1,Math.min(4,Number(step)||1));currentStep=safe;stages.forEach(stage=>stage.classList.toggle('active',Number(stage.dataset.step)===safe));stepPills.forEach((pill,index)=>{const n=index+1;pill.classList.toggle('active',n===safe);pill.classList.toggle('done',n<safe)});if(progressBar)progressBar.style.width=(safe/4*100)+'%';syncPageState();renderSummary()}
       function configPayload(){return{guildId:guildSelect.value,parentCategoryId:parentCategoryId.value||null,appealsChannelId:appealsChannelId.value||null,transcriptsChannelId:transcriptsChannelId.value||null,managerRoleId:managerRoleId.value||null,escalationRoles:{high:highEscalationRoleId.value||null,immediate:immediateEscalationRoleId.value||null},rolePermanence:!!rolePermanence.checked,tutorialEnabled:!!tutorialEnabled.checked,setup:{step:currentStep}}}
@@ -775,11 +795,11 @@ function createSetupHtml() {
         '<div class=\"item\"><div><strong>Tutorial</strong><div class=\"muted\">'+(tutorialEnabled.checked?'Enabled':'Disabled')+'</div></div></div>';}
       async function loadCatalogs(){const ch=await api('/api/channels');const cats=await api('/api/categories');const roles=await api('/api/roles');catalogs.channels=Array.isArray(ch.channels)?ch.channels:[];catalogs.categories=Array.isArray(cats.categories)?cats.categories:[];catalogs.roles=Array.isArray(roles.roles)?roles.roles:[];fillSelect(parentCategoryId,catalogs.categories,'Not set',null);const texts=catalogs.channels.filter(c=>c.type==='text');fillSelect(appealsChannelId,texts,'Not set',null);fillSelect(transcriptsChannelId,texts,'Not set',null);fillSelect(managerRoleId,catalogs.roles,'Optional',null);fillSelect(highEscalationRoleId,catalogs.roles,'Optional',null);fillSelect(immediateEscalationRoleId,catalogs.roles,'Optional',null)}
       async function loadGuilds(){const data=await api('/api/my/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];guildSelect.innerHTML=guilds.map(g=>'<option value=\"'+esc(g.id)+'\">'+esc(g.name)+' ('+esc(g.id)+')</option>').join('')||'<option value=\"\">No guilds found</option>';const preset=qs.get('guild');if(preset&&guilds.some(g=>g.id===preset))guildSelect.value=preset;syncPageState()}
-      async function loadConfig(){const gid=guildSelect.value; if(!gid) return; const data=await api('/api/guild-config?guildId='+encodeURIComponent(gid)); const c=data.config||{}; parentCategoryId.value=c.parentCategoryId||''; appealsChannelId.value=c.appealsChannelId||''; transcriptsChannelId.value=c.transcriptsChannelId||''; managerRoleId.value=c.managerRoleId||''; highEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.high)||''; immediateEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.immediate)||''; rolePermanence.checked=c.rolePermanence!==false; tutorialEnabled.checked=!!c.tutorialEnabled; setLocked(Boolean(c&&c.setup&&c.setup.completed)); const requestedPage=Number(qs.get('page')||0); const configStep=Number(c&&c.setup&&c.setup.step)||1; gotoStep(c&&c.setup&&c.setup.completed?4:(requestedPage||configStep));}
+      async function loadConfig(){const gid=guildSelect.value; if(!gid) return; const data=await api('/api/guild-config?guildId='+encodeURIComponent(gid)); const c=data.config||{}; parentCategoryId.value=c.parentCategoryId||''; appealsChannelId.value=c.appealsChannelId||''; transcriptsChannelId.value=c.transcriptsChannelId||''; managerRoleId.value=c.managerRoleId||''; highEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.high)||''; immediateEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.immediate)||''; rolePermanence.checked=c.rolePermanence!==false; tutorialEnabled.checked=!!c.tutorialEnabled; setupCompleted=Boolean(c&&c.setup&&c.setup.completed); setLocked(setupCompleted); const requestedPage=Number(qs.get('page')||0); const configStep=Number(c&&c.setup&&c.setup.step)||1; gotoStep(setupCompleted?4:(requestedPage||configStep));}
       async function saveConfig(extra){const payload={...configPayload(),...(extra||{})};await api('/api/guild-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})}
       saveBtn.onclick=async()=>{try{err.style.display='none';await saveConfig();saveBtn.textContent='Saved';setTimeout(()=>saveBtn.textContent='Save all',1000)}catch(e){err.style.display='block';err.textContent=e.message}};
-      doneBtn.onclick=async()=>{try{err.style.display='none';await saveConfig({setupComplete:true,setup:{step:4}});fireConfetti();doneBtn.textContent='Completed';setTimeout(()=>doneBtn.textContent='Mark complete',1200);await loadConfig()}catch(e){err.style.display='block';err.textContent=e.message}};
-      initBtn.onclick=async()=>{try{err.style.display='none';const gid=guildSelect.value;initBtn.disabled=true;await api('/api/guild-config/init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:gid})});await loadConfig();initBtn.textContent='Created';setTimeout(()=>{initBtn.textContent='Create server config';initBtn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;initBtn.disabled=false}};
+      doneBtn.onclick=async()=>{try{err.style.display='none';await saveConfig({setupComplete:true,setup:{step:4}});fireConfetti();showFinishOverlay();doneBtn.textContent='Completed';setTimeout(()=>doneBtn.textContent='Mark complete',1200);await loadConfig()}catch(e){err.style.display='block';err.textContent=e.message}};
+      initBtn.onclick=async()=>{try{if(setupCompleted)throw new Error('This server setup is already finished.');err.style.display='none';const gid=guildSelect.value;initBtn.disabled=true;await api('/api/guild-config/init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:gid})});await loadConfig();initBtn.textContent='Created';setTimeout(()=>{initBtn.textContent='Create server config';initBtn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;initBtn.disabled=false}};
       document.getElementById('saveChannels').onclick=async()=>{try{err.style.display='none';await saveConfig({setup:{step:2}})}catch(e){err.style.display='block';err.textContent=e.message}};
       document.getElementById('saveRoles').onclick=async()=>{try{err.style.display='none';await saveConfig({setup:{step:3}})}catch(e){err.style.display='block';err.textContent=e.message}};
       async function createChannel(kind){const gid=guildSelect.value;if(!gid)throw new Error('Pick a guild first.');const defaults={category:'Tickets',feedback:'ticket-feedback',transcripts:'ticket-transcripts'};const label=kind==='category'?'category':'channel';const name=prompt('Name for the new '+label+':',defaults[kind]||'tickets');if(name===null)return false;const trimmed=String(name||'').trim();if(!trimmed)throw new Error('A name is required.');await saveConfig({setup:{step:2}});const result=await api('/api/setup/create-channel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:gid,kind,name:trimmed,parentCategoryId:parentCategoryId.value||null})});await loadCatalogs();if(kind==='category')parentCategoryId.value=result.channel.id;else if(kind==='feedback')appealsChannelId.value=result.channel.id;else if(kind==='transcripts')transcriptsChannelId.value=result.channel.id;renderSummary();return true}
@@ -790,6 +810,8 @@ function createSetupHtml() {
       document.getElementById('stepNext3').onclick=async()=>{try{err.style.display='none';await saveConfig({setup:{step:3}});gotoStep(4)}catch(e){err.style.display='block';err.textContent=e.message}};
       [guildSelect,parentCategoryId,appealsChannelId,transcriptsChannelId,managerRoleId,highEscalationRoleId,immediateEscalationRoleId,rolePermanence,tutorialEnabled].forEach(el=>{if(el)el.onchange=renderSummary});
       guildSelect.onchange=async()=>{syncPageState();try{await api('/api/state?guild='+encodeURIComponent(guildSelect.value))}catch{};await loadCatalogs();await loadConfig();};
+      if(finishDoneBtn)finishDoneBtn.onclick=()=>{hideFinishOverlay();window.location='/dashboard';};
+      if(finishOverlay)finishOverlay.onclick=(e)=>{if(e.target===finishOverlay){hideFinishOverlay();window.location='/dashboard';}};
       (async()=>{try{gotoStep(1);await loadGuilds();try{await api('/api/state?guild='+encodeURIComponent(guildSelect.value))}catch{};await loadCatalogs();await loadConfig();renderSummary()}catch(e){err.style.display='block';err.textContent=e.message}})();
     `;
 
@@ -1659,6 +1681,13 @@ async function handleApi(req, res, url, client) {
         }
 
         const activeStorage = ticketStore.getActiveStorage();
+        const existingConfig = typeof ticketStore.getGuildConfig === 'function'
+            ? ticketStore.getGuildConfig(guildId, activeStorage)
+            : {};
+        if (Boolean(existingConfig?.setup?.completed)) {
+            sendJson(res, 409, { error: 'This server setup is already finished.' });
+            return true;
+        }
         const config = typeof ticketStore.bootstrapGuildConfig === 'function'
             ? ticketStore.bootstrapGuildConfig(guildId, { storage: activeStorage })
             : (typeof ticketStore.setGuildConfig === 'function' ? ticketStore.setGuildConfig(guildId, {}, activeStorage) : {});
@@ -3678,7 +3707,7 @@ function startDashboard(client) {
                 return;
             }
 
-            if (pathname === '/controller') {
+            if (pathname === '/controller' || pathname === '/controller/') {
                 if (hasDiscordOAuthConfigured() && !getDashboardSessionUserId(req)) {
                     const next = encodeURIComponent('/controller' + (url.search || ''));
                     res.writeHead(302, { Location: `/login?next=${next}`, 'Cache-Control': 'no-store' });
@@ -3693,7 +3722,22 @@ function startDashboard(client) {
                 return;
             }
 
-            if (pathname === '/dashboard') {
+            if (pathname === '/owner' || pathname === '/owner/') {
+                if (hasDiscordOAuthConfigured() && !getDashboardSessionUserId(req)) {
+                    const next = encodeURIComponent('/owner' + (url.search || ''));
+                    res.writeHead(302, { Location: `/login?next=${next}`, 'Cache-Control': 'no-store' });
+                    res.end();
+                    return;
+                }
+                if (!isBotOwnerUser(req)) {
+                    sendHtml(res, 403, '<h1>403</h1><p>Owner user only.</p>');
+                    return;
+                }
+                sendHtml(res, 200, createControllerHtml());
+                return;
+            }
+
+            if (pathname === '/dashboard' || pathname === '/dashboard/') {
                 if (!isAuthed(req)) {
                     if (hasDiscordOAuthConfigured()) {
                         const next = encodeURIComponent('/dashboard' + (url.search || ''));
@@ -3708,7 +3752,22 @@ function startDashboard(client) {
                 return;
             }
 
-            if (pathname === '/setup') {
+            if (pathname === '/staff' || pathname === '/staff/') {
+                if (!isAuthed(req)) {
+                    if (hasDiscordOAuthConfigured()) {
+                        const next = encodeURIComponent('/staff' + (url.search || ''));
+                        res.writeHead(302, { Location: `/login?next=${next}`, 'Cache-Control': 'no-store' });
+                        res.end();
+                        return;
+                    }
+                    sendHtml(res, 401, '<h1>401</h1><p>Unauthorized</p>');
+                    return;
+                }
+                sendHtml(res, 200, createServerPickerHtml({ ownerView: false }));
+                return;
+            }
+
+            if (pathname === '/setup' || pathname === '/setup/') {
                 if (!isAuthed(req)) {
                     if (hasDiscordOAuthConfigured()) {
                         const next = encodeURIComponent('/setup' + (url.search || ''));
