@@ -27,6 +27,19 @@ const dashboardOauthStates = new Map();
 const dashboardSessions = new Map();
 const DASHBOARD_SESSION_COOKIE = 'dashboard_session';
 const BRAND_NAME = 'eazyDesk';
+const STAFF_COMMUNITY_GUILD_ID = '1009499668734017617';
+const SENIOR_STAFF_ROLE_IDS = [
+    '1060974176413962350',
+    '1183890711335161887',
+    '1183890337106759690',
+    '1060975791120326666',
+    '1183890622852120636',
+    '1016056762761216001',
+    '1016049847767420999',
+    '1060975293424222288'
+];
+const GUILD_CATALOG_CACHE_TTL_MS = 20 * 1000;
+const guildCatalogCache = new Map();
 
 const DEFAULT_TUTORIALS = [
     {
@@ -397,7 +410,7 @@ function createHomeHtml(options = {}) {
 </html>`;
 }
 
-function baseDashboardPage({ title, body, script = '', ownerView = false }) {
+function baseDashboardPage({ title, body, script = '', ownerView = false, staffView = false, showStaffLink = false }) {
     const siteAnnouncement = normalizeSiteAnnouncement(ticketStore.getBotConfig()?.siteAnnouncement);
     const announcementHtml = siteAnnouncement.enabled
         ? `<div class="wrap" style="padding-top:14px;padding-bottom:0"><div class="card" style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px"><div><strong>Announcement</strong><div class="muted">${siteAnnouncement.text}</div></div>${siteAnnouncement.ctaLabel && siteAnnouncement.linkUrl ? `<a class="btn primary" href="${siteAnnouncement.linkUrl}" target="_blank" rel="noreferrer">${siteAnnouncement.ctaLabel}</a>` : ''}</div></div>`
@@ -458,6 +471,8 @@ function baseDashboardPage({ title, body, script = '', ownerView = false }) {
     <a class="brand" href="/"><img src="/assets/sync.png" alt="logo" /><div class="title">${String(title || 'Dashboard')}</div></a>
     <nav class="nav">
       <a class="btn" href="/dashboard">Servers</a>
+      ${showStaffLink ? '<a class="btn" href="/staff">Staff</a>' : ''}
+      ${ownerView ? '<a class="btn" href="/owner">Owner</a>' : ''}
       ${ownerView ? '<a class="btn" href="/overview">Dashboard</a>' : ''}
       ${ownerView ? '<a class="btn" href="/setup">Setup</a>' : ''}
       <div id="themeNav" class="theme-nav">
@@ -488,6 +503,7 @@ function baseDashboardPage({ title, body, script = '', ownerView = false }) {
       document.querySelectorAll('[data-theme-item]').forEach(item=>item.onclick=(e)=>{e.stopPropagation();const next=normalise(item.getAttribute('data-theme-item'));try{localStorage.setItem(key,next)}catch{}apply(next);if(nav)nav.classList.remove('open')});
     })();
   </script>
+  <script>document.body.dataset.view=${JSON.stringify(staffView ? 'staff' : (ownerView ? 'owner' : 'default'))};</script>
   <script>${script || ''}</script>
 </body>
 </html>`;
@@ -520,11 +536,12 @@ function createControllerHtml() {
       async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class=\"muted\">No guilds found. (Bot may not be ready yet.)</div>';for(const btn of document.querySelectorAll('[data-restart]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/controller/setup/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-restart')})});btn.textContent='Restarted';setTimeout(()=>{btn.textContent='Restart Setup';btn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
 
-    return baseDashboardPage({ title: 'Controller', body, script, ownerView: true });
+    return baseDashboardPage({ title: 'Controller', body, script, ownerView: true, showStaffLink: true });
 }
 
 function createServerPickerHtml(options = {}) {
     const ownerView = Boolean(options.ownerView);
+    const showStaffLink = Boolean(options.showStaffLink);
     const body = `
       <div class="card">
         <h2 style="margin:0 0 6px">Server Access</h2>
@@ -553,7 +570,46 @@ function createServerPickerHtml(options = {}) {
       async function load(){try{const data=await api('/api/dashboard/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="muted">No servers found for this account.</div>'}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
 
-    return baseDashboardPage({ title: 'Servers', body, script, ownerView });
+    return baseDashboardPage({ title: 'Servers', body, script, ownerView, showStaffLink });
+}
+
+function createStaffHtml(options = {}) {
+    const ownerView = Boolean(options.ownerView);
+    const body = `
+      <div class="card">
+        <h2 style="margin:0 0 6px">Staff Operations</h2>
+        <div class="muted">Senior staff can manage bot-connected servers here, create invite links for handoffs, and remove the bot when a server should no longer be supported.</div>
+        <div id="staffError" class="err" style="display:none;margin-top:12px"></div>
+        <div id="staffSuccess" class="card" style="display:none;margin-top:12px;padding:12px 14px"></div>
+        <div id="staffList" class="list server-grid"></div>
+      </div>
+    `;
+
+    const script = `
+      const ownerView=${JSON.stringify(ownerView)};
+      const list=document.getElementById('staffList');
+      const err=document.getElementById('staffError');
+      const ok=document.getElementById('staffSuccess');
+      const inviteMap={};
+      function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
+      async function api(path,opt){const r=await fetch(path,{credentials:'include',...(opt||{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+      function note(message){if(!ok)return;ok.style.display='block';ok.innerHTML='<strong>Done</strong><div class="muted" style="margin-top:4px">'+esc(message)+'</div>'}
+      function renderPerms(g){const tags=[];if(g.setupCompleted)tags.push('<span class="pill">Setup complete</span>');if(g.canAccessDashboard)tags.push('<span class="pill">Dashboard access</span>');if(g.sharedWithUser)tags.push('<span class="pill">User is in server</span>');if(g.userPermissionSummary)tags.push('<span class="pill">'+esc(g.userPermissionSummary)+'</span>');return tags.join('')}
+      function actionButtons(g){const buttons=[];if(g.canAccessDashboard)buttons.push('<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a>');if(g.canManageSetup&&!g.setupCompleted)buttons.push('<a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1">Open Setup</a>');buttons.push('<button class="btn" type="button" data-invite="'+esc(g.id)+'">Create Invite</button>');buttons.push('<button class="btn" type="button" data-leave="'+esc(g.id)+'" data-guild-name="'+esc(g.name)+'">Remove Bot</button>');return buttons.join('')}
+      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=(Array.isArray(g.highlights)&&g.highlights.length?g.highlights:['Bot is active in this server']).map(esc).join(' • ');const inviteUrl=inviteMap[g.id]||g.inviteUrl||'';return '<div class="item server-card can-manage">'+
+        '<div style="display:grid;gap:8px;min-width:0">'+
+          '<div class="row" style="gap:10px">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class="pill">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
+          '<div class="row">'+renderPerms(g)+'</div>'+
+          '<div class="muted">'+detail+'</div>'+
+          (inviteUrl?'<div class="card" style="padding:10px 12px"><div class="muted">Latest invite</div><a href="'+esc(inviteUrl)+'" target="_blank" rel="noreferrer">'+esc(inviteUrl)+'</a></div>':'')+
+        '</div>'+
+        '<div class="row">'+actionButtons(g)+'</div>'+
+      '</div>'}
+      async function bindActions(){for(const btn of document.querySelectorAll('[data-invite]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-invite');const data=await api('/api/staff/guild-invite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});inviteMap[guildId]=data.inviteUrl||'';note('Invite ready for '+(data.guildName||'that server')+'.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-leave]')){btn.onclick=async()=>{const guildId=btn.getAttribute('data-leave');const guildName=btn.getAttribute('data-guild-name')||'this server';if(!confirm('Remove the bot from '+guildName+'?'))return;try{err.style.display='none';ok.style.display='none';btn.disabled=true;await api('/api/staff/guild-leave',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});delete inviteMap[guildId];note('The bot has been removed from '+guildName+'.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}}
+      async function load(){try{const data=await api('/api/staff/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="muted">No bot-connected servers found.</div>';await bindActions()}catch(e){err.style.display='block';err.textContent=e.message}}load();
+    `;
+
+    return baseDashboardPage({ title: 'Staff', body, script, ownerView, staffView: true, showStaffLink: true });
 }
 
 function createSetupHtml() {
@@ -809,13 +865,13 @@ function createSetupHtml() {
       document.getElementById('stepNext2').onclick=async()=>{try{err.style.display='none';await saveConfig({setup:{step:2}});gotoStep(3)}catch(e){err.style.display='block';err.textContent=e.message}};
       document.getElementById('stepNext3').onclick=async()=>{try{err.style.display='none';await saveConfig({setup:{step:3}});gotoStep(4)}catch(e){err.style.display='block';err.textContent=e.message}};
       [guildSelect,parentCategoryId,appealsChannelId,transcriptsChannelId,managerRoleId,highEscalationRoleId,immediateEscalationRoleId,rolePermanence,tutorialEnabled].forEach(el=>{if(el)el.onchange=renderSummary});
-      guildSelect.onchange=async()=>{syncPageState();try{await api('/api/state?guild='+encodeURIComponent(guildSelect.value))}catch{};await loadCatalogs();await loadConfig();};
+      guildSelect.onchange=async()=>{syncPageState();try{await api('/api/dashboard/select-guild',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:guildSelect.value})})}catch{};await loadCatalogs();await loadConfig();};
       if(finishDoneBtn)finishDoneBtn.onclick=()=>{hideFinishOverlay();window.location='/dashboard';};
       if(finishOverlay)finishOverlay.onclick=(e)=>{if(e.target===finishOverlay){hideFinishOverlay();window.location='/dashboard';}};
-      (async()=>{try{gotoStep(1);await loadGuilds();try{await api('/api/state?guild='+encodeURIComponent(guildSelect.value))}catch{};await loadCatalogs();await loadConfig();renderSummary()}catch(e){err.style.display='block';err.textContent=e.message}})();
+      (async()=>{try{gotoStep(1);await loadGuilds();try{await api('/api/dashboard/select-guild',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:guildSelect.value})})}catch{};await loadCatalogs();await loadConfig();renderSummary()}catch(e){err.style.display='block';err.textContent=e.message}})();
     `;
 
-    return baseDashboardPage({ title: 'Setup', body, script });
+    return baseDashboardPage({ title: 'Setup', body, script, showStaffLink: false });
 }
 
 function parseCookies(source) {
@@ -879,6 +935,47 @@ function isBotOwnerUser(req) {
     if (!ownerId) return false;
     const userId = getDashboardSessionUserId(req);
     return Boolean(userId && userId === ownerId);
+}
+
+function getSeniorStaffRoleIds() {
+    return [...SENIOR_STAFF_ROLE_IDS];
+}
+
+async function getSeniorStaffAccess(client, req) {
+    if (isBotOwnerUser(req)) {
+        return {
+            allowed: true,
+            isOwner: true,
+            userId: getDashboardSessionUserId(req),
+            guildId: STAFF_COMMUNITY_GUILD_ID,
+            matchedRoleIds: getSeniorStaffRoleIds()
+        };
+    }
+
+    const userId = getDashboardSessionUserId(req);
+    if (!userId) {
+        return { allowed: false, isOwner: false, userId: null, guildId: STAFF_COMMUNITY_GUILD_ID, matchedRoleIds: [] };
+    }
+
+    const guild = client?.guilds?.cache?.get(STAFF_COMMUNITY_GUILD_ID)
+        || await client?.guilds?.fetch?.(STAFF_COMMUNITY_GUILD_ID).catch(() => null);
+    if (!guild) {
+        return { allowed: false, isOwner: false, userId, guildId: STAFF_COMMUNITY_GUILD_ID, matchedRoleIds: [] };
+    }
+
+    const member = guild?.members?.cache?.get(userId) || await guild?.members?.fetch?.(userId).catch(() => null);
+    if (!member) {
+        return { allowed: false, isOwner: false, userId, guildId: STAFF_COMMUNITY_GUILD_ID, matchedRoleIds: [] };
+    }
+
+    const matchedRoleIds = getSeniorStaffRoleIds().filter(roleId => member.roles?.cache?.has?.(roleId));
+    return {
+        allowed: matchedRoleIds.length > 0,
+        isOwner: false,
+        userId,
+        guildId: STAFF_COMMUNITY_GUILD_ID,
+        matchedRoleIds
+    };
 }
 
 function isStrictOwnerViewer(req) {
@@ -1240,44 +1337,62 @@ function canManageGuild(client, req, guildId) {
     return getDashboardSessionGuildIds(req).includes(id);
 }
 
+async function getCachedGuildCatalog(guild, kind, loader) {
+    const guildId = String(guild?.id || '').trim();
+    if (!guildId) return [];
+    const key = `${guildId}:${kind}`;
+    const now = Date.now();
+    const cached = guildCatalogCache.get(key);
+    if (cached && (now - cached.createdAt) < GUILD_CATALOG_CACHE_TTL_MS) return cached.value;
+    const value = await loader();
+    guildCatalogCache.set(key, { createdAt: now, value });
+    return value;
+}
+
 async function getRoleCatalog(client, req = null) {
     const guild = getDashboardGuild(client, req);
     if (!guild) return [];
-    await guild.roles.fetch();
-    return guild.roles.cache
-        .filter(r => r.id !== guild.id)
-        .sort((a, b) => b.position - a.position)
-        .map(r => ({ id: r.id, name: r.name, color: r.hexColor && r.hexColor !== '#000000' ? r.hexColor : '#99AAB5' }));
+    return getCachedGuildCatalog(guild, 'roles', async () => {
+        await guild.roles.fetch();
+        return guild.roles.cache
+            .filter(r => r.id !== guild.id)
+            .sort((a, b) => b.position - a.position)
+            .map(r => ({ id: r.id, name: r.name, color: r.hexColor && r.hexColor !== '#000000' ? r.hexColor : '#99AAB5' }));
+    });
 }
 
 async function getTextChannelCatalog(client, req = null) {
     const guild = getDashboardGuild(client, req);
     if (!guild) return [];
-    await guild.channels.fetch();
-    return guild.channels.cache
-        .filter(ch => ch && typeof ch.isTextBased === 'function' && ch.isTextBased() && !ch.isThread())
-        .sort((a, b) => {
-            const posA = Number(a.rawPosition || 0);
-            const posB = Number(b.rawPosition || 0);
-            if (posA !== posB) return posA - posB;
-            return String(a.name || '').localeCompare(String(b.name || ''));
-        })
-        .map(ch => ({ id: ch.id, name: ch.name || 'unnamed-channel', type: 'text' }));
+    return getCachedGuildCatalog(guild, 'channels', async () => {
+        await guild.channels.fetch();
+        return guild.channels.cache
+            .filter(ch => ch && typeof ch.isTextBased === 'function' && ch.isTextBased() && !ch.isThread())
+            .sort((a, b) => {
+                const posA = Number(a.rawPosition || 0);
+                const posB = Number(b.rawPosition || 0);
+                if (posA !== posB) return posA - posB;
+                return String(a.name || '').localeCompare(String(b.name || ''));
+            })
+            .map(ch => ({ id: ch.id, name: ch.name || 'unnamed-channel', type: 'text' }));
+    });
 }
 
 async function getCategoryCatalog(client, req = null) {
     const guild = getDashboardGuild(client, req);
     if (!guild) return [];
-    await guild.channels.fetch();
-    return guild.channels.cache
-        .filter(ch => ch && ch.type === ChannelType.GuildCategory)
-        .sort((a, b) => {
-            const posA = Number(a.rawPosition || 0);
-            const posB = Number(b.rawPosition || 0);
-            if (posA !== posB) return posA - posB;
-            return String(a.name || '').localeCompare(String(b.name || ''));
-        })
-        .map(ch => ({ id: ch.id, name: ch.name || 'unnamed-category', type: 'category' }));
+    return getCachedGuildCatalog(guild, 'categories', async () => {
+        await guild.channels.fetch();
+        return guild.channels.cache
+            .filter(ch => ch && ch.type === ChannelType.GuildCategory)
+            .sort((a, b) => {
+                const posA = Number(a.rawPosition || 0);
+                const posB = Number(b.rawPosition || 0);
+                if (posA !== posB) return posA - posB;
+                return String(a.name || '').localeCompare(String(b.name || ''));
+            })
+            .map(ch => ({ id: ch.id, name: ch.name || 'unnamed-category', type: 'category' }));
+    });
 }
 
 function summarizeStats(activeStorage, options = {}) {
@@ -1420,6 +1535,66 @@ async function getDashboardState(client, req = null) {
     };
 }
 
+function summarizeSharedUserGuild(client, req, guild) {
+    const oauthGuild = getDashboardSessionOauthGuilds(req).find(entry => String(entry?.id || '') === String(guild?.id || ''));
+    const perms = oauthGuild ? summarizeOauthGuildPermissions(oauthGuild) : null;
+    return {
+        sharedWithUser: Boolean(oauthGuild),
+        userPermissionSummary: perms?.permissionSummary?.join(', ') || '',
+        canAccessDashboard: Boolean(guild) && Boolean(perms?.canAccessDashboard),
+        canManageSetup: Boolean(guild) && Boolean(perms?.canAccessDashboard)
+    };
+}
+
+async function buildStaffGuildList(client, req) {
+    const activeStorage = ticketStore.getActiveStorage();
+    const guilds = [...(client?.guilds?.cache?.values?.() || [])]
+        .map(guild => {
+            const cfg = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(guild.id, activeStorage) : {};
+            const shared = summarizeSharedUserGuild(client, req, guild);
+            const highlights = [];
+            if (shared.sharedWithUser && shared.userPermissionSummary) highlights.push(shared.userPermissionSummary);
+            if (cfg?.managerRoleId) highlights.push('Manager role configured');
+            if (cfg?.transcriptsChannelId) highlights.push('Transcript archive configured');
+            if (!highlights.length) highlights.push('Ready for staff operations');
+            return {
+                id: guild.id,
+                name: guild.name,
+                memberCount: guild.memberCount ?? null,
+                iconURL: typeof guild.iconURL === 'function' ? guild.iconURL({ extension: 'png', size: 64 }) : null,
+                setupCompleted: Boolean(cfg?.setup?.completed),
+                setupStep: Number(cfg?.setup?.step || 1),
+                ...shared,
+                highlights
+            };
+        })
+        .sort((a, b) => {
+            if (a.canAccessDashboard !== b.canAccessDashboard) return a.canAccessDashboard ? -1 : 1;
+            if (a.setupCompleted !== b.setupCompleted) return a.setupCompleted ? -1 : 1;
+            return String(a.name).localeCompare(String(b.name));
+        });
+    return guilds;
+}
+
+async function createGuildInviteForStaff(guild) {
+    if (!guild) return null;
+    await guild.channels.fetch().catch(() => null);
+    const candidate = guild.channels.cache
+        .filter(channel => channel && typeof channel.isTextBased === 'function' && channel.isTextBased() && !channel.isThread())
+        .sort((a, b) => Number(a.rawPosition || 0) - Number(b.rawPosition || 0))
+        .find(channel => {
+            const perms = channel.permissionsFor?.(guild.members.me);
+            return Boolean(perms?.has?.(PermissionsBitField.Flags.ViewChannel) && perms?.has?.(PermissionsBitField.Flags.CreateInstantInvite));
+        });
+    if (!candidate || typeof candidate.createInvite !== 'function') return null;
+    return candidate.createInvite({
+        maxAge: 60 * 60 * 24,
+        maxUses: 0,
+        unique: true,
+        reason: 'Senior staff dashboard invite generation'
+    }).catch(() => null);
+}
+
 async function handleApi(req, res, url, client) {
     const { pathname } = url;
     const method = req.method || 'GET';
@@ -1458,6 +1633,32 @@ async function handleApi(req, res, url, client) {
 
     if (!isAuthed(req)) {
         sendJson(res, 401, { error: 'Unauthorized' });
+        return true;
+    }
+
+    if (method === 'POST' && pathname === '/api/dashboard/select-guild') {
+        const body = await readBody(req);
+        const guildId = String(body.guildId || '').trim();
+        if (!/^\d{17,20}$/.test(guildId)) {
+            sendJson(res, 400, { error: 'Invalid guildId' });
+            return true;
+        }
+        if (!client?.guilds?.cache?.has?.(guildId)) {
+            sendJson(res, 404, { error: 'Guild not found' });
+            return true;
+        }
+        const userId = getDashboardSessionUserId(req);
+        const ownerId = getBotOwnerId();
+        const allowed = !userId || (ownerId && userId === ownerId) || getDashboardSessionGuildIds(req).includes(guildId);
+        if (!allowed) {
+            sendJson(res, 403, { error: 'Forbidden' });
+            return true;
+        }
+        appendSetCookie(res, `dashboard_guild=${encodeURIComponent(guildId)}; ${cookieAttributes({
+            maxAge: 2592000,
+            secure: isHttpsPublicBaseUrl()
+        })}`);
+        sendJson(res, 200, { ok: true, guildId });
         return true;
     }
 
@@ -1575,6 +1776,70 @@ async function handleApi(req, res, url, client) {
         return true;
     }
 
+    if (method === 'GET' && pathname === '/api/staff/guilds') {
+        const staffAccess = await getSeniorStaffAccess(client, req);
+        if (!staffAccess.allowed) {
+            sendJson(res, 403, { error: 'Senior staff only' });
+            return true;
+        }
+        const guilds = await buildStaffGuildList(client, req);
+        sendJson(res, 200, { guilds, staffGuildId: STAFF_COMMUNITY_GUILD_ID, matchedRoleIds: staffAccess.matchedRoleIds });
+        return true;
+    }
+
+    if (method === 'POST' && pathname === '/api/staff/guild-invite') {
+        const staffAccess = await getSeniorStaffAccess(client, req);
+        if (!staffAccess.allowed) {
+            sendJson(res, 403, { error: 'Senior staff only' });
+            return true;
+        }
+        const body = await readBody(req);
+        const guildId = String(body.guildId || '').trim();
+        if (!/^\d{17,20}$/.test(guildId)) {
+            sendJson(res, 400, { error: 'Invalid guildId' });
+            return true;
+        }
+        const guild = client?.guilds?.cache?.get(guildId) || await client?.guilds?.fetch?.(guildId).catch(() => null);
+        if (!guild) {
+            sendJson(res, 404, { error: 'Guild not found' });
+            return true;
+        }
+        const invite = await createGuildInviteForStaff(guild);
+        if (!invite?.url) {
+            sendJson(res, 500, { error: 'Could not create an invite for that server. Check bot permissions.' });
+            return true;
+        }
+        sendJson(res, 200, { ok: true, guildId, guildName: guild.name, inviteUrl: invite.url, code: invite.code || null });
+        return true;
+    }
+
+    if (method === 'POST' && pathname === '/api/staff/guild-leave') {
+        const staffAccess = await getSeniorStaffAccess(client, req);
+        if (!staffAccess.allowed) {
+            sendJson(res, 403, { error: 'Senior staff only' });
+            return true;
+        }
+        const body = await readBody(req);
+        const guildId = String(body.guildId || '').trim();
+        if (!/^\d{17,20}$/.test(guildId)) {
+            sendJson(res, 400, { error: 'Invalid guildId' });
+            return true;
+        }
+        const guild = client?.guilds?.cache?.get(guildId) || await client?.guilds?.fetch?.(guildId).catch(() => null);
+        if (!guild) {
+            sendJson(res, 404, { error: 'Guild not found' });
+            return true;
+        }
+        const guildName = guild.name;
+        const left = await guild.leave().then(() => true).catch(() => false);
+        if (!left) {
+            sendJson(res, 500, { error: 'The bot could not leave that server.' });
+            return true;
+        }
+        sendJson(res, 200, { ok: true, guildId, guildName });
+        return true;
+    }
+
     if (method === 'GET' && pathname === '/api/guild-config') {
         const guildId = String(url.searchParams.get('guildId') || '').trim();
         if (!/^\d{17,20}$/.test(guildId)) {
@@ -1610,6 +1875,10 @@ async function handleApi(req, res, url, client) {
         const currentCfg = typeof ticketStore.getGuildConfig === 'function'
             ? ticketStore.getGuildConfig(guildId, activeStorage)
             : {};
+        if (Boolean(currentCfg?.setup?.completed) && !isStrictOwnerViewer(req)) {
+            sendJson(res, 409, { error: 'This server setup is already finished.' });
+            return true;
+        }
 
         const next = {};
         for (const key of ['parentCategoryId', 'appealsChannelId', 'transcriptsChannelId', 'managerRoleId']) {
@@ -3748,7 +4017,9 @@ function startDashboard(client) {
                     sendHtml(res, 401, '<h1>401</h1><p>Unauthorized</p>');
                     return;
                 }
-                sendHtml(res, 200, createServerPickerHtml({ ownerView: isStrictOwnerViewer(req) }));
+                const ownerView = isStrictOwnerViewer(req);
+                const staffAccess = await getSeniorStaffAccess(client, req);
+                sendHtml(res, 200, createServerPickerHtml({ ownerView, showStaffLink: ownerView || staffAccess.allowed }));
                 return;
             }
 
@@ -3763,7 +4034,14 @@ function startDashboard(client) {
                     sendHtml(res, 401, '<h1>401</h1><p>Unauthorized</p>');
                     return;
                 }
-                sendHtml(res, 200, createServerPickerHtml({ ownerView: false }));
+                {
+                    const staffAccess = await getSeniorStaffAccess(client, req);
+                    if (!staffAccess.allowed) {
+                        sendHtml(res, 403, '<h1>403</h1><p>Senior staff only.</p>');
+                        return;
+                    }
+                }
+                sendHtml(res, 200, createStaffHtml({ ownerView: isStrictOwnerViewer(req) }));
                 return;
             }
 
@@ -3779,11 +4057,21 @@ function startDashboard(client) {
                     return;
                 }
                 {
-                    const access = await getDashboardAccess(client, req, requestedGuildId || getDashboardGuild(client, req)?.id || null);
+                    const targetGuildId = requestedGuildId || getDashboardGuild(client, req)?.id || null;
+                    const access = await getDashboardAccess(client, req, targetGuildId);
                     const allowedPages = getAllowedDashboardPages(access);
                     if (!allowedPages.has('/setup')) {
                         sendHtml(res, 403, '<h1>403</h1><p>You do not have access to setup for this server.</p>');
                         return;
+                    }
+                    if (!isStrictOwnerViewer(req) && targetGuildId) {
+                        const setupConfig = typeof ticketStore.getGuildConfig === 'function'
+                            ? ticketStore.getGuildConfig(targetGuildId, ticketStore.getActiveStorage())
+                            : {};
+                        if (Boolean(setupConfig?.setup?.completed)) {
+                            sendHtml(res, 403, '<h1>403</h1><p>This server has already completed setup.</p>');
+                            return;
+                        }
                     }
                 }
                 sendHtml(res, 200, createSetupHtml());
