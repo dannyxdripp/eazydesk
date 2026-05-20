@@ -538,7 +538,7 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
 </html>`;
 }
 
-function createControllerHtml() {
+function createControllerHtml(req = null) {
     const body = `
       <div class="card">
         <h2 style="margin:0 0 6px">Controller Panel</h2>
@@ -572,6 +572,7 @@ function createControllerHtml() {
 function createServerPickerHtml(options = {}) {
     const ownerView = Boolean(options.ownerView);
     const showStaffLink = Boolean(options.showStaffLink);
+    const req = options.req || null;
     const body = `
       <div class="card">
         <h2 style="margin:0 0 6px">Server Access</h2>
@@ -606,6 +607,7 @@ function createServerPickerHtml(options = {}) {
 
 function createStaffHtml(options = {}) {
     const ownerView = Boolean(options.ownerView);
+    const req = options.req || null;
     const body = `
       <div class="card">
         <h2 style="margin:0 0 6px">Staff Operations</h2>
@@ -661,7 +663,7 @@ function createStaffHtml(options = {}) {
     return baseDashboardPage({ title: 'Staff', body, script, ownerView, staffView: true, showStaffLink: true });
 }
 
-function createSetupHtml() {
+function createSetupHtml(req = null) {
     const body = `
       <style>
         .setup-shell{display:grid;gap:16px}
@@ -4599,7 +4601,7 @@ function startDashboard(client) {
                     sendHtml(res, 403, '<h1>403</h1><p>Owner user only.</p>');
                     return;
                 }
-                sendHtml(res, 200, createControllerHtml());
+                sendHtml(res, 200, createControllerHtml(req));
                 return;
             }
 
@@ -4614,7 +4616,7 @@ function startDashboard(client) {
                     sendHtml(res, 403, '<h1>403</h1><p>Owner user only.</p>');
                     return;
                 }
-                sendHtml(res, 200, createControllerHtml());
+                sendHtml(res, 200, createControllerHtml(req));
                 return;
             }
 
@@ -4631,7 +4633,7 @@ function startDashboard(client) {
                 }
                 const ownerView = isStrictOwnerViewer(req);
                 const staffAccess = await getSeniorStaffAccess(client, req);
-                sendHtml(res, 200, createServerPickerHtml({ ownerView, showStaffLink: ownerView || staffAccess.allowed }));
+                sendHtml(res, 200, createServerPickerHtml({ ownerView, showStaffLink: ownerView || staffAccess.allowed, req }));
                 return;
             }
 
@@ -4653,7 +4655,7 @@ function startDashboard(client) {
                         return;
                     }
                 }
-                sendHtml(res, 200, createStaffHtml({ ownerView: isStrictOwnerViewer(req) }));
+                sendHtml(res, 200, createStaffHtml({ ownerView: isStrictOwnerViewer(req), req }));
                 return;
             }
 
@@ -4686,7 +4688,7 @@ function startDashboard(client) {
                         }
                     }
                 }
-                sendHtml(res, 200, createSetupHtml());
+                sendHtml(res, 200, createSetupHtml(req));
                 return;
             }
 
