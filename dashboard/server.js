@@ -2,6 +2,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { URL } = require('url');
 const { MessageFlags, ChannelType, PermissionsBitField } = require('discord.js');
 const ticketStore = require('../utils/ticket-store');
@@ -158,6 +159,88 @@ function normalizeSiteAnnouncement(input) {
 
 function randomToken(bytes = 24) {
     return crypto.randomBytes(Math.max(16, Number(bytes) || 24)).toString('base64url');
+}
+
+function getDashboardSessionSecret() {
+    return String(
+        process.env.DASHBOARD_SESSION_SECRET ||
+        process.env.SESSION_SECRET ||
+        process.env.COOKIE_SECRET ||
+        process.env.DISCORD_OAUTH_CLIENT_SECRET ||
+        process.env.DISCORD_CLIENT_SECRET ||
+        process.env.OAUTH_CLIENT_SECRET ||
+        process.env.TOKEN ||
+        ''
+    ).trim();
+}
+
+function signDashboardSessionPayload(payload) {
+    const secret = getDashboardSessionSecret();
+    if (!secret) return '';
+    return crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+}
+
+function createDashboardSessionCookieValue(entry) {
+    const payload = {
+        v: 1,
+        userId: String(entry?.userId || '').trim(),
+        csrfToken: String(entry?.csrfToken || '').trim(),
+        guildIds: Array.isArray(entry?.guildIds) ? entry.guildIds.map(String) : [],
+        oauthGuilds: Array.isArray(entry?.oauthGuilds) ? entry.oauthGuilds : [],
+        createdAt: Number(entry?.createdAt || Date.now())
+    };
+    if (!/^\d{17,20}$/.test(payload.userId)) return '';
+
+    try {
+        const json = JSON.stringify(payload);
+        const packed = zlib.deflateRawSync(Buffer.from(json, 'utf8')).toString('base64url');
+        const sig = signDashboardSessionPayload(packed);
+        return sig ? `${packed}.${sig}` : '';
+    } catch {
+        return '';
+    }
+}
+
+function parseDashboardSessionCookieValue(value) {
+    const raw = String(value || '').trim();
+    const dot = raw.lastIndexOf('.');
+    if (dot <= 0) return null;
+
+    const payload = raw.slice(0, dot);
+    const sig = raw.slice(dot + 1);
+    const expected = signDashboardSessionPayload(payload);
+    if (!expected) return null;
+
+    try {
+        const a = Buffer.from(sig);
+        const b = Buffer.from(expected);
+        if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+
+        const json = zlib.inflateRawSync(Buffer.from(payload, 'base64url')).toString('utf8');
+        const parsed = JSON.parse(json);
+        if (!parsed || typeof parsed !== 'object') return null;
+
+        const userId = String(parsed.userId || '').trim();
+        if (!/^\d{17,20}$/.test(userId)) return null;
+
+        return {
+            userId,
+            csrfToken: String(parsed.csrfToken || '').trim() || randomToken(18),
+            guildIds: Array.isArray(parsed.guildIds) ? parsed.guildIds.map(String).filter(id => /^\d{17,20}$/.test(id)) : [],
+            oauthGuilds: Array.isArray(parsed.oauthGuilds)
+                ? parsed.oauthGuilds.map(g => ({
+                    id: String(g?.id || '').trim(),
+                    name: String(g?.name || '').trim(),
+                    icon: String(g?.icon || '').trim() || null,
+                    owner: Boolean(g?.owner),
+                    permissions: String(g?.permissions || '0').trim() || '0'
+                })).filter(g => /^\d{17,20}$/.test(g.id))
+                : [],
+            createdAt: Number(parsed.createdAt || 0)
+        };
+    } catch {
+        return null;
+    }
 }
 
 function getDiscordOAuthClientId() {
@@ -1185,10 +1268,11 @@ function getTranscriptSessionUserId(req) {
 
 function setDashboardSession(res, userId, guildIds = [], oauthGuilds = []) {
     const sessionId = randomToken();
-    dashboardSessions.set(sessionId, {
+    const allowedGuildIds = [...new Set(Array.isArray(guildIds) ? guildIds.map(String).filter(id => /^\d{17,20}$/.test(id)) : [])];
+    const entry = {
         userId: String(userId),
         csrfToken: randomToken(18),
-        guildIds: Array.isArray(guildIds) ? guildIds.map(String) : [],
+        guildIds: allowedGuildIds,
         oauthGuilds: Array.isArray(oauthGuilds)
             ? oauthGuilds.map(g => ({
                 id: String(g?.id || '').trim(),
@@ -1196,12 +1280,15 @@ function setDashboardSession(res, userId, guildIds = [], oauthGuilds = []) {
                 icon: String(g?.icon || '').trim() || null,
                 owner: Boolean(g?.owner),
                 permissions: String(g?.permissions || '0').trim() || '0'
-            })).filter(g => /^\d{17,20}$/.test(g.id))
+            })).filter(g => /^\d{17,20}$/.test(g.id) && (!allowedGuildIds.length || allowedGuildIds.includes(g.id)))
             : [],
         createdAt: Date.now()
-    });
+    };
+    const cookieValue = createDashboardSessionCookieValue(entry) || sessionId;
+    dashboardSessions.set(sessionId, entry);
+    dashboardSessions.set(cookieValue, entry);
     const secure = isHttpsPublicBaseUrl();
-    const cookie = `${DASHBOARD_SESSION_COOKIE}=${encodeURIComponent(sessionId)}; ${cookieAttributes({
+    const cookie = `${DASHBOARD_SESSION_COOKIE}=${encodeURIComponent(cookieValue)}; ${cookieAttributes({
         maxAge: Math.floor(TRANSCRIPT_SESSION_TTL_MS / 1000),
         secure,
         sameSite: secure ? 'None' : 'Lax'
@@ -1220,7 +1307,11 @@ function getDashboardSession(req) {
     const cookies = parseCookies(req?.headers?.cookie);
     const sessionId = String(cookies[DASHBOARD_SESSION_COOKIE] || '').trim();
     if (!sessionId) return null;
-    const entry = dashboardSessions.get(sessionId);
+    let entry = dashboardSessions.get(sessionId);
+    if (!entry) {
+        entry = parseDashboardSessionCookieValue(sessionId);
+        if (entry) dashboardSessions.set(sessionId, entry);
+    }
     if (!entry) return null;
     const createdAt = Number(entry.createdAt || 0);
     if (!createdAt || (Date.now() - createdAt) > TRANSCRIPT_SESSION_TTL_MS) {
@@ -2117,7 +2208,11 @@ async function handleApi(req, res, url, client) {
     }
 
     if (method === 'GET' && pathname === '/api/state') {
-        const state = await getDashboardState(client, req);
+        const requestedId = String(url.searchParams.get('guild') || url.searchParams.get('guildId') || '').trim();
+        const stateReq = /^\d{17,20}$/.test(requestedId)
+            ? { ...req, headers: { ...(req?.headers || {}), cookie: `${req?.headers?.cookie || ''}; dashboard_guild=${requestedId}` } }
+            : req;
+        const state = await getDashboardState(client, stateReq);
         state.isOwner = isStrictOwnerViewer(req);
         sendJson(res, 200, state);
         return true;
@@ -4738,11 +4833,11 @@ function renderPageHero(path){
  return '<div class="card page-hero"><div class="page-hero-head"><div><div class="page-kicker">Module</div><h3>'+esc(title)+'</h3><p>'+esc(desc)+'</p></div><div class="page-pill-row">'+chips.join('')+'</div></div></div>';
 }
 function render(){const access=(state&&state.access)||{};const allowed=new Set(['/documentation','/tutorials','/pricing','/upgrade']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor','/pricing','/upgrade'].forEach(p=>allowed.add(p))}else{if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types')}if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This section is not available for your role in the selected server.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderPageHero(currentPath)+renderSettings();else if(currentPath==='/availability')html=renderPageHero(currentPath)+renderAvailability();else if(currentPath==='/tutorials')html=renderPageHero(currentPath)+renderTutorials();else if(currentPath==='/commands/ticket-types')html=renderPageHero(currentPath)+renderTypes();else if(currentPath==='/commands/tag')html=renderPageHero(currentPath)+renderTags();else if(currentPath==='/tickets')html=renderPageHero(currentPath)+renderTickets();else if(currentPath==='/transcripts')html=renderPageHero(currentPath)+renderTranscripts();else if(currentPath==='/commands/feedback')html=renderPageHero(currentPath)+renderFeedback();else if(currentPath==='/commands/appeal')html=renderPageHero(currentPath)+renderAppeal();else if(currentPath==='/statistics')html=renderPageHero(currentPath)+renderStats();else if(currentPath==='/embed-editor')html=renderPageHero(currentPath)+renderBranding();else if(currentPath==='/pricing')html=renderPageHero(currentPath)+renderPricing();else if(currentPath==='/upgrade')html=renderPageHero(currentPath)+renderUpgrade();else html=renderPageHero(currentPath)+renderDocs();document.title=${JSON.stringify(BRAND_NAME + ' • ')}+({"/overview":"Home","/settings":"Settings","/availability":"Availability","/tutorials":"Tutorials","/commands/ticket-types":"Ticket Types","/commands/tag":"Tags","/tickets":"Tickets","/transcripts":"Transcripts","/commands/feedback":"Feedback","/statistics":"Statistics","/embed-editor":"Embed Editor","/pricing":"Pricing","/upgrade":"Upgrade","/documentation":"Documentation"}[currentPath]||'Dashboard');renderAnnouncementBar();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire()})})}
-async function boot(){state=await api('/api/state');render()}
+async function boot(){state=await api('/api/state'+(location.search||''));render()}
 document.getElementById('refreshStateBtn').onclick=async()=>{try{await boot();note('Dashboard refreshed.','ok')}catch(e){note(e.message,'danger')}};
 document.getElementById('authLogin').onclick=async()=>{try{localStorage.setItem(tokenKey,authToken.value.trim());await api('/api/auth/login',{method:'POST',body:JSON.stringify({token:authToken.value.trim()})});auth.style.display='none';authMsg.textContent='';await boot()}catch(e){authMsg.textContent=e.message||'Login failed'}};
 (function(){try{if(authDiscord)authDiscord.href='/login?next='+encodeURIComponent(location.pathname+location.search)}catch{}})();
-(async()=>{try{await boot()}catch{auth.style.display='flex'}})();
+(async()=>{try{await boot()}catch(e){if((e&&e.message)==='Unauthorized')auth.style.display='flex';else note((e&&e.message)||'Dashboard failed to load.','danger')}})();
 </script></body></html>`;
 }
 
