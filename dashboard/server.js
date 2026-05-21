@@ -1529,7 +1529,9 @@ async function getCachedGuildCatalog(guild, kind, loader) {
     if (!guildId) return [];
     const key = `${guildId}:${kind}`;
     const now = Date.now();
-    const cached = guildCatalogCache.get(key);
+        if (allowed.has(basePath)) return next; 
+        if (basePath.startsWith('/t/')) return next; 
+        if (basePath === '/pricing') return next; 
     if (cached && (now - cached.createdAt) < GUILD_CATALOG_CACHE_TTL_MS) return cached.value;
     const value = await loader();
     guildCatalogCache.set(key, { createdAt: now, value });
@@ -3211,6 +3213,10 @@ function navItem(path, label, currentPath) {
             icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M6 8h14v12H6a2 2 0 0 1-2-2V6"/><path d="M16 14h.01"/></svg>',
             desc: 'Plans and access'
         },
+        '/upgrade': {
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6M12 22v-6M4.9 4.9l4.2 4.2M19.1 19.1l-4.2-4.2M2 12h6M22 12h-6"/></svg>',
+            desc: 'Upgrade options and custom plans'
+        },
         '/documentation': {
             icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
             desc: 'Placeholders and templates'
@@ -3226,8 +3232,9 @@ function navItem(path, label, currentPath) {
 function getAllowedDashboardPages(access = {}) {
     const pages = new Set(['/documentation', '/tutorials']);
     pages.add('/pricing');
+    pages.add('/upgrade');
     if (access?.canFullDashboard || access?.isOwner) {
-        ['/overview', '/settings', '/availability', '/commands/ticket-types', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/tutorials', '/pricing', '/setup', '/controller'].forEach(page => pages.add(page));
+        ['/overview', '/settings', '/availability', '/commands/ticket-types', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/tutorials', '/pricing', '/upgrade', '/setup', '/controller'].forEach(page => pages.add(page));
         return pages;
     }
     if (access?.canManageSettings) pages.add('/setup');
@@ -3256,6 +3263,7 @@ function pageTitleForPath(path) {
         '/statistics': 'Statistics',
         '/embed-editor': 'Embed Editor',
         '/pricing': 'Pricing',
+        '/upgrade': 'Upgrade',
         '/documentation': 'Documentation'
     };
     return map[path] || 'Dashboard';
@@ -3275,6 +3283,7 @@ function pageDescriptionForPath(path) {
         '/statistics': 'Track recent performance, close reasons, and staff activity trends.',
         '/embed-editor': 'Update reusable bot message templates with a simpler editing workflow.',
         '/pricing': 'Compare plans and see what is available for this server.',
+        '/upgrade': 'Upgrade to Premium or contact sales for Enterprise plans.',
         '/documentation': 'Reference placeholders, templates, and dashboard usage notes.'
     };
     return map[path] || 'Manage this part of the dashboard with a simpler, more focused layout.';
@@ -4376,6 +4385,12 @@ function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Start
       '</div>'+ 
     '</section>'+ 
   '</div>'}
+function renderUpgrade(){
+    return '<div class="grid">'+
+        '<div class="card"><h3>Upgrade</h3><p class="muted">Upgrade from Free to Premium for advanced features, or contact sales for Enterprise options.</p><div style="margin-top:12px" class="row"><button class="btn primary">Upgrade to Premium</button><button class="btn-soft">Contact Sales</button></div></div>'+
+        '<div class="card"><h3>Enterprise</h3><p class="muted">Custom plans for large communities — includes SLA, dedicated onboarding, and integrations.</p><div style="margin-top:12px"><ul><li>Dedicated onboarding</li><li>Custom integrations</li><li>Advanced analytics</li><li>Priority SLA</li></ul></div></div>'+
+    '</div>'
+}
 function renderTutorials(){
  const tutorials=Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[];
  const cards=tutorials.map((tutorial,index)=>'<button type="button" class="card tutorialCard" data-tutorial-open="'+index+'" style="text-align:left;padding:0;overflow:hidden">'+
