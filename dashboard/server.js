@@ -255,6 +255,21 @@ function hasDiscordOAuthConfigured() {
     return Boolean(getDiscordOAuthClientId() && getDiscordOAuthClientSecret());
 }
 
+function getBotInviteUrl(guildId = '') {
+    const clientId = getDiscordOAuthClientId() || String(process.env.APP_ID || process.env.APPLICATION_ID || '').trim();
+    if (!/^\d{17,20}$/.test(clientId)) return '';
+    const url = new URL('https://discord.com/oauth2/authorize');
+    url.searchParams.set('client_id', clientId);
+    url.searchParams.set('scope', 'bot applications.commands');
+    url.searchParams.set('permissions', '268561488');
+    const id = String(guildId || '').trim();
+    if (/^\d{17,20}$/.test(id)) {
+        url.searchParams.set('guild_id', id);
+        url.searchParams.set('disable_guild_select', 'true');
+    }
+    return url.toString();
+}
+
 function isTranscriptOAuthRequired() {
     const raw = String(process.env.TRANSCRIPT_REQUIRE_OAUTH ?? 'true').trim().toLowerCase();
     return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
@@ -579,6 +594,39 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     .theme-nav.open .theme-menu{display:grid;gap:6px}
     .theme-item{appearance:none;border:1px solid transparent;background:rgba(255,255,255,.03);color:var(--tx);padding:9px 10px;border-radius:12px;text-align:left;cursor:pointer}
     .theme-item:hover,.theme-item.active{border-color:var(--cardOutline);background:color-mix(in srgb,var(--acc) 12%, transparent)}
+    .pricing-page{display:grid;gap:34px;padding-top:12px;padding-bottom:44px}
+    .pricing-hero{padding:44px 38px;display:grid;gap:18px}
+    .pricing-hero h1{font-size:clamp(34px,5vw,58px);line-height:1;margin:0 0 14px;letter-spacing:0}
+    .pricing-kicker{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:var(--acc);margin-bottom:12px}
+    .pricing-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:center}
+    .pricing-card{padding:26px;border-radius:18px;border:1px solid var(--bd);background:rgba(255,255,255,.035);display:grid;gap:18px;min-height:420px}
+    .pricing-card.featured{border-color:color-mix(in srgb,var(--acc) 58%, transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--acc) 22%, transparent),0 0 40px color-mix(in srgb,var(--acc) 16%, transparent);transform:scale(1.035);background:color-mix(in srgb,var(--acc) 8%, rgba(255,255,255,.035))}
+    .plan-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+    .plan-name{font-size:22px;font-weight:850}
+    .plan-price{font-size:38px;font-weight:900;line-height:1}
+    .plan-note{color:var(--mut);font-size:13px;line-height:1.6}
+    .plan-badge{display:inline-flex;align-items:center;white-space:nowrap;border-radius:999px;padding:6px 10px;border:1px solid color-mix(in srgb,var(--acc) 38%, transparent);background:color-mix(in srgb,var(--acc) 13%, transparent);font-size:11px;font-weight:850;color:var(--tx)}
+    .pricing-feature-list{display:grid;gap:9px}
+    .pricing-feature{display:flex;gap:10px;align-items:center;color:var(--tx)}
+    .pricing-feature .dot{width:8px;height:8px;border-radius:999px;background:var(--acc);box-shadow:0 0 14px color-mix(in srgb,var(--acc) 50%, transparent);flex:0 0 auto}
+    .pricing-preview{border:1px solid var(--bd);border-radius:18px;background:rgba(255,255,255,.025);padding:22px}
+    .pricing-preview-title{font-size:12px;font-weight:850;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin-bottom:14px}
+    .preview-frame{border:1px solid rgba(255,255,255,.09);border-radius:16px;background:#080c18;overflow:hidden}
+    .preview-bar{height:38px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:8px;padding:0 14px;color:var(--mut);font-size:12px}
+    .preview-dot{width:9px;height:9px;border-radius:999px;background:var(--acc)}
+    .preview-body{padding:18px;display:grid;gap:12px}
+    .preview-row{height:12px;border-radius:999px;background:rgba(255,255,255,.08)}
+    .preview-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:6px}
+    .preview-mini{min-height:90px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.045);padding:12px}
+    .pricing-table{overflow-x:auto;padding:24px}
+    .pricing-table table{width:100%;border-collapse:collapse;min-width:680px}
+    .pricing-table th,.pricing-table td{padding:15px 12px;text-align:left;border-bottom:1px solid rgba(255,255,255,.08)}
+    .pricing-table td{color:var(--mut)}
+    .pricing-table td.active{color:var(--tx);font-weight:800}
+    .pricing-faq{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    .pricing-faq .faq-item{padding:20px;border-radius:18px;border:1px solid var(--bd);background:rgba(255,255,255,.03)}
+    .pricing-cta{text-align:center;padding:36px 28px}
+    @media(max-width:900px){.pricing-grid,.pricing-faq{grid-template-columns:1fr}.pricing-card.featured{transform:none}.preview-cards{grid-template-columns:1fr}.pricing-table table{min-width:0}}
     .err{color:#fecaca;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.10);padding:10px 12px;border-radius:14px}
     `;
 
@@ -689,7 +737,7 @@ function createServerPickerHtml(options = {}) {
       const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function renderPerms(g){const tags=[];tags.push(g.botInServer?'<span class="pill">Bot in server</span>':'<span class="pill">Bot not in server</span>');tags.push(g.isOwner?'<span class="pill">Owner</span>':'');tags.push(g.isAdmin?'<span class="pill">Administrator</span>':'');tags.push(!g.isAdmin&&g.canManageGuild?'<span class="pill">Manage Server</span>':'');tags.push(!g.isAdmin&&!g.canManageGuild&&g.canManageChannels?'<span class="pill">Manage Channels</span>':'');return tags.filter(Boolean).join('')}
-      function renderAction(g){if(g.botInServer&&g.canAccessDashboard)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a><a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1">Setup</a>';if(g.botInServer)return '<span class="muted">No dashboard permissions</span>';return '<span class="muted">Bot is not in this server</span>'}
+      function renderAction(g){if(g.botInServer&&g.canAccessDashboard)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a><a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1">Setup</a>';if(g.botInServer)return '<span class="muted">No dashboard permissions</span>';if(g.inviteUrl)return '<a class="btn primary" href="'+esc(g.inviteUrl)+'">Add Bot</a>';return '<span class="muted">Bot is not in this server</span>'}
       function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=Array.isArray(g.permissionSummary)&&g.permissionSummary.length?g.permissionSummary.map(esc).join(' • '):'No elevated permissions';const cls='item server-card'+(g.canAccessDashboard?' can-manage':'');return '<div class="'+cls+'">'+
         '<div style="display:grid;gap:8px;min-width:0">'+
           '<div class="row" style="gap:10px">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class="pill">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
@@ -1657,9 +1705,7 @@ async function getCachedGuildCatalog(guild, kind, loader) {
     if (!guildId) return [];
     const key = `${guildId}:${kind}`;
     const now = Date.now();
-        if (allowed.has(basePath)) return next; 
-        if (basePath.startsWith('/t/')) return next; 
-        if (basePath === '/pricing') return next; 
+    const cached = guildCatalogCache.get(key);
     if (cached && (now - cached.createdAt) < GUILD_CATALOG_CACHE_TTL_MS) return cached.value;
     const value = await loader();
     guildCatalogCache.set(key, { createdAt: now, value });
@@ -2270,6 +2316,7 @@ async function handleApi(req, res, url, client) {
                     canManageGuild: true,
                     canManageChannels: true,
                     canAccessDashboard: true,
+                    inviteUrl: '',
                     permissionSummary: ['Bot owner']
                 }))
                 .sort((a, b) => String(a.name).localeCompare(String(b.name)));
@@ -2287,7 +2334,8 @@ async function handleApi(req, res, url, client) {
                             : (typeof sharedGuild?.iconURL === 'function' ? sharedGuild.iconURL({ extension: 'png', size: 64 }) : null),
                         botInServer: Boolean(sharedGuild),
                         ...perms,
-                        canAccessDashboard: Boolean(sharedGuild) && perms.canAccessDashboard
+                        canAccessDashboard: Boolean(sharedGuild) && perms.canAccessDashboard,
+                        inviteUrl: !sharedGuild && perms.canAccessDashboard ? getBotInviteUrl(entry.id) : ''
                     };
                 })
                 .sort((a, b) => {
@@ -3968,7 +4016,7 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
 .pricing-table th,.pricing-table td{padding:16px 14px;text-align:left;border-bottom:1px solid rgba(255,255,255,.08);}
 .pricing-table th{font-weight:700;color:var(--tx);}
 .pricing-table td{color:var(--mt);}
-.pricing-table td.active{color:var(--text);font-weight:700;}
+.pricing-table td.active{color:var(--tx);font-weight:700;}
 .pricing-preview{display:grid;gap:16px;padding:24px;border-radius:24px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);}
 .pricing-preview .pricing-screenshot{border-radius:20px;overflow:hidden;background:rgba(6,8,18,.95);border:1px solid rgba(255,255,255,.08);}
 .pricing-screenshot-title{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:var(--mt);margin-bottom:12px;}
@@ -5025,41 +5073,53 @@ function startDashboard(client) {
             function createPricingPage(req = null) {
                 return baseDashboardPage({
                     title: 'Pricing',
-                    body: '<div class="page-shell pricing-page">' +
-                        '<section class="pricing-hero card">' +
-                            '<div class="row" style="align-items:flex-start;gap:24px">' +
-                                '<div style="max-width:640px">' +
-                                    '<div class="page-kicker">Pricing</div>' +
-                                    '<h3 style="margin:0 0 14px">Simple billing for ticket support and staff operations.</h3>' +
-                                    '<p class="muted" style="max-width:620px">Free plan keeps ticket workflows running. Premium adds AI moderation, priority support, and extra automation for growing communities.</p>' +
-                                    '<div class="row" style="gap:10px;flex-wrap:wrap;margin-top:22px">' +
-                                        '<a class="btn primary" href="/upgrade">Upgrade to Premium</a>' +
-                                        '<a class="btn-soft" href="#faq">Read FAQ</a>' +
-                                    '</div>' +
-                                '</div>' +
-                                '<div class="pricing-hero-stats">' +
-                                    '<div class="pricing-stat"><strong>5 modules</strong><span>Tickets, Logs, Automod, Overview, Analytics</span></div>' +
-                                    '<div class="pricing-stat"><strong>Live previews</strong><span>See how panels, dashboards, and analytics look.</span></div>' +
-                                '</div>' +
-                            '</div>' +
-                        '</section>' +
-                        '<section class="pricing-table card">' +
-                            '<h3 style="margin:0 0 16px">Compare plans</h3>' +
-                            '<div style="overflow-x:auto">' +
-                                '<table><thead><tr><th style="min-width:220px">Feature</th><th>Free</th><th>Premium</th><th>Enterprise</th></tr></thead><tbody>' +
-                                    '<tr><td>AI Moderation</td><td class="">—</td><td class="active">Yes</td><td class="active">Yes</td></tr>' +
-                                    '<tr><td>Unlimited Tickets</td><td class="active">Yes</td><td class="active">Yes</td><td class="active">Yes</td></tr>' +
-                                    '<tr><td>Custom Panels</td><td class="active">Yes</td><td class="active">Yes</td><td class="active">Yes</td></tr>' +
-                                    '<tr><td>Priority Support</td><td class="">—</td><td class="active">Yes</td><td class="active">Yes</td></tr>' +
-                                '</tbody></table>' +
-                            '</div>' +
-                        '</section>' +
-                        '<section id="faq" class="pricing-faq">' +
-                            '<div class="faq-item"><strong>Can I upgrade later?</strong><p class="muted" style="margin:10px 0 0">Yes. Start on Free and move to Premium anytime without losing your configuration.</p></div>' +
-                            '<div class="faq-item"><strong>What does Enterprise include?</strong><p class="muted" style="margin:10px 0 0">Dedicated onboarding, custom integrations, advanced analytics, and service-level support.</p></div>' +
-                            '<div class="faq-item"><strong>How does billing work?</strong><p class="muted" style="margin:10px 0 0">Premium is billed monthly. Enterprise is handled through a custom agreement.</p></div>' +
-                        '</section>' +
-                    '</div>',
+                    body: `
+                        <div class="pricing-page">
+                            <section class="pricing-hero card">
+                                <div class="pricing-kicker">Pricing</div>
+                                <h1>Simple plans for cleaner Discord support.</h1>
+                                <p class="muted" style="max-width:680px;margin:0">Run tickets, panels, transcripts, logging, and analytics from one focused dashboard. Upgrade when you want AI moderation and faster support.</p>
+                                <div class="row" style="margin-top:8px">
+                                    <a class="btn primary" href="#plans">View plans</a>
+                                    <a class="btn" href="#faq">FAQ</a>
+                                </div>
+                            </section>
+                            <section class="pricing-preview">
+                                <div class="pricing-preview-title">Dashboard preview</div>
+                                <div class="preview-frame"><div class="preview-bar"><span class="preview-dot"></span>eazyDesk Overview</div><div class="preview-body"><div class="preview-row" style="width:42%"></div><div class="preview-row" style="width:28%"></div><div class="preview-cards"><div class="preview-mini"><strong>5 active tickets</strong><div class="muted">Queue health</div></div><div class="preview-mini"><strong>2 ticket panels</strong><div class="muted">Custom panels</div></div><div class="preview-mini"><strong>Logging enabled</strong><div class="muted">Audit trail</div></div></div></div></div>
+                            </section>
+                            <section id="plans" class="pricing-grid">
+                                <div class="pricing-card"><div class="plan-top"><div><div class="plan-name">Free</div><div class="plan-note">Core ticket workflows.</div></div></div><div class="plan-price">$0</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>Unlimited Tickets</div><div class="pricing-feature"><span class="dot"></span>Custom Panels</div><div class="pricing-feature"><span class="dot"></span>Logging</div></div><a class="btn" href="/dashboard">Get started</a></div>
+                                <div class="pricing-card featured"><div class="plan-top"><div><div class="plan-name">Premium</div><div class="plan-note">Best for growing support teams.</div></div><span class="plan-badge">Most Popular</span></div><div class="plan-price">$12/mo</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>AI Moderation</div><div class="pricing-feature"><span class="dot"></span>Unlimited Tickets</div><div class="pricing-feature"><span class="dot"></span>Custom Panels</div><div class="pricing-feature"><span class="dot"></span>Logging</div><div class="pricing-feature"><span class="dot"></span>Priority Support</div></div><a class="btn primary" href="/upgrade">Upgrade</a></div>
+                                <div class="pricing-card"><div class="plan-top"><div><div class="plan-name">Enterprise</div><div class="plan-note">Custom support operations.</div></div></div><div class="plan-price">Custom</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>AI Moderation</div><div class="pricing-feature"><span class="dot"></span>Unlimited Tickets</div><div class="pricing-feature"><span class="dot"></span>Custom Panels</div><div class="pricing-feature"><span class="dot"></span>Logging</div><div class="pricing-feature"><span class="dot"></span>Priority Support</div></div><a class="btn" href="/upgrade">Contact sales</a></div>
+                            </section>
+                            <section class="pricing-preview">
+                                <div class="pricing-preview-title">Ticket panel preview</div>
+                                <div class="preview-frame"><div class="preview-bar"><span class="preview-dot"></span>Custom Ticket Panel</div><div class="preview-body"><div class="preview-row" style="width:54%"></div><div class="preview-row" style="width:66%"></div><div class="preview-row" style="width:38%"></div><div class="preview-cards"><div class="preview-mini"><strong>Support</strong><div class="muted">Open ticket</div></div><div class="preview-mini"><strong>Billing</strong><div class="muted">Route to team</div></div><div class="preview-mini"><strong>Reports</strong><div class="muted">Private thread</div></div></div></div></div>
+                            </section>
+                            <section class="pricing-table card">
+                                <h2 style="margin:0 0 16px">Feature comparison</h2>
+                                <table><thead><tr><th>Feature</th><th>Free</th><th>Premium</th><th>Enterprise</th></tr></thead><tbody>
+                                    <tr><td>AI Moderation</td><td>-</td><td class="active">Yes</td><td class="active">Yes</td></tr>
+                                    <tr><td>Unlimited Tickets</td><td class="active">Yes</td><td class="active">Yes</td><td class="active">Yes</td></tr>
+                                    <tr><td>Custom Panels</td><td class="active">Yes</td><td class="active">Yes</td><td class="active">Yes</td></tr>
+                                    <tr><td>Logging</td><td class="active">Yes</td><td class="active">Yes</td><td class="active">Yes</td></tr>
+                                    <tr><td>Priority Support</td><td>-</td><td class="active">Yes</td><td class="active">Yes</td></tr>
+                                </tbody></table>
+                            </section>
+                            <section class="pricing-preview">
+                                <div class="pricing-preview-title">Analytics preview</div>
+                                <div class="preview-frame"><div class="preview-bar"><span class="preview-dot"></span>Ticket Analytics</div><div class="preview-body"><div class="preview-row" style="width:48%"></div><div class="preview-cards"><div class="preview-mini"><strong>14d trends</strong><div class="muted">Claims and closes</div></div><div class="preview-mini"><strong>Top reasons</strong><div class="muted">Close insights</div></div><div class="preview-mini"><strong>Tag usage</strong><div class="muted">Common replies</div></div></div></div></div>
+                            </section>
+                            <section id="faq" class="pricing-faq">
+                                <div class="faq-item"><strong>Can I upgrade later?</strong><p class="muted">Yes. Start free and upgrade without losing your dashboard setup.</p></div>
+                                <div class="faq-item"><strong>What does Premium add?</strong><p class="muted">AI moderation, priority support, and more automation for active teams.</p></div>
+                                <div class="faq-item"><strong>What is Enterprise?</strong><p class="muted">A custom plan for larger servers that need onboarding, integrations, or higher-touch support.</p></div>
+                                <div class="faq-item"><strong>Does Free include tickets?</strong><p class="muted">Yes. Free keeps the core ticket, panel, transcript, and logging flow available.</p></div>
+                            </section>
+                            <section class="pricing-cta card"><div class="pricing-kicker">Ready</div><h2 style="margin:0 0 10px">Choose the support setup that fits your server.</h2><p class="muted">Keep it simple now, upgrade when the queue grows.</p><div class="row" style="justify-content:center;margin-top:18px"><a class="btn primary" href="/upgrade">Upgrade to Premium</a><a class="btn" href="/dashboard">Open dashboard</a></div></section>
+                        </div>
+                    `,
                     ownerView: false,
                     showStaffLink: false
                 });
