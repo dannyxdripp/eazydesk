@@ -118,7 +118,16 @@ function dashboardIcon(name) {
         remove: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M10 11v6M14 11v6M6 6l1 14h10l1-14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
         repair: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.7 6.3 3 3L8 19H5v-3l9.7-9.7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m12 4 2-2 4 4-2 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
         restart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 2v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20.5 13a8.5 8.5 0 1 1-2.5-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
-        diagnostics: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m7 15 3-3 3 2 4-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+        diagnostics: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m7 15 3-3 3 2 4-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        home: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V10.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+        tickets: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 9h6M9 15h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        panels: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 9h8M8 13h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        transcripts: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 3v5h5M10 12h6M10 16h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        tag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10 10 20l-6-6L14 4h6v6Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="17" cy="7" r="1" fill="currentColor"/></svg>',
+        feedback: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+        embed: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 9h8M8 13h4M16 15h1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        pricing: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 13h2M6 11h6M6 15h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+        docs: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l3 3v15H6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M15 3v4h4M9 12h6M9 16h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
     };
     return icons[name] || icons.dashboard;
 }
@@ -3470,20 +3479,24 @@ function pageDescriptionForPath(path) {
 }
 
 function topNavItem(path, label, group, description) {
+    const iconForPath = {
+        '/overview': 'home',
+        '/settings': 'setup',
+        '/availability': 'diagnostics',
+        '/tutorials': 'docs',
+        '/tickets': 'tickets',
+        '/transcripts': 'transcripts',
+        '/commands/ticket-types': 'panels',
+        '/commands/tag': 'tag',
+        '/commands/feedback': 'feedback',
+        '/statistics': 'diagnostics',
+        '/embed-editor': 'embed',
+        '/pricing': 'pricing',
+        '/upgrade': 'owner',
+        '/documentation': 'docs'
+    };
     return `<button type="button" class="topnav-item" data-topnav-item data-value="${path}"><span class="topnav-main"><span class="topnav-icon">${dashboardIcon(
-        path === '/overview' ? 'dashboard'
-            : path === '/settings' ? 'setup'
-                : path === '/availability' ? 'diagnostics'
-                    : path === '/tutorials' ? 'open'
-                        : path === '/tickets' ? 'servers'
-                            : path === '/transcripts' ? 'invite'
-                                : path === '/commands/ticket-types' ? 'setup'
-                                    : path === '/commands/tag' ? 'repair'
-                                        : path === '/commands/feedback' ? 'staff'
-                                            : path === '/statistics' ? 'diagnostics'
-                                                : path === '/embed-editor' ? 'open'
-                                                    : path === '/pricing' ? 'owner'
-                                                    : 'dashboard'
+        iconForPath[path] || 'dashboard'
     )}</span><span class="topnav-copy"><strong>${label}</strong><span>${description}</span></span></span><span class="tag">${group}</span></button>`;
 }
 
@@ -4059,22 +4072,39 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
  .stat-tile strong{display:block;font-size:26px;line-height:1.05;margin-top:4px}
  .quick-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
   .module-stack{display:grid;gap:22px}
-  .module-options{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
-  .module-option{min-height:150px;text-align:left;align-items:flex-start;justify-content:space-between;padding:18px;border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.035));border:1px solid rgba(255,255,255,.12);color:var(--tx);box-shadow:var(--shadow-soft)}
+  .module-options{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));align-items:stretch}
+  .module-option{min-height:116px;text-align:left;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px;border-radius:16px;background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.035));border:1px solid rgba(255,255,255,.12);color:var(--tx);box-shadow:var(--shadow-soft)}
   .module-option:hover{border-color:rgba(56,189,248,.28);background:linear-gradient(180deg,rgba(56,189,248,.10),rgba(255,255,255,.035))}
-  .module-option strong{display:block;font-size:18px;margin-bottom:8px}
-  .module-editor-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px}
+  .module-option strong{display:block;font-size:16px;margin-bottom:6px}
+  .module-option .muted{display:block;line-height:1.45}
+  .module-option .pill{flex:0 0 auto}
+  .module-editor-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.10)}
   .module-editor-title{font-size:13px;font-weight:850;color:var(--mt);letter-spacing:.12em;text-transform:uppercase}
   .module-drill.editing > .module-options{display:none}
-  .module-drill.editing > .module-source > .card,.module-drill.editing > .module-source > .split,.module-drill.editing > .module-source > .grid{display:none}
-  .module-drill.editing > .module-source > .card.active-panel,.module-drill.editing > .module-source > .split.active-panel,.module-drill.editing > .module-source > .grid.active-panel{display:block}
+  .module-drill.editing > .module-source{display:block}
+  .module-drill.editing .module-root{display:grid!important;grid-template-columns:1fr!important;gap:0!important}
+  .module-drill.editing .module-panel{display:none!important}
+  .module-drill.editing .module-panel.active-panel{display:block!important;width:100%;max-width:980px;margin:0 auto}
   .module-drill:not(.editing) > .module-source{display:none}
  .list-meta{margin-top:4px;font-size:12px;color:rgba(247,248,255,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  .help{margin-top:6px;font-size:12px;color:rgba(247,248,255,.60)}
  textarea{min-height:110px}
-  #app > .grid,#app > .split{grid-template-columns:1fr;gap:24px}
-  #app > .grid > .card,#app > .split > .card{width:100%;min-height:min(620px,calc(100vh - 180px));padding:22px}
-  #app .card + .card{margin-top:2px}
+  #app > .grid,#app > .split{gap:14px;align-items:start}
+  #app > .grid{grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr))}
+  #app > .split{grid-template-columns:minmax(280px,340px) minmax(0,1fr)}
+  #app > .grid > .card,#app > .split > .card{width:100%;min-height:0;padding:18px}
+  #app .card + .card{margin-top:0}
+  .card{height:auto}
+  .card h3{margin-top:0;margin-bottom:10px}
+  .card p:last-child,.item p:last-child{margin-bottom:0}
+  .item{align-items:stretch}
+  .item-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .row{align-items:start}
+  .btn,.btn-soft,.btn-danger,.cs-trigger,.ms-trigger{min-height:42px;display:inline-flex;align-items:center;justify-content:center;gap:8px;line-height:1.2;white-space:normal;max-width:100%}
+  .btn,.btn-soft,.btn-danger{width:auto;padding-left:14px;padding-right:14px}
+  .topnav-btn,.cs-trigger,.ms-trigger,.module-option{width:100%}
+  .btn svg,.btn-soft svg,.btn-danger svg,.topnav-icon svg,.btn-icon svg,.nav-kicker svg{display:block;transform:none;transform-origin:center}
+  .btn-icon,.topnav-icon,.nav-kicker{flex:0 0 auto}
   .server-icon-btn{width:46px!important;height:46px!important;padding:0!important;border-radius:16px}
   .topbar-right .server-icon-btn{order:99}
   .server-icon-btn .btn-icon{width:20px;height:20px}
@@ -4643,7 +4673,57 @@ function getBrandingTemplates(){const box=document.getElementById('brandingTempl
 function renderBrandingPreview(){const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');const bar=document.getElementById('brandingPreviewBar');const titleView=document.getElementById('brandingPreviewTitle');const descView=document.getElementById('brandingPreviewDesc');const color=((colorEl&&colorEl.value)||'#5865F2').trim();if(bar)bar.style.background=color.startsWith('#')?color:('#'+color.replace('#',''));if(titleView)titleView.textContent=(titleEl&&titleEl.value)||'(No title)';const rawDesc=(descEl&&descEl.value)||'';const cleaned=rawDesc.split(/\\r?\\n/).map(line=>{const t=String(line||'').trim();if(/^\\[\\[(divider|sep|separator)(?::(small|large))?\\]\\]$/i.test(t))return '────────';if(/^\\[\\[(space|spacer)(?::(small|large))?\\]\\]$/i.test(t))return '';return line}).join('\\n').replace(/\\n{3,}/g,'\\n\\n').trim()||'(No description)';if(descView)descView.textContent=cleaned}
 function loadBrandingKey(key){const templates=getBrandingTemplates();const t=templates[key]||defaultEmbedTemplates[key]||{title:'',description:'',color:'#5865F2'};const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');if(colorEl)colorEl.value=t.color||'#5865F2';if(titleEl)titleEl.value=t.title||'';if(descEl)descEl.value=t.description||'';renderBrandingPreview()}
 function applyBrandingFormToTemplate(){const keyEl=document.getElementById('brandingKey');const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');const box=document.getElementById('brandingTemplates');if(!keyEl||!box)return;const key=keyEl.value;const templates=getBrandingTemplates();templates[key]={...(templates[key]||{}),color:((colorEl&&colorEl.value)||'').trim(),title:(titleEl&&titleEl.value)||'',description:(descEl&&descEl.value)||''};box.value=JSON.stringify(templates,null,2);renderBrandingPreview()}
-function setupModuleDrilldown(){if(['/overview','/tutorials','/documentation','/pricing'].includes(currentPath))return;const root=app.querySelector(':scope > .grid, :scope > .split');if(!root||root.dataset.drillReady==='true')return;root.dataset.drillReady='true';const panels=Array.from(root.children).filter(el=>el&&el.classList&&el.classList.contains('card'));if(panels.length<2)return;const drill=document.createElement('div');drill.className='module-drill';const options=document.createElement('div');options.className='module-options';const source=document.createElement('div');source.className='module-source';root.parentNode.insertBefore(drill,root);drill.appendChild(options);drill.appendChild(source);source.appendChild(root);panels.forEach((panel,index)=>{const title=(panel.querySelector('h3')&&panel.querySelector('h3').textContent)||('Section '+(index+1));const desc=(panel.querySelector('.muted')&&panel.querySelector('.muted').textContent)||'Open this section to edit its settings.';const btn=document.createElement('button');btn.type='button';btn.className='module-option';btn.innerHTML='<span><strong>'+esc(title)+'</strong><span class="muted">'+esc(desc)+'</span></span><span class="pill">Open</span>';btn.onclick=()=>{panels.forEach(p=>p.classList.remove('active-panel'));panel.classList.add('active-panel');if(!panel.querySelector(':scope > .module-editor-head')){const head=document.createElement('div');head.className='module-editor-head';head.innerHTML='<div><div class="module-editor-title">Editing</div><h3 style="margin:4px 0 0">'+esc(title)+'</h3></div><button type="button" class="btn-soft moduleBack" style="width:auto">Back</button>';panel.insertBefore(head,panel.firstChild);head.querySelector('.moduleBack').onclick=()=>{drill.classList.remove('editing');panels.forEach(p=>p.classList.remove('active-panel'));window.scrollTo({top:0,behavior:'smooth'})};}drill.classList.add('editing');window.scrollTo({top:0,behavior:'smooth'})};options.appendChild(btn);});}
+function setupModuleDrilldown(){
+ if(['/overview','/tutorials','/documentation','/pricing','/upgrade'].includes(currentPath))return;
+ const root=app.querySelector(':scope > .grid, :scope > .split');
+ if(!root||root.dataset.drillReady==='true')return;
+ const panels=Array.from(root.children).filter(el=>el&&el.classList&&el.classList.contains('card'));
+ if(panels.length<2)return;
+ root.dataset.drillReady='true';
+ root.classList.add('module-root');
+ panels.forEach(panel=>panel.classList.add('module-panel'));
+
+ const drill=document.createElement('div');
+ drill.className='module-drill';
+ const options=document.createElement('div');
+ options.className='module-options';
+ const source=document.createElement('div');
+ source.className='module-source';
+ root.parentNode.insertBefore(drill,root);
+ drill.appendChild(options);
+ drill.appendChild(source);
+ source.appendChild(root);
+
+ const openPanel=(panel,title)=>{
+  panels.forEach(p=>p.classList.remove('active-panel'));
+  panel.classList.add('active-panel');
+  if(!panel.querySelector(':scope > .module-editor-head')){
+   const head=document.createElement('div');
+   head.className='module-editor-head';
+   head.innerHTML='<div><div class="module-editor-title">Module</div><h3 style="margin:4px 0 0">'+esc(title)+'</h3></div><button type="button" class="btn-soft moduleBack" style="width:auto">Back to modules</button>';
+   panel.insertBefore(head,panel.firstChild);
+   const back=head.querySelector('.moduleBack');
+   if(back)back.onclick=()=>{
+    drill.classList.remove('editing');
+    panels.forEach(p=>p.classList.remove('active-panel'));
+    window.scrollTo({top:0,behavior:'smooth'});
+   };
+  }
+  drill.classList.add('editing');
+  window.scrollTo({top:0,behavior:'smooth'});
+ };
+
+ panels.forEach((panel,index)=>{
+  const title=(panel.querySelector('h3')&&panel.querySelector('h3').textContent)||('Module '+(index+1));
+  const desc=(panel.querySelector('.muted')&&panel.querySelector('.muted').textContent)||'Open this module page.';
+  const btn=document.createElement('button');
+  btn.type='button';
+  btn.className='module-option';
+  btn.innerHTML='<span><strong>'+esc(title)+'</strong><span class="muted">'+esc(desc)+'</span></span><span class="pill">Open</span>';
+  btn.onclick=()=>openPanel(panel,title);
+  options.appendChild(btn);
+ });
+}
 function wire(){
  if(!window.__navWired){
  window.__navWired=true;
