@@ -394,7 +394,7 @@ function getGuildAiAccess(guildId, storage = null) {
     const normalized = current && typeof current === 'object' ? current : {};
     return {
         guildId: id,
-        plan: ['none', 'trial', 'premium'].includes(String(normalized.plan || '').trim()) ? String(normalized.plan).trim() : 'none',
+        plan: ['none', 'trial', 'premium', 'plus', 'pro', 'plus_trial', 'pro_trial'].includes(String(normalized.plan || '').trim()) ? String(normalized.plan).trim() : 'none',
         enabled: Boolean(normalized.enabled),
         trialStartedAt: normalized.trialStartedAt || null,
         trialEndsAt: normalized.trialEndsAt || null,
@@ -417,7 +417,7 @@ function setGuildAiAccess(guildId, patch, storage = null) {
         ...incoming,
         guildId: id
     };
-    next.plan = ['none', 'trial', 'premium'].includes(String(next.plan || '').trim()) ? String(next.plan).trim() : 'none';
+    next.plan = ['none', 'trial', 'premium', 'plus', 'pro', 'plus_trial', 'pro_trial'].includes(String(next.plan || '').trim()) ? String(next.plan).trim() : 'none';
     next.enabled = Boolean(next.enabled);
     next.trialStartedAt = next.trialStartedAt || null;
     next.trialEndsAt = next.trialEndsAt || null;
@@ -432,9 +432,10 @@ function getEffectiveGuildAiAccess(guildId, storage = null) {
     const access = getGuildAiAccess(guildId, storage);
     const now = Date.now();
     const trialEndsAtMs = Date.parse(access.trialEndsAt || '');
-    const trialActive = access.plan === 'trial' && !Number.isNaN(trialEndsAtMs) && now < trialEndsAtMs;
-    const expiredTrial = access.plan === 'trial' && !Number.isNaN(trialEndsAtMs) && now >= trialEndsAtMs;
-    const premiumActive = access.plan === 'premium';
+    const isTrialPlan = ['trial', 'plus_trial', 'pro_trial'].includes(access.plan);
+    const trialActive = isTrialPlan && !Number.isNaN(trialEndsAtMs) && now < trialEndsAtMs;
+    const expiredTrial = isTrialPlan && !Number.isNaN(trialEndsAtMs) && now >= trialEndsAtMs;
+    const premiumActive = ['premium', 'plus', 'pro'].includes(access.plan);
     return {
         ...access,
         premiumActive,

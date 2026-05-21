@@ -26,6 +26,7 @@ const TRANSCRIPT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const dashboardOauthStates = new Map();
 const dashboardSessions = new Map();
+const dashboardApiRequests = [];
 const DASHBOARD_SESSION_COOKIE = 'dashboard_session';
 const BRAND_NAME = 'eazyDesk';
 const STAFF_COMMUNITY_GUILD_ID = '1009499668734017617';
@@ -635,6 +636,13 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     .pricing-faq{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
     .pricing-faq .faq-item{padding:20px;border-radius:18px;border:1px solid var(--bd);background:rgba(255,255,255,.03)}
     .pricing-cta{text-align:center;padding:36px 28px}
+    .upgrade-reward{position:relative;overflow:hidden;min-height:70vh;display:grid;place-items:center;text-align:center;padding:56px 28px}
+    .upgrade-word{position:absolute;color:color-mix(in srgb,var(--acc) 70%, white);opacity:.16;font-weight:900;font-size:clamp(24px,5vw,72px);animation:floatReward 7s ease-in-out infinite}
+    .upgrade-word.w1{left:6%;top:12%}.upgrade-word.w2{right:8%;top:20%;animation-delay:1s}.upgrade-word.w3{left:18%;bottom:12%;animation-delay:2s}.upgrade-word.w4{right:15%;bottom:18%;animation-delay:3s}
+    .party-emoji{position:absolute;font-size:28px;animation:partyFly 4.8s linear infinite;opacity:.85}
+    .party-emoji.e1{left:8%;bottom:-40px}.party-emoji.e2{left:30%;bottom:-60px;animation-delay:1s}.party-emoji.e3{left:60%;bottom:-50px;animation-delay:1.8s}.party-emoji.e4{left:82%;bottom:-70px;animation-delay:.4s}
+    @keyframes floatReward{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-18px) rotate(2deg)}}
+    @keyframes partyFly{0%{transform:translateY(0) rotate(0deg);opacity:0}12%{opacity:.9}100%{transform:translateY(-78vh) rotate(320deg);opacity:0}}
     @media(max-width:900px){.pricing-grid,.pricing-faq{grid-template-columns:1fr}.pricing-card.featured{transform:none}.preview-cards{grid-template-columns:1fr}.pricing-table table{min-width:0}}
     .err{color:#fecaca;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.10);padding:10px 12px;border-radius:14px}
     `;
@@ -787,6 +795,11 @@ function createStaffHtml(options = {}) {
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function note(message){if(!ok)return;ok.style.display='block';ok.innerHTML='<strong>Done</strong><div class="muted" style="margin-top:4px">'+esc(message)+'</div>'}
       function pill(text){return '<span class="pill">'+esc(text)+'</span>'}
+      function renderPermissionMatrix(matrix){const keys=['canViewConfiguration','canRunDiagnostics','canViewTranscripts','canCreateInvite','canRemoveBot'];return '<div class="card" style="grid-column:1/-1"><strong>Staff role permissions</strong><div class="muted" style="margin-top:6px">Each role family maps to specific operational actions.</div><div style="overflow:auto;margin-top:12px"><table style="width:100%;border-collapse:collapse;min-width:720px"><thead><tr><th style="text-align:left;padding:10px">Role family</th>'+keys.map(k=>'<th style="text-align:left;padding:10px">'+esc(k.replace(/^can/,''))+'</th>').join('')+'</tr></thead><tbody>'+((matrix||[]).map(row=>'<tr><td style="padding:10px;border-top:1px solid rgba(255,255,255,.08)"><strong>'+esc(row.name)+'</strong><div class="muted">'+esc((row.roleIds||[]).join(', '))+'</div></td>'+keys.map(k=>'<td style="padding:10px;border-top:1px solid rgba(255,255,255,.08)">'+(row.permissions&&row.permissions[k]?'Yes':'-')+'</td>').join('')+'</tr>').join(''))+'</tbody></table></div></div>'}
+      function renderLiveOps(data){const viewers=(data.activeViewers||[]).slice(0,8);const reqs=(data.apiRequests||[]).slice(0,8);return '<div class="grid" style="grid-column:1/-1">'+
+        '<div class="card"><strong>Current staff/dashboard viewers</strong><div class="list">'+(viewers.length?viewers.map(v=>'<div class="item"><div><strong>'+esc(v.userId)+'</strong><div class="muted">Last seen '+esc(String(v.lastSeenAt||'').replace('T',' ').slice(0,19))+'</div></div></div>').join(''):'<div class="muted">No active viewers tracked yet.</div>')+'</div></div>'+
+        '<div class="card"><strong>Recent API requests</strong><div class="list">'+(reqs.length?reqs.map(r=>'<div class="item"><div><strong>'+esc(r.method+' '+r.path)+'</strong><div class="muted">'+esc(r.status)+' • '+esc(r.durationMs)+'ms • '+esc(r.userId||'anonymous')+'</div></div></div>').join(''):'<div class="muted">No API requests tracked yet.</div>')+'</div></div>'+
+      '</div>'}
       function renderSummaryCards(cap){const groups=Array.isArray(cap&&cap.roleFamilies)?cap.roleFamilies:[];const cards=[
         {title:'Support Operations',desc:'Config, diagnostics, permission sync, setup restarts, channel repair.',enabled:!!cap.canRunDiagnostics},
         {title:'Quality Assurance',desc:'Transcript review, audit visibility, staff activity checks, compliance oversight.',enabled:!!cap.canViewTranscripts},
@@ -813,10 +826,46 @@ function createStaffHtml(options = {}) {
       '</div>'}
       async function postRepair(guildId,action){const data=await api('/api/staff/guild-repair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action})});return data}
       async function bindActions(){for(const btn of document.querySelectorAll('[data-invite]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-invite');const data=await api('/api/staff/guild-invite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});inviteMap[guildId]=data.inviteUrl||'';note('Invite ready for '+(data.guildName||'that server')+'.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-restart-setup]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-restart-setup');await api('/api/staff/guild-restart-setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});note('Setup restart prepared for that server.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-repair]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-repair');const action=btn.getAttribute('data-repair-action');const data=await postRepair(guildId,action);note((data&&data.result&&data.result.message)||'Repair finished.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-leave]')){btn.onclick=async()=>{const guildId=btn.getAttribute('data-leave');const guildName=btn.getAttribute('data-guild-name')||'this server';if(!confirm('Remove the bot from '+guildName+'?'))return;try{err.style.display='none';ok.style.display='none';btn.disabled=true;await api('/api/staff/guild-leave',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});delete inviteMap[guildId];note('The bot has been removed from '+guildName+'.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}}
-      async function load(){try{const data=await api('/api/staff/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];renderSummaryCards(data.capabilities||{});list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="muted">No bot-connected servers found.</div>';await bindActions()}catch(e){err.style.display='block';err.textContent=e.message}}load();
+      async function load(){try{const data=await api('/api/staff/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];renderSummaryCards(data.capabilities||{});summary.insertAdjacentHTML('beforeend',renderPermissionMatrix(data.permissionMatrix||[])+renderLiveOps(data));list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="muted">No bot-connected servers found.</div>';await bindActions()}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
 
     return baseDashboardPage({ title: 'Staff', body, script, ownerView, staffView: true, showStaffLink: true });
+}
+
+function createOwnerHtml(req = null) {
+    const body = `
+      <div class="card">
+        <h2 style="margin:0 0 6px">Owner Console</h2>
+        <div class="muted">Owner includes every staff capability, plus plan grants, AI access, live viewers, API requests, and audit history.</div>
+        <div id="ownerError" class="err" style="display:none;margin-top:12px"></div>
+        <div id="ownerSuccess" class="card" style="display:none;margin-top:12px;padding:12px 14px"></div>
+        <div id="ownerSummary" class="grid" style="margin-top:12px"></div>
+        <div id="ownerGuilds" class="list server-grid"></div>
+      </div>
+    `;
+
+    const script = `
+      const err=document.getElementById('ownerError'),ok=document.getElementById('ownerSuccess'),summary=document.getElementById('ownerSummary'),guildList=document.getElementById('ownerGuilds');
+      const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
+      function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
+      async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+      function note(t){ok.style.display='block';ok.innerHTML='<strong>Updated</strong><div class="muted">'+esc(t)+'</div>'}
+      function pill(t){return '<span class="pill">'+esc(t)+'</span>'}
+      function renderRows(title,items,mapper){return '<div class="card"><strong>'+esc(title)+'</strong><div class="list">'+(items.length?items.map(mapper).join(''):'<div class="muted">Nothing yet.</div>')+'</div></div>'}
+      function grantButtons(g){return '<div class="row"><button class="btn" data-plan="plus" data-guild="'+esc(g.id)+'">Grant Plus</button><button class="btn" data-plan="pro" data-guild="'+esc(g.id)+'">Grant Pro</button><button class="btn-soft" data-trial="plus_trial" data-guild="'+esc(g.id)+'">Plus Trial</button><button class="btn-soft" data-trial="pro_trial" data-guild="'+esc(g.id)+'">Pro Trial</button><button class="btn-danger" data-clear="'+esc(g.id)+'">Clear</button></div>'}
+      function guildCard(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px" />':'';const ai=g.aiAccess||{};return '<div class="item server-card can-manage"><div style="display:grid;gap:8px"><div class="row">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+pill(ai.statusLabel||'Free plan')+'</div><div class="muted">'+esc(g.memberCount||0)+' members • '+esc(ai.planLabel||'Free')+'</div>'+grantButtons(g)+'</div></div>'}
+      async function grant(guildId,action,plan){await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action,plan,days:14})})}
+      async function load(){try{const data=await api('/api/owner/activity');const viewers=data.activeViewers||[], reqs=data.apiRequests||[], audit=data.staffAudit||[];summary.innerHTML=
+        renderRows('Current staff in dashboard',viewers.slice(0,10),v=>'<div class="item"><div><strong>'+esc(v.userId)+'</strong><div class="muted">Last seen '+esc(String(v.lastSeenAt||'').replace('T',' ').slice(0,19))+'</div></div></div>')+
+        renderRows('Live API requests',reqs.slice(0,12),r=>'<div class="item"><div><strong>'+esc(r.method+' '+r.path)+'</strong><div class="muted">'+esc(r.status)+' • '+esc(r.durationMs)+'ms • '+esc(r.userId||'anonymous')+'</div></div></div>')+
+        renderRows('Staff audit',audit.slice(0,12),a=>'<div class="item"><div><strong>'+esc(a.action||'action')+'</strong><div class="muted">'+esc(a.status||'unknown')+' • '+esc(a.guildId||'global')+' • '+esc(String(a.createdAt||'').replace('T',' ').slice(0,19))+'</div></div></div>');
+        guildList.innerHTML=(data.guilds||[]).map(guildCard).join('')||'<div class="muted">No guilds found.</div>';
+        document.querySelectorAll('[data-plan]').forEach(b=>b.onclick=async()=>{try{await grant(b.dataset.guild,'set-plan',b.dataset.plan);note('Plan granted.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
+        document.querySelectorAll('[data-trial]').forEach(b=>b.onclick=async()=>{try{await grant(b.dataset.guild,'start-trial',b.dataset.trial);note('Trial started.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
+        document.querySelectorAll('[data-clear]').forEach(b=>b.onclick=async()=>{try{await grant(b.dataset.clear,'clear','none');note('Access cleared.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
+      }catch(e){err.style.display='block';err.textContent=e.message}}load();
+    `;
+    return baseDashboardPage({ title: 'Owner', body, script, ownerView: true, staffView: true, showStaffLink: true });
 }
 
 function createSetupHtml(req = null) {
@@ -1211,6 +1260,36 @@ function resolveStaffCapabilities(matchedRoleIds = [], isOwner = false) {
     };
 }
 
+function getStaffPermissionMatrix() {
+    const groups = getStaffRoleGroups();
+    return [
+        {
+            key: 'executive',
+            name: 'Executive',
+            roleIds: groups.executive,
+            permissions: resolveStaffCapabilities(groups.executive, true)
+        },
+        {
+            key: 'supportOperations',
+            name: 'Support Operations',
+            roleIds: groups.supportOperations,
+            permissions: resolveStaffCapabilities(groups.supportOperations, false)
+        },
+        {
+            key: 'qualityAssurance',
+            name: 'Quality Assurance',
+            roleIds: groups.qualityAssurance,
+            permissions: resolveStaffCapabilities(groups.qualityAssurance, false)
+        },
+        {
+            key: 'communityManagement',
+            name: 'Community Management',
+            roleIds: groups.communityManagement,
+            permissions: resolveStaffCapabilities(groups.communityManagement, false)
+        }
+    ];
+}
+
 async function getSeniorStaffAccess(client, req) {
     if (isStrictOwnerViewer(req)) {
         return {
@@ -1379,6 +1458,8 @@ function getDashboardSession(req) {
         entry.csrfToken = randomToken(18);
         dashboardSessions.set(sessionId, entry);
     }
+    entry.lastSeenAt = new Date().toISOString();
+    dashboardSessions.set(sessionId, entry);
     return entry && typeof entry === 'object' ? entry : null;
 }
 
@@ -1443,15 +1524,23 @@ function getGuildAiUiState(guildId, storage = null) {
     const trialRemainingDays = trialRemainingMs
         ? Math.max(0, Math.ceil(trialRemainingMs / (24 * 60 * 60 * 1000)))
         : 0;
+    const planLabel = access.plan === 'pro' || access.plan === 'pro_trial'
+        ? 'Pro'
+        : access.plan === 'plus' || access.plan === 'plus_trial' || access.plan === 'premium'
+            ? 'Plus'
+            : access.plan === 'trial'
+                ? 'AI'
+                : 'Free';
     return {
         ...access,
         statusLabel: access.premiumActive
-            ? 'Premium AI active'
+            ? `${planLabel} active`
             : access.trialActive
-                ? `Trial active • ${trialRemainingDays} day${trialRemainingDays === 1 ? '' : 's'} left`
+                ? `${planLabel} trial active • ${trialRemainingDays} day${trialRemainingDays === 1 ? '' : 's'} left`
                 : access.expiredTrial
                     ? 'Trial expired'
-                    : 'No AI subscription',
+                    : 'Free plan',
+        planLabel,
         trialRemainingDays
     };
 }
@@ -1753,6 +1842,41 @@ function recordStaffAuditEvent(req, entry = {}, storage = null) {
     return item;
 }
 
+function recordDashboardApiRequest(req, pathname, startedAt, status = 200) {
+    const item = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        createdAt: new Date(startedAt || Date.now()).toISOString(),
+        method: String(req?.method || 'GET'),
+        path: String(pathname || ''),
+        status: Number(status || 0),
+        durationMs: Math.max(0, Date.now() - Number(startedAt || Date.now())),
+        userId: getDashboardSessionUserId(req) || null,
+        ip: String(req?.headers?.['x-forwarded-for'] || req?.socket?.remoteAddress || '').split(',')[0].trim() || null
+    };
+    dashboardApiRequests.push(item);
+    while (dashboardApiRequests.length > 250) dashboardApiRequests.shift();
+    return item;
+}
+
+function getDashboardViewerList() {
+    const seen = new Map();
+    for (const entry of dashboardSessions.values()) {
+        const userId = String(entry?.userId || '').trim();
+        if (!/^\d{17,20}$/.test(userId)) continue;
+        const current = seen.get(userId);
+        const lastSeenAt = String(entry?.lastSeenAt || entry?.createdAt || '').trim();
+        if (!current || String(current.lastSeenAt || '') < lastSeenAt) {
+            seen.set(userId, {
+                userId,
+                guildIds: Array.isArray(entry.guildIds) ? entry.guildIds : [],
+                createdAt: entry.createdAt ? new Date(entry.createdAt).toISOString() : null,
+                lastSeenAt
+            });
+        }
+    }
+    return [...seen.values()].sort((a, b) => String(b.lastSeenAt || '').localeCompare(String(a.lastSeenAt || ''))).slice(0, 50);
+}
+
 function enforceStaffRateLimit(req, actionKey, max = 8, windowMs = 60_000) {
     const userId = getDashboardSessionUserId(req) || 'anonymous';
     const key = `${userId}:${String(actionKey || 'staff')}`;
@@ -1839,7 +1963,7 @@ function getGuildRuntimeDiagnostics(client, guild, config = {}, storage = null) 
         ownerId: guild?.ownerId || null,
         botJoinDate: getBotGuildMember(guild)?.joinedAt ? new Date(getBotGuildMember(guild).joinedAt).toISOString() : null,
         shardAssignment: shardIds.length ? `Shard ${shardIds.join(', ')}` : `Process ${process.pid}`,
-        subscriptionPlan: guildAi.premiumActive ? 'Premium AI' : guildAi.trialActive ? 'AI Trial' : String(botConfig?.subscriptions?.[guild?.id]?.plan || botConfig?.defaultPlan || 'Standard'),
+        subscriptionPlan: guildAi.premiumActive ? `${guildAi.planLabel || 'Plus'} AI` : guildAi.trialActive ? `${guildAi.planLabel || 'AI'} Trial` : String(botConfig?.subscriptions?.[guild?.id]?.plan || botConfig?.defaultPlan || 'Free'),
         enabledModules: getGuildEnabledModules(config),
         apiLatencyMs: Number(client?.ws?.ping || 0),
         databaseLatencyMs: null,
@@ -2193,6 +2317,12 @@ async function repairGuildChannels(guild, config = {}) {
 async function handleApi(req, res, url, client) {
     const { pathname } = url;
     const method = req.method || 'GET';
+    const startedAt = Date.now();
+    const rawWriteHead = res.writeHead.bind(res);
+    res.writeHead = (...args) => {
+        try { if (pathname.startsWith('/api/')) recordDashboardApiRequest(req, pathname, startedAt, args[0]); } catch {}
+        return rawWriteHead(...args);
+    };
 
     if (method === 'POST' && pathname === '/api/auth/login') {
         const body = await readBody(req);
@@ -2394,7 +2524,35 @@ async function handleApi(req, res, url, client) {
             guilds,
             staffGuildId: STAFF_COMMUNITY_GUILD_ID,
             matchedRoleIds: gate.staffAccess.matchedRoleIds,
-            capabilities: gate.staffAccess.capabilities
+            capabilities: gate.staffAccess.capabilities,
+            permissionMatrix: getStaffPermissionMatrix(),
+            activeViewers: getDashboardViewerList(),
+            apiRequests: dashboardApiRequests.slice(-40).reverse()
+        });
+        return true;
+    }
+
+    if (method === 'GET' && pathname === '/api/owner/activity') {
+        if (!isStrictOwnerViewer(req)) {
+            sendJson(res, 403, { error: 'Owner access required' });
+            return true;
+        }
+        const activeStorage = ticketStore.getActiveStorage();
+        const staffAudit = getStaffAuditLog(activeStorage).slice(-100).reverse();
+        const guilds = [...(client?.guilds?.cache?.values?.() || [])].map(guild => ({
+            id: guild.id,
+            name: guild.name,
+            memberCount: guild.memberCount ?? null,
+            iconURL: typeof guild.iconURL === 'function' ? guild.iconURL({ extension: 'png', size: 64 }) : null,
+            aiAccess: getGuildAiUiState(guild.id, activeStorage)
+        })).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+        sendJson(res, 200, {
+            guilds,
+            staffGuildId: STAFF_COMMUNITY_GUILD_ID,
+            permissionMatrix: getStaffPermissionMatrix(),
+            activeViewers: getDashboardViewerList(),
+            apiRequests: dashboardApiRequests.slice(-100).reverse(),
+            staffAudit
         });
         return true;
     }
@@ -2845,20 +3003,26 @@ async function handleApi(req, res, url, client) {
         let nextPatch = {};
 
         if (action === 'start-trial') {
+            const trialPlan = ['plus_trial', 'pro_trial', 'trial'].includes(String(body.plan || '').trim().toLowerCase())
+                ? String(body.plan).trim().toLowerCase()
+                : 'trial';
             const trialDays = Math.max(1, Math.min(30, Number(body.days || 7)));
             const startedAt = new Date().toISOString();
             const endsAt = new Date(Date.now() + (trialDays * 24 * 60 * 60 * 1000)).toISOString();
             nextPatch = {
-                plan: 'trial',
+                plan: trialPlan,
                 enabled: true,
                 trialStartedAt: startedAt,
                 trialEndsAt: endsAt,
                 notifiedTrialExpiredAt: null,
                 grantedByOwnerId: ownerId
             };
-        } else if (action === 'set-premium') {
+        } else if (action === 'set-premium' || action === 'set-plan') {
+            const plan = ['plus', 'pro', 'premium'].includes(String(body.plan || '').trim().toLowerCase())
+                ? String(body.plan).trim().toLowerCase()
+                : 'plus';
             nextPatch = {
-                plan: 'premium',
+                plan,
                 enabled: true,
                 trialStartedAt: current.trialStartedAt || null,
                 trialEndsAt: null,
@@ -3472,7 +3636,7 @@ function pageDescriptionForPath(path) {
         '/statistics': 'Track recent performance, close reasons, and staff activity trends.',
         '/embed-editor': 'Update reusable bot message templates with a simpler editing workflow.',
         '/pricing': 'Compare plans and see what is available for this server.',
-        '/upgrade': 'Upgrade to Premium or contact sales for Enterprise plans.',
+        '/upgrade': 'Upgrade to Plus or contact sales for Pro plans.',
         '/documentation': 'Reference placeholders, templates, and dashboard usage notes.'
     };
     return map[path] || 'Manage this part of the dashboard with a simpler, more focused layout.';
@@ -4080,12 +4244,14 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
   .module-option .pill{flex:0 0 auto}
   .module-editor-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.10)}
   .module-editor-title{font-size:13px;font-weight:850;color:var(--mt);letter-spacing:.12em;text-transform:uppercase}
+  .module-drill.editing{position:fixed;inset:0;z-index:80;background:rgba(2,6,23,.76);backdrop-filter:blur(16px);padding:28px;overflow:auto;animation:modalIn .18s ease}
   .module-drill.editing > .module-options{display:none}
   .module-drill.editing > .module-source{display:block}
   .module-drill.editing .module-root{display:grid!important;grid-template-columns:1fr!important;gap:0!important}
   .module-drill.editing .module-panel{display:none!important}
   .module-drill.editing .module-panel.active-panel{display:block!important;width:100%;max-width:980px;margin:0 auto}
   .module-drill:not(.editing) > .module-source{display:none}
+  @keyframes modalIn{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:scale(1)}}
  .list-meta{margin-top:4px;font-size:12px;color:rgba(247,248,255,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  .help{margin-top:6px;font-size:12px;color:rgba(247,248,255,.60)}
  textarea{min-height:110px}
@@ -4143,7 +4309,7 @@ const app=document.getElementById('app'),notice=document.getElementById('notice'
 const note=(t,m='')=>{notice.textContent=t||'';notice.className='notice '+m};
 async function api(path,opt={}){const h={'Content-Type':'application/json',...(opt.headers||{})};const tok=localStorage.getItem(tokenKey);if(tok)h['x-dashboard-token']=tok;const csrf=(state&&state.csrfToken)||'';if(csrf&&String(opt.method||'GET').toUpperCase()!=='GET')h['x-csrf-token']=csrf;const r=await fetch(path,{credentials:'include',...opt,headers:h});if(r.status===401){const next=encodeURIComponent(location.pathname+location.search);window.location='/login?next='+next;throw new Error('Unauthorized')}const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
 function navTitleForPath(p){return ({ '/overview':'Home','/settings':'Settings','/availability':'Availability','/tutorials':'Tutorials','/commands/ticket-types':'Ticket Types','/commands/tag':'Tags','/tickets':'Tickets','/transcripts':'Transcripts','/commands/feedback':'Feedback','/statistics':'Statistics','/embed-editor':'Embed Editor','/pricing':'Pricing','/upgrade':'Upgrade','/documentation':'Documentation'}[p]||'Dashboard')}
-function pageDescForPath(p){return ({ '/overview':'A cleaner snapshot of ticket activity, queue health, and the most common next actions.','/settings':'Core server configuration, routing, and system behavior in one place.','/availability':'Adjust queue expectations per ticket type without digging through commands.','/tutorials':'Guides, walkthroughs, and internal onboarding material for your staff.','/commands/ticket-types':'Shape each ticket flow, assign support coverage, and keep categories tidy.','/commands/tag':'Store reusable answers and keep repeat support responses consistent.','/tickets':'Review active conversations, add notes, and handle escalations quickly.','/transcripts':'Browse saved transcripts and archive history without leaving the dashboard.','/commands/feedback':'Control where feedback lands and how the flow is presented.','/statistics':'Track recent performance, close reasons, and staff activity trends.','/embed-editor':'Update reusable bot message templates with a simpler editing workflow.','/pricing':'Compare plans and see what is available for this server.','/upgrade':'Upgrade to Premium or contact sales for Enterprise plans.','/documentation':'Reference placeholders, templates, and dashboard usage notes.'}[p]||'Manage this part of the dashboard with a simpler, more focused layout.')}
+function pageDescForPath(p){return ({ '/overview':'A cleaner snapshot of ticket activity, queue health, and the most common next actions.','/settings':'Core server configuration, routing, and system behavior in one place.','/availability':'Adjust queue expectations per ticket type without digging through commands.','/tutorials':'Guides, walkthroughs, and internal onboarding material for your staff.','/commands/ticket-types':'Shape each ticket flow, assign support coverage, and keep categories tidy.','/commands/tag':'Store reusable answers and keep repeat support responses consistent.','/tickets':'Review active conversations, add notes, and handle escalations quickly.','/transcripts':'Browse saved transcripts and archive history without leaving the dashboard.','/commands/feedback':'Control where feedback lands and how the flow is presented.','/statistics':'Track recent performance, close reasons, and staff activity trends.','/embed-editor':'Update reusable bot message templates with a simpler editing workflow.','/pricing':'Compare plans and see what is available for this server.','/upgrade':'Upgrade to Plus or contact sales for Pro plans.','/documentation':'Reference placeholders, templates, and dashboard usage notes.'}[p]||'Manage this part of the dashboard with a simpler, more focused layout.')}
 function parseEmoji(raw){const s=String(raw||'').trim();if(!s)return null;const m=s.match(/^<(a?):([a-zA-Z0-9_]+):(\d{17,20})>$/);if(m)return{animated:m[1]==='a',name:m[2],id:m[3],raw:s};return{unicode:s,raw:s}}
 function emojiHtml(raw){const e=parseEmoji(raw);if(!e)return '';if(e.id){const ext=e.animated?'gif':'png';return '<span class="emoji-inline"><img src="https://cdn.discordapp.com/emojis/'+e.id+'.'+ext+'?size=64&quality=lossless" alt="'+esc(e.name||'emoji')+'" /></span>'}return '<span class="emoji-inline">'+esc(e.unicode)+'</span>'}
 function teamLabel(team){const src=team&&typeof team==='object'?team:{};const e=emojiHtml(src.emoji||'');return (e?e+' ':'')+esc(src.name||'')}
@@ -4197,10 +4363,10 @@ function categorySelect(id,selectedId,placeholder){const cats=Array.isArray(stat
 
    '<div class="card">'+
     '<h3>AI Access</h3>'+
-    '<div class="pill '+(ai.premiumActive?'ok':ai.trialActive?'warn':ai.expiredTrial?'danger':'')+'">'+esc(ai.statusLabel||'No AI subscription')+'</div>'+
+    '<div class="pill '+(ai.premiumActive?'ok':ai.trialActive?'warn':ai.expiredTrial?'danger':'')+'">'+esc(ai.statusLabel||'Free plan')+'</div>'+
     '<p class="muted" style="margin-top:10px">'+(ai.hasAccess
         ? 'AI suggested replies are enabled for this server.'
-        : 'This server does not own a premium AI subscription. Ask the bot owner for access or a trial.')+'</p>'+
+        : 'This server does not own a Plus AI subscription. Ask the bot owner for access or a trial.')+'</p>'+
     '<div style="margin-top:12px"><button id="aiUpsell" class="btn-soft" type="button">Learn About AI Access</button></div>'+
    '</div>'+
   '</div>'+
@@ -4500,15 +4666,21 @@ function renderTranscripts(){
 }
 function renderFeedback(){return '<div class="card"><h3>Feedback Command Settings</h3><label>Feedback Channel</label>'+channelSelect('feedbackConfigId',state.botConfig.appealsChannelId||'','Select feedback channel')+'<div style="margin-top:10px"><button id="saveFeedback" class="btn">Save</button></div></div>'}
 function renderAppeal(){return renderFeedback()}
-function renderStats(){const t=state.statistics&&state.statistics.totals?state.statistics.totals:{activeTickets:0,totalClaimed:0,totalClosed:0};return '<div class="grid"><div class="card"><h3>Numbers (14d)</h3><div class="row"><div class="item"><div class="muted">Active tickets</div><strong>'+t.activeTickets+'</strong></div><div class="item"><div class="muted">Claimed</div><strong>'+t.totalClaimed+'</strong></div><div class="item"><div class="muted">Closed</div><strong>'+t.totalClosed+'</strong></div></div><div class="muted" style="margin-top:8px">Claimed/Closed exclude self-opened tickets when that data is available.</div></div><div class="card"><h3>Support Member Lookup</h3><label>User (ID or mention)</label><input id="staffLookupQuery" placeholder="<@123> or 123..." /><div class="row" style="margin-top:10px"><button id="staffLookupBtn" class="btn">Lookup</button><button id="staffLookupClear" class="btn-soft">Clear</button></div><div id="staffLookupResult" class="list" style="margin-top:10px"></div></div></div>'}
+function renderStats(){const stats=state.statistics||{};const t=stats.totals||{activeTickets:0,totalClaimed:0,totalClosed:0};const top=(stats.topCloseReasons||[]).slice(0,6);const tags=(stats.tagUsage||[]).slice(0,6);return '<div class="grid">'+
+ '<div class="card" style="grid-column:1/-1"><h3>Statistics Overview</h3><div class="stat-strip"><div class="stat-tile"><div class="muted">Active tickets</div><strong>'+t.activeTickets+'</strong></div><div class="stat-tile"><div class="muted">Claims</div><strong>'+t.totalClaimed+'</strong></div><div class="stat-tile"><div class="muted">Closed</div><strong>'+t.totalClosed+'</strong></div><div class="stat-tile"><div class="muted">Close rate</div><strong>'+Math.round((t.totalClosed/Math.max(1,t.totalClaimed))*100)+'%</strong></div></div></div>'+
+ '<div class="card" style="grid-column:1/-1"><div class="item-top"><h3>Activity Graph</h3><div class="row" style="width:auto"><button class="btn-soft statsView" data-chart="bar">Bar</button><button class="btn-soft statsView" data-chart="line">Line</button><button class="btn-soft statsView" data-chart="area">Area</button></div></div><canvas id="statsChart" height="260" style="width:100%;max-height:320px"></canvas><div class="muted">Switch views to compare claimed and closed tickets over the last 14 days.</div></div>'+
+ '<div class="card"><h3>Top Close Reasons</h3><div class="list">'+(top.length?top.map(r=>'<div class="item"><strong>'+esc(r.reason||'Unknown')+'</strong><span class="pill">'+esc(r.count||0)+'</span></div>').join(''):'<div class="muted">No close reason data yet.</div>')+'</div></div>'+
+ '<div class="card"><h3>Popular Tags</h3><div class="list">'+(tags.length?tags.map(r=>'<div class="item"><strong>'+esc(r.name||'Unknown')+'</strong><span class="pill">'+esc(r.count||0)+'</span></div>').join(''):'<div class="muted">No tag data yet.</div>')+'</div></div>'+
+ '<div class="card"><h3>Support Member Lookup</h3><label>User (ID or mention)</label><input id="staffLookupQuery" placeholder="<@123> or 123..." /><div class="row" style="margin-top:10px"><button id="staffLookupBtn" class="btn">Lookup</button><button id="staffLookupClear" class="btn-soft">Clear</button></div><div id="staffLookupResult" class="list" style="margin-top:10px"></div></div>'+
+ '</div>'}
 function renderBranding(){const templates=state.botConfig.embedTemplates||defaultEmbedTemplates;const keys=Object.keys(templates);const firstKey=keys[0]||'ticketClaimed';const first=templates[firstKey]||{title:'',description:'',color:'#5865F2'};return '<div class="grid"><div class="card"><h3>Visual Components V2 Template Editor</h3><p class="muted">Template workflow: pick a template, edit text, preview live, then save. These templates render into Components V2 containers (accent color applies only when the bot decides the message is success/error).</p><div class="item" style="margin-top:10px"><div class="muted">Separators: add <code>[[divider]]</code>, <code>[[divider:large]]</code>, <code>[[space]]</code>, or <code>[[space:large]]</code> on their own line inside <strong>Description</strong> to insert dividers/spacers.</div></div><div class="row"><div><label>Template</label><select id="brandingKey">'+keys.map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join('')+'</select></div><div><label>Accent Color</label><input id="brandingColor" value="'+esc(first.color||'#5865F2')+'" placeholder="#5865F2" /></div></div><label>Title</label><input id="brandingTitle" value="'+esc(first.title||'')+'" /><label>Description</label><textarea id="brandingDescription" style="min-height:160px">'+esc(first.description||'')+'</textarea><div class="row" style="margin-top:10px"><button id="applyBrandingTemplate" class="btn-soft">Apply to Template</button><button id="saveBranding" class="btn">Save Templates</button></div><div class="row" style="margin-top:10px"><button id="resetBrandingDefaults" class="btn-soft">Reset to Defaults</button><button id="formatBrandingJson" class="btn-soft">Format JSON</button></div></div><div class="card"><h3>Live Preview</h3><div class="preview-shell"><div class="preview-msg"><div class="preview-avatar"></div><div class="preview-content"><div class="preview-name">Tickets Bot <span class="preview-tag">BOT</span></div><div id="brandingPreviewEmbed" class="preview-embed"><div id="brandingPreviewBar" class="preview-bar"></div><div class="preview-main"><div id="brandingPreviewTitle" class="preview-title"></div><div id="brandingPreviewDesc" class="preview-desc"></div></div></div></div></div></div><label style="margin-top:14px">Advanced JSON</label><textarea id="brandingTemplates" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(templates,null,2))+'</textarea></div></div>'}
-function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Starter support for small communities',features:['Unlimited tickets','Custom panels','Logs & transcripts','Dashboard access'],cta:'Current plan',active:true},{name:'Premium',price:'$12/mo',description:'Modern support automation for growing teams',features:['AI Moderation','Unlimited tickets','Custom panels','Logging','Priority support'],cta:'Most popular',active:false,featured:true},{name:'Enterprise',price:'Custom',description:'Tailored support for large servers and service teams',features:['Dedicated onboarding','Custom integrations','Advanced analytics','Priority SLA','Custom panels'],cta:'Contact sales',active:false}];const rows=[['AI Moderation','—','Yes','Yes'],['Unlimited Tickets','Yes','Yes','Yes'],['Custom Panels','Yes','Yes','Yes'],['Logging','Yes','Yes','Yes'],['Priority Support','—','Yes','Yes']];const faqs=[{q:'Can I start on the Free plan and upgrade later?','a':'Yes. The Free plan is available immediately, and you can upgrade anytime without losing configuration.'},{q:'What does “Custom” include?','a':'Enterprise includes dedicated setup support, custom integrations, higher limits, and SLA-based response times.'},{q:'Does Premium include AI Moderation?','a':'Yes. Premium includes AI-assisted moderation workflows for tickets and posts.'},{q:'How does billing work?','a':'Premium is billed monthly. Enterprise billing is handled through a custom agreement with your team.'}];return '<div class="page-shell pricing-page">'+
+function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Starter support for small communities',features:['Unlimited tickets','Custom panels','Logs & transcripts','Dashboard access'],cta:'Current plan',active:true},{name:'Plus',price:'$12/mo',description:'Modern support automation for growing teams',features:['AI Moderation','Unlimited tickets','Custom panels','Logging','Priority support'],cta:'Most popular',active:false,featured:true},{name:'Pro',price:'Custom',description:'Tailored support for large servers and service teams',features:['Dedicated onboarding','Custom integrations','Advanced analytics','Priority SLA','Custom panels'],cta:'Contact sales',active:false}];const rows=[['AI Moderation','—','Yes','Yes'],['Unlimited Tickets','Yes','Yes','Yes'],['Custom Panels','Yes','Yes','Yes'],['Logging','Yes','Yes','Yes'],['Priority Support','—','Yes','Yes']];const faqs=[{q:'Can I start on the Free plan and upgrade later?','a':'Yes. The Free plan is available immediately, and you can upgrade anytime without losing configuration.'},{q:'What does “Custom” include?','a':'Pro includes dedicated setup support, custom integrations, higher limits, and SLA-based response times.'},{q:'Does Plus include AI Moderation?','a':'Yes. Plus includes AI-assisted moderation workflows for tickets and posts.'},{q:'How does billing work?','a':'Plus is billed monthly. Pro billing is handled through a custom agreement with your team.'}];return '<div class="page-shell pricing-page">'+
     '<section class="pricing-hero card">'+
       '<div class="row" style="align-items:flex-start;gap:24px">'+
         '<div style="max-width:640px">'+
           '<div class="page-kicker">Pricing</div>'+
           '<h3 style="margin:0 0 14px">Simple billing for ticket support and staff operations.</h3>'+
-          '<p class="muted" style="max-width:620px">Pick the right plan for your community: Free for basic ticket workflows, Premium for AI and priority support, or Enterprise for fully custom server operations.</p>'+
+          '<p class="muted" style="max-width:620px">Pick the right plan for your community: Free for basic ticket workflows, Plus for AI and priority support, or Pro for fully custom server operations.</p>'+
           '<div class="row" style="gap:10px;flex-wrap:wrap;margin-top:22px">'+
             '<a class="btn primary" href="#plans">View plans</a>'+
             '<a class="btn-soft" href="#faq">Read FAQ</a>'+
@@ -4568,7 +4740,7 @@ function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Start
       '<h3 style="margin:0 0 16px">Compare plans</h3>'+ 
       '<div style="overflow-x:auto">'+
         '<table><thead><tr><th style="min-width:220px">Feature</th>'+
-          '<th>Free</th><th>Premium</th><th>Enterprise</th></tr></thead><tbody>'+ 
+          '<th>Free</th><th>Plus</th><th>Pro</th></tr></thead><tbody>'+ 
           rows.map(row=>'<tr><td>'+esc(row[0])+'</td><td class="'+(row[1]==='Yes'?'active':'')+'">'+esc(row[1])+'</td><td class="'+(row[2]==='Yes'?'active':'')+'">'+esc(row[2])+'</td><td class="'+(row[3]==='Yes'?'active':'')+'">'+esc(row[3])+'</td></tr>').join('')+
         '</tbody></table>'+ 
       '</div>'+ 
@@ -4593,7 +4765,7 @@ function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Start
       '<div style="max-width:760px;margin:0 auto">'+
         '<div class="page-kicker">Ready to choose?</div><h3 style="margin:0 0 12px">Start with a plan that fits your team.</h3><p class="muted">No matter the size of your server, you can keep ticket flow clean, staff handoffs simple, and admin work centralized.</p>'+ 
         '<div class="row" style="justify-content:center;gap:12px;margin-top:20px;flex-wrap:wrap">'+
-          '<button class="btn primary" type="button">Upgrade to Premium</button>'+ 
+          '<button class="btn primary" type="button">Upgrade to Plus</button>'+ 
           '<button class="btn-soft" type="button">Contact sales</button>'+ 
         '</div>'+ 
       '</div>'+ 
@@ -4601,8 +4773,8 @@ function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Start
   '</div>'}
 function renderUpgrade(){
     return '<div class="grid">'+
-        '<div class="card"><h3>Upgrade</h3><p class="muted">Upgrade from Free to Premium for advanced features, or contact sales for Enterprise options.</p><div style="margin-top:12px" class="row"><button class="btn primary">Upgrade to Premium</button><button class="btn-soft">Contact Sales</button></div></div>'+
-        '<div class="card"><h3>Enterprise</h3><p class="muted">Custom plans for large communities — includes SLA, dedicated onboarding, and integrations.</p><div style="margin-top:12px"><ul><li>Dedicated onboarding</li><li>Custom integrations</li><li>Advanced analytics</li><li>Priority SLA</li></ul></div></div>'+
+        '<div class="card"><h3>Upgrade</h3><p class="muted">Upgrade from Free to Plus for advanced features, or contact sales for Pro options.</p><div style="margin-top:12px" class="row"><button class="btn primary">Upgrade to Plus</button><button class="btn-soft">Contact Sales</button></div></div>'+
+        '<div class="card"><h3>Pro</h3><p class="muted">Custom plans for large communities — includes SLA, dedicated onboarding, and integrations.</p><div style="margin-top:12px"><ul><li>Dedicated onboarding</li><li>Custom integrations</li><li>Advanced analytics</li><li>Priority SLA</li></ul></div></div>'+
     '</div>'
 }
 function renderTutorials(){
@@ -4670,7 +4842,7 @@ function fillType(name){const t=state.ticketTypes.find(x=>x.name===name);if(!t)r
 function fillTag(name){const t=state.tags.find(x=>x.name===name);if(!t)return;tagName.value=t.name||'';tagKind.value=t.kind||'suggestion';tagTitle.value=t.title||'';tagDesc.value=t.description||'';tagKeys.value=(t.keywords||[]).join(', ')}
 function fillTeam(name){const t=state.supportTeams.find(x=>x.name===name);if(!t)return;stName.value=t.name||'';stEmoji.value=t.emoji||'';setRoleSelection('stRoles',(t.roleIds||(t.roleId?[t.roleId]:[]))||[])}
 function getBrandingTemplates(){const box=document.getElementById('brandingTemplates');if(!box)return {};try{const parsed=JSON.parse(box.value);return parsed&&typeof parsed==='object'?parsed:{};}catch{return {}}}
-function renderBrandingPreview(){const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');const bar=document.getElementById('brandingPreviewBar');const titleView=document.getElementById('brandingPreviewTitle');const descView=document.getElementById('brandingPreviewDesc');const color=((colorEl&&colorEl.value)||'#5865F2').trim();if(bar)bar.style.background=color.startsWith('#')?color:('#'+color.replace('#',''));if(titleView)titleView.textContent=(titleEl&&titleEl.value)||'(No title)';const rawDesc=(descEl&&descEl.value)||'';const cleaned=rawDesc.split(/\\r?\\n/).map(line=>{const t=String(line||'').trim();if(/^\\[\\[(divider|sep|separator)(?::(small|large))?\\]\\]$/i.test(t))return '────────';if(/^\\[\\[(space|spacer)(?::(small|large))?\\]\\]$/i.test(t))return '';return line}).join('\\n').replace(/\\n{3,}/g,'\\n\\n').trim()||'(No description)';if(descView)descView.textContent=cleaned}
+function renderBrandingPreview(){const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');const bar=document.getElementById('brandingPreviewBar');const titleView=document.getElementById('brandingPreviewTitle');const descView=document.getElementById('brandingPreviewDesc');const color=((colorEl&&colorEl.value)||'#5865F2').trim();if(bar)bar.style.background=color.startsWith('#')?color:('#'+color.replace('#',''));if(titleView)titleView.textContent=(titleEl&&titleEl.value)||'(No title)';const rawDesc=(descEl&&descEl.value)||'';const cleaned=rawDesc.split(/\\r?\\n/).map(line=>{const t=String(line||'').trim();if(/^\\[\\[(divider|sep|separator)(?::(small|large))?\\]\\]$/i.test(t))return '--------';if(/^\\[\\[(space|spacer)(?::(small|large))?\\]\\]$/i.test(t))return '';return line}).join('\\n').replace(/\\n{3,}/g,'\\n\\n').trim()||'(No description)';if(descView)descView.textContent=cleaned}
 function loadBrandingKey(key){const templates=getBrandingTemplates();const t=templates[key]||defaultEmbedTemplates[key]||{title:'',description:'',color:'#5865F2'};const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');if(colorEl)colorEl.value=t.color||'#5865F2';if(titleEl)titleEl.value=t.title||'';if(descEl)descEl.value=t.description||'';renderBrandingPreview()}
 function applyBrandingFormToTemplate(){const keyEl=document.getElementById('brandingKey');const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');const box=document.getElementById('brandingTemplates');if(!keyEl||!box)return;const key=keyEl.value;const templates=getBrandingTemplates();templates[key]={...(templates[key]||{}),color:((colorEl&&colorEl.value)||'').trim(),title:(titleEl&&titleEl.value)||'',description:(descEl&&descEl.value)||''};box.value=JSON.stringify(templates,null,2);renderBrandingPreview()}
 function setupModuleDrilldown(){
@@ -4700,16 +4872,17 @@ function setupModuleDrilldown(){
   if(!panel.querySelector(':scope > .module-editor-head')){
    const head=document.createElement('div');
    head.className='module-editor-head';
-   head.innerHTML='<div><div class="module-editor-title">Module</div><h3 style="margin:4px 0 0">'+esc(title)+'</h3></div><button type="button" class="btn-soft moduleBack" style="width:auto">Back to modules</button>';
+   head.innerHTML='<div><div class="module-editor-title">Overlay configuration modal</div><h3 style="margin:4px 0 0">'+esc(title)+'</h3></div><button type="button" class="btn-soft moduleBack" style="width:auto">X Close</button>';
    panel.insertBefore(head,panel.firstChild);
    const back=head.querySelector('.moduleBack');
    if(back)back.onclick=()=>{
     drill.classList.remove('editing');
     panels.forEach(p=>p.classList.remove('active-panel'));
-    window.scrollTo({top:0,behavior:'smooth'});
+    document.body.style.overflow='';
    };
   }
   drill.classList.add('editing');
+  document.body.style.overflow='hidden';
   window.scrollTo({top:0,behavior:'smooth'});
  };
 
@@ -4723,8 +4896,30 @@ function setupModuleDrilldown(){
   btn.onclick=()=>openPanel(panel,title);
   options.appendChild(btn);
  });
+ drill.addEventListener('click',ev=>{if(ev.target===drill){drill.classList.remove('editing');panels.forEach(p=>p.classList.remove('active-panel'));document.body.style.overflow='';}});
+ if(!window.__moduleEscBound){window.__moduleEscBound=true;document.addEventListener('keydown',ev=>{if(ev.key==='Escape'){document.querySelectorAll('.module-drill.editing').forEach(d=>d.classList.remove('editing'));document.querySelectorAll('.module-panel.active-panel').forEach(p=>p.classList.remove('active-panel'));document.body.style.overflow='';}});}
+}
+function setupStatsChart(){
+ const canvas=document.getElementById('statsChart');if(!canvas)return;
+ const ctx=canvas.getContext('2d');let mode='bar';
+ const byDay=(state.statistics&&state.statistics.byDay)||{};
+ const labels=Object.keys(byDay);
+ const claimed=labels.map(k=>Number(byDay[k].claimed||0));
+ const closed=labels.map(k=>Number(byDay[k].closed||0));
+ function draw(){
+  const dpr=window.devicePixelRatio||1,w=canvas.clientWidth||900,h=260;canvas.width=w*dpr;canvas.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+  const max=Math.max(1,...claimed,...closed),pad=34,plotW=w-pad*2,plotH=h-pad*2;
+  ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1;for(let i=0;i<=4;i++){const y=pad+plotH*(i/4);ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke();}
+  const x=i=>pad+(labels.length<=1?plotW/2:(plotW*i/(labels.length-1))); const y=v=>pad+plotH-(v/max)*plotH;
+  function line(data,color,fill){ctx.beginPath();data.forEach((v,i)=>{if(i)ctx.lineTo(x(i),y(v));else ctx.moveTo(x(i),y(v));});if(fill){ctx.lineTo(x(data.length-1),h-pad);ctx.lineTo(x(0),h-pad);ctx.closePath();ctx.fillStyle=color.replace('1)','.16)');ctx.fill();}ctx.beginPath();data.forEach((v,i)=>{if(i)ctx.lineTo(x(i),y(v));else ctx.moveTo(x(i),y(v));});ctx.strokeStyle=color;ctx.lineWidth=3;ctx.stroke();}
+  if(mode==='bar'){const bw=Math.max(8,plotW/labels.length/3);labels.forEach((_,i)=>{ctx.fillStyle='rgba(56,189,248,.85)';ctx.fillRect(x(i)-bw-2,y(claimed[i]),bw,h-pad-y(claimed[i]));ctx.fillStyle='rgba(87,242,135,.78)';ctx.fillRect(x(i)+2,y(closed[i]),bw,h-pad-y(closed[i]));});}else{line(claimed,'rgba(56,189,248,1)',mode==='area');line(closed,'rgba(87,242,135,1)',mode==='area');}
+  ctx.fillStyle='rgba(247,248,255,.72)';ctx.font='12px Inter, sans-serif';ctx.fillText('Claimed',pad,18);ctx.fillText('Closed',pad+78,18);
+ }
+ document.querySelectorAll('.statsView').forEach(btn=>btn.onclick=()=>{mode=btn.dataset.chart||'bar';draw()});
+ draw();window.addEventListener('resize',draw,{once:true});
 }
 function wire(){
+ setupStatsChart();
  if(!window.__navWired){
  window.__navWired=true;
   const pageTitleEl=document.getElementById('pageTitle');
@@ -4779,9 +4974,9 @@ function wire(){
  document.querySelectorAll('.copyPH').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText(b.dataset.v||'');note('Placeholder copied.','ok')});
  const saveConfig=document.getElementById('saveConfig');if(saveConfig)saveConfig.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,appealsChannelId:feedbackId.value||null,setup:{step:4}})});note('Settings saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const savePanelConfig=document.getElementById('savePanelConfig');if(savePanelConfig)savePanelConfig.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,panelConfig:{title:(document.getElementById('panelTitle')?.value||'').trim(),description:document.getElementById('panelDescription')?.value||'',advisory:document.getElementById('panelAdvisory')?.value||''},setup:{step:4}})});note('Panel saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
- const aiUpsell=document.getElementById('aiUpsell');if(aiUpsell)aiUpsell.onclick=()=>{alert('This server does not own a premium AI subscription yet. The bot owner can enable premium AI or start a free trial for this server.')};
+ const aiUpsell=document.getElementById('aiUpsell');if(aiUpsell)aiUpsell.onclick=()=>{window.location='/pricing'};
  const aiStartTrial=document.getElementById('aiStartTrial');if(aiStartTrial)aiStartTrial.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'start-trial',days:7})});note('AI free trial started for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
- const aiSetPremium=document.getElementById('aiSetPremium');if(aiSetPremium)aiSetPremium.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'set-premium'})});note('Premium AI enabled for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
+ const aiSetPlus=document.getElementById('aiSetPlus');if(aiSetPlus)aiSetPlus.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'set-plan',plan:'plus'})});note('Plus enabled for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const aiToggleEnabled=document.getElementById('aiToggleEnabled');if(aiToggleEnabled)aiToggleEnabled.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:(state&&state.aiAccess&&state.aiAccess.enabled)?'disable':'enable'})});note('AI access updated.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const aiClear=document.getElementById('aiClear');if(aiClear)aiClear.onclick=async()=>{try{const confirmed=prompt('Type CLEAR to remove AI access for this server.');if(confirmed!=='CLEAR')return;await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'clear'})});note('AI access cleared.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const saveHomeImages=document.getElementById('saveHomeImages');if(saveHomeImages)saveHomeImages.onclick=async()=>{try{const urls=[document.getElementById('homeImg1')?.value||'',document.getElementById('homeImg2')?.value||'',document.getElementById('homeImg3')?.value||''].map(s=>String(s||'').trim()).filter(Boolean);await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:urls})});note('Home images saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
@@ -5059,7 +5254,7 @@ function startDashboard(client) {
                     sendHtml(res, 403, '<h1>403</h1><p>Owner user only.</p>');
                     return;
                 }
-                sendHtml(res, 200, createControllerHtml(req));
+                sendHtml(res, 200, createOwnerHtml(req));
                 return;
             }
 
@@ -5170,8 +5365,8 @@ function startDashboard(client) {
                             </section>
                             <section id="plans" class="pricing-grid">
                                 <div class="pricing-card"><div class="plan-top"><div><div class="plan-name">Free</div><div class="plan-note">Core ticket workflows.</div></div></div><div class="plan-price">$0</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>Unlimited Tickets</div><div class="pricing-feature"><span class="dot"></span>Custom Panels</div><div class="pricing-feature"><span class="dot"></span>Logging</div></div><a class="btn" href="/dashboard">Get started</a></div>
-                                <div class="pricing-card featured"><div class="plan-top"><div><div class="plan-name">Premium</div><div class="plan-note">Best for growing support teams.</div></div><span class="plan-badge">Most Popular</span></div><div class="plan-price">$12/mo</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>AI Moderation</div><div class="pricing-feature"><span class="dot"></span>Unlimited Tickets</div><div class="pricing-feature"><span class="dot"></span>Custom Panels</div><div class="pricing-feature"><span class="dot"></span>Logging</div><div class="pricing-feature"><span class="dot"></span>Priority Support</div></div><a class="btn primary" href="/upgrade">Upgrade</a></div>
-                                <div class="pricing-card"><div class="plan-top"><div><div class="plan-name">Enterprise</div><div class="plan-note">Custom support operations.</div></div></div><div class="plan-price">Custom</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>AI Moderation</div><div class="pricing-feature"><span class="dot"></span>Unlimited Tickets</div><div class="pricing-feature"><span class="dot"></span>Custom Panels</div><div class="pricing-feature"><span class="dot"></span>Logging</div><div class="pricing-feature"><span class="dot"></span>Priority Support</div></div><a class="btn" href="/upgrade">Contact sales</a></div>
+                                <div class="pricing-card featured"><div class="plan-top"><div><div class="plan-name">Plus</div><div class="plan-note">Best for growing support teams.</div></div><span class="plan-badge">Most Popular</span></div><div class="plan-price">$12/mo</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>AI Moderation</div><div class="pricing-feature"><span class="dot"></span>Unlimited Tickets</div><div class="pricing-feature"><span class="dot"></span>Custom Panels</div><div class="pricing-feature"><span class="dot"></span>Logging</div><div class="pricing-feature"><span class="dot"></span>Priority Support</div></div><a class="btn primary" href="/upgrade">Upgrade</a></div>
+                                <div class="pricing-card"><div class="plan-top"><div><div class="plan-name">Pro</div><div class="plan-note">Custom support operations.</div></div></div><div class="plan-price">Custom</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>AI Moderation</div><div class="pricing-feature"><span class="dot"></span>Unlimited Tickets</div><div class="pricing-feature"><span class="dot"></span>Custom Panels</div><div class="pricing-feature"><span class="dot"></span>Logging</div><div class="pricing-feature"><span class="dot"></span>Priority Support</div></div><a class="btn" href="/upgrade">Contact sales</a></div>
                             </section>
                             <section class="pricing-preview">
                                 <div class="pricing-preview-title">Ticket panel preview</div>
@@ -5179,7 +5374,7 @@ function startDashboard(client) {
                             </section>
                             <section class="pricing-table card">
                                 <h2 style="margin:0 0 16px">Feature comparison</h2>
-                                <table><thead><tr><th>Feature</th><th>Free</th><th>Premium</th><th>Enterprise</th></tr></thead><tbody>
+                                <table><thead><tr><th>Feature</th><th>Free</th><th>Plus</th><th>Pro</th></tr></thead><tbody>
                                     <tr><td>AI Moderation</td><td>-</td><td class="active">Yes</td><td class="active">Yes</td></tr>
                                     <tr><td>Unlimited Tickets</td><td class="active">Yes</td><td class="active">Yes</td><td class="active">Yes</td></tr>
                                     <tr><td>Custom Panels</td><td class="active">Yes</td><td class="active">Yes</td><td class="active">Yes</td></tr>
@@ -5193,11 +5388,11 @@ function startDashboard(client) {
                             </section>
                             <section id="faq" class="pricing-faq">
                                 <div class="faq-item"><strong>Can I upgrade later?</strong><p class="muted">Yes. Start free and upgrade without losing your dashboard setup.</p></div>
-                                <div class="faq-item"><strong>What does Premium add?</strong><p class="muted">AI moderation, priority support, and more automation for active teams.</p></div>
-                                <div class="faq-item"><strong>What is Enterprise?</strong><p class="muted">A custom plan for larger servers that need onboarding, integrations, or higher-touch support.</p></div>
+                                <div class="faq-item"><strong>What does Plus add?</strong><p class="muted">AI moderation, priority support, and more automation for active teams.</p></div>
+                                <div class="faq-item"><strong>What is Pro?</strong><p class="muted">A custom plan for larger servers that need onboarding, integrations, or higher-touch support.</p></div>
                                 <div class="faq-item"><strong>Does Free include tickets?</strong><p class="muted">Yes. Free keeps the core ticket, panel, transcript, and logging flow available.</p></div>
                             </section>
-                            <section class="pricing-cta card"><div class="pricing-kicker">Ready</div><h2 style="margin:0 0 10px">Choose the support setup that fits your server.</h2><p class="muted">Keep it simple now, upgrade when the queue grows.</p><div class="row" style="justify-content:center;margin-top:18px"><a class="btn primary" href="/upgrade">Upgrade to Premium</a><a class="btn" href="/dashboard">Open dashboard</a></div></section>
+                            <section class="pricing-cta card"><div class="pricing-kicker">Ready</div><h2 style="margin:0 0 10px">Choose the support setup that fits your server.</h2><p class="muted">Keep it simple now, upgrade when the queue grows.</p><div class="row" style="justify-content:center;margin-top:18px"><a class="btn primary" href="/upgrade">Upgrade to Plus</a><a class="btn" href="/dashboard">Open dashboard</a></div></section>
                         </div>
                     `,
                     ownerView: false,
@@ -5207,10 +5402,11 @@ function startDashboard(client) {
             function createUpgradePage(req = null) {
                 return baseDashboardPage({
                     title: 'Upgrade',
-                    body: '<div class="page-shell upgrade-page"><div class="grid">' +
-                        '<div class="card"><h3>Upgrade</h3><p class="muted">Upgrade from Free to Premium for advanced ticketing features, AI moderation, and priority support.</p><div style="margin-top:12px" class="row"><button class="btn primary">Upgrade to Premium</button><button class="btn-soft">Contact Sales</button></div></div>' +
-                        '<div class="card"><h3>Enterprise</h3><p class="muted">Custom plans for large communities with dedicated onboarding, integrations, and SLA support.</p><div style="margin-top:12px"><ul><li>Dedicated onboarding</li><li>Custom integrations</li><li>Advanced analytics</li><li>Priority SLA</li></ul></div></div>' +
-                    '</div></div>',
+                    body: '<section class="card upgrade-reward">' +
+                        '<div class="upgrade-word w1">PLUS</div><div class="upgrade-word w2">PRO</div><div class="upgrade-word w3">GROW</div><div class="upgrade-word w4">SUPPORT</div>' +
+                        '<div class="party-emoji e1">🎉</div><div class="party-emoji e2">✨</div><div class="party-emoji e3">🚀</div><div class="party-emoji e4">🎊</div>' +
+                        '<div style="position:relative;z-index:1;max-width:760px"><div class="pricing-kicker">Next step</div><h1 style="font-size:clamp(38px,6vw,72px);line-height:1;margin:0 0 14px">You are taking the next big step.</h1><p class="muted" style="font-size:16px">Plus and Pro unlock stronger automation, AI moderation, priority help, and a smoother support operation for your server.</p><div class="row" style="justify-content:center;margin-top:24px"><a class="btn primary" href="https://discord.gg/JSUX9GQP6J" target="_blank" rel="noreferrer">Contact us in support</a><a class="btn-soft" href="/pricing">Compare plans</a></div></div>' +
+                    '</section>',
                     ownerView: false,
                     showStaffLink: false
                 });
@@ -5639,3 +5835,4 @@ function startDashboard(client) {
 }
 
 module.exports = { startDashboard };
+
