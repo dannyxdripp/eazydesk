@@ -1332,6 +1332,14 @@ function summarizeOauthGuildPermissions(guild) {
     };
 }
 
+function getDashboardOauthPermissionSummary(req, guildId) {
+    const id = String(guildId || '').trim();
+    if (!/^\d{17,20}$/.test(id)) return null;
+    const entry = getDashboardSessionOauthGuilds(req).find(g => String(g?.id || '') === id);
+    if (!entry) return null;
+    return summarizeOauthGuildPermissions(entry);
+}
+
 function getGuildSupportRoleIds(guildId, storage = null) {
     const teams = ticketStore.getSupportTeamsForGuild(guildId, storage);
     const ids = [];
@@ -1386,6 +1394,26 @@ async function getDashboardAccess(client, req, guildId = null) {
     const guild = client.guilds.cache.get(id);
     const member = guild?.members?.cache?.get(userId) || await guild?.members?.fetch?.(userId).catch(() => null);
     if (!member) {
+        const oauthPerms = getDashboardOauthPermissionSummary(req, id);
+        if (oauthPerms?.canAccessDashboard) {
+            return {
+                guildId: id,
+                level: oauthPerms.isOwner ? 'guild-owner' : 'manager',
+                isOwner: Boolean(oauthPerms.isOwner),
+                isManager: true,
+                isStaff: true,
+                canFullDashboard: Boolean(oauthPerms.isOwner),
+                canManageSettings: true,
+                canManageAvailability: true,
+                canManageTicketTypes: true,
+                canManageEscalations: true,
+                canViewTickets: true,
+                canEditNotes: true,
+                canViewTranscripts: true,
+                canCloseTickets: true
+            };
+        }
+
         return {
             guildId: id,
             level: 'none',
@@ -1412,7 +1440,8 @@ async function getDashboardAccess(client, req, guildId = null) {
     const adminLike = Boolean(
         isGuildOwner ||
         member.permissions?.has?.(PermissionsBitField.Flags.ManageGuild) ||
-        member.permissions?.has?.(PermissionsBitField.Flags.Administrator)
+        member.permissions?.has?.(PermissionsBitField.Flags.Administrator) ||
+        getDashboardOauthPermissionSummary(req, id)?.canAccessDashboard
     );
     const isManager = adminLike || (managerRoleId && member.roles?.cache?.has?.(managerRoleId));
     const isStaff = isManager || supportRoleIds.some(roleId => member.roles?.cache?.has?.(roleId));
@@ -1498,10 +1527,11 @@ function getDashboardGuild(client, req = null) {
     }
 
     if (Array.isArray(allowedGuildIds) && allowedGuildIds.length) {
-        if (ownerId && userId === ownerId) {
-            return client.guilds.cache.get(allowedGuildIds[0]) || null;
-        }
-        return null;
+        const oauthAccess = getDashboardSessionOauthGuilds(req)
+            .filter(entry => allowedGuildIds.includes(String(entry?.id || '')))
+            .find(entry => summarizeOauthGuildPermissions(entry).canAccessDashboard);
+        const fallbackId = String(oauthAccess?.id || allowedGuildIds[0] || '').trim();
+        return client.guilds.cache.get(fallbackId) || null;
     }
 
     return client.guilds.cache.first() || null;
@@ -5301,6 +5331,17 @@ function startDashboard(client) {
 
             const pages = new Set(['/overview', '/settings', '/availability', '/tutorials', '/commands/ticket-types', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/documentation']);
             if (pages.has(pathname)) {
+                if (!isAuthed(req)) {
+                    if (hasDiscordOAuthConfigured()) {
+                        const next = encodeURIComponent(pathname + (url.search || ''));
+                        res.writeHead(302, { Location: `/login?next=${next}`, 'Cache-Control': 'no-store' });
+                        res.end();
+                        return;
+                    }
+                    sendHtml(res, 401, '<h1>401</h1><p>Unauthorized</p>');
+                    return;
+                }
+
                 const access = await getDashboardAccess(client, req, requestedGuildId || getDashboardGuild(client, req)?.id || null);
                 const allowedPages = getAllowedDashboardPages(access);
                 if (!allowedPages.has(pathname)) {
