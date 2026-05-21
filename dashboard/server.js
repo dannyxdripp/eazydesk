@@ -1153,17 +1153,20 @@ function isHttpsPublicBaseUrl() {
 function setTranscriptSession(res, userId) {
     const sessionId = randomToken();
     transcriptSessions.set(sessionId, { userId: String(userId), createdAt: Date.now() });
+    const secure = isHttpsPublicBaseUrl();
     const cookie = `${TRANSCRIPT_SESSION_COOKIE}=${encodeURIComponent(sessionId)}; ${cookieAttributes({
         maxAge: Math.floor(TRANSCRIPT_SESSION_TTL_MS / 1000),
-        secure: isHttpsPublicBaseUrl()
+        secure,
+        sameSite: secure ? 'None' : 'Lax'
     })}`;
-    res.setHeader('Set-Cookie', cookie);
+    appendSetCookie(res, cookie);
     return sessionId;
 }
 
 function clearTranscriptSession(res) {
-    const cookie = `${TRANSCRIPT_SESSION_COOKIE}=; ${cookieAttributes({ maxAge: 0, secure: isHttpsPublicBaseUrl() })}`;
-    res.setHeader('Set-Cookie', cookie);
+    const secure = isHttpsPublicBaseUrl();
+    const cookie = `${TRANSCRIPT_SESSION_COOKIE}=; ${cookieAttributes({ maxAge: 0, secure, sameSite: secure ? 'None' : 'Lax' })}`;
+    appendSetCookie(res, cookie);
 }
 
 function getTranscriptSessionUserId(req) {
@@ -1197,17 +1200,20 @@ function setDashboardSession(res, userId, guildIds = [], oauthGuilds = []) {
             : [],
         createdAt: Date.now()
     });
+    const secure = isHttpsPublicBaseUrl();
     const cookie = `${DASHBOARD_SESSION_COOKIE}=${encodeURIComponent(sessionId)}; ${cookieAttributes({
         maxAge: Math.floor(TRANSCRIPT_SESSION_TTL_MS / 1000),
-        secure: isHttpsPublicBaseUrl()
+        secure,
+        sameSite: secure ? 'None' : 'Lax'
     })}`;
-    res.setHeader('Set-Cookie', cookie);
+    appendSetCookie(res, cookie);
     return sessionId;
 }
 
 function clearDashboardSession(res) {
-    const cookie = `${DASHBOARD_SESSION_COOKIE}=; ${cookieAttributes({ maxAge: 0, secure: isHttpsPublicBaseUrl() })}`;
-    res.setHeader('Set-Cookie', cookie);
+    const secure = isHttpsPublicBaseUrl();
+    const cookie = `${DASHBOARD_SESSION_COOKIE}=; ${cookieAttributes({ maxAge: 0, secure, sameSite: secure ? 'None' : 'Lax' })}`;
+    appendSetCookie(res, cookie);
 }
 
 function getDashboardSession(req) {
