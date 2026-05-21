@@ -3807,6 +3807,41 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
 .title{font-size:26px;font-weight:750;letter-spacing:.15px}
 .card{border-radius:18px;box-shadow:var(--shadow-soft);background:linear-gradient(180deg,rgba(17,20,36,.78),rgba(11,14,28,.78));border-color:rgba(255,255,255,.10)}
 .card:hover{box-shadow:var(--shadow);transform:translateY(-3px)}
+.pricing-hero{padding:28px 26px;display:grid;gap:18px;}
+.pricing-hero .page-kicker{margin-bottom:4px;}
+.pricing-hero-stats{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr));}
+.pricing-stat{padding:18px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);}
+.pricing-stat strong{display:block;font-size:22px;margin-bottom:6px;}
+.pricing-card{border-radius:24px;padding:28px;display:flex;flex-direction:column;gap:20px;min-height:460px;transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease;}
+.pricing-card.featured{border:1px solid rgba(56,189,248,.45);box-shadow:0 0 0 1px rgba(56,189,248,.16),0 28px 80px rgba(56,189,248,.08);transform:scale(1.02);}
+.pricing-card .plan-name{font-size:22px;font-weight:800;letter-spacing:.02em;}
+.pricing-card .plan-price{font-size:42px;font-weight:900;line-height:1;}
+.pricing-card .plan-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;background:rgba(56,189,248,.12);color:var(--acc);}
+.pricing-card .plan-note{color:var(--mt);font-size:13px;line-height:1.6;}
+.pricing-card .plan-action{margin-top:auto;}
+.pricing-feature-list{display:grid;gap:10px;}
+.pricing-feature{display:flex;align-items:center;gap:10px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);}
+.pricing-feature .dot{width:10px;height:10px;border-radius:999px;background:var(--acc);flex-shrink:0;}
+.pricing-table{overflow-x:auto;padding:24px;border-radius:24px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);}
+.pricing-table table{width:100%;border-collapse:collapse;min-width:680px;}
+.pricing-table th,.pricing-table td{padding:16px 14px;text-align:left;border-bottom:1px solid rgba(255,255,255,.08);}
+.pricing-table th{font-weight:700;color:var(--tx);}
+.pricing-table td{color:var(--mt);}
+.pricing-table td.active{color:var(--text);font-weight:700;}
+.pricing-preview{display:grid;gap:16px;padding:24px;border-radius:24px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);}
+.pricing-preview .pricing-screenshot{border-radius:20px;overflow:hidden;background:rgba(6,8,18,.95);border:1px solid rgba(255,255,255,.08);}
+.pricing-screenshot-title{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:var(--mt);margin-bottom:12px;}
+.pricing-screenshot-thumb{position:relative;min-height:240px;background:linear-gradient(180deg,rgba(4,7,18,.95),rgba(8,11,28,.95));}
+.pricing-screenshot-bar{position:absolute;left:0;right:0;top:0;height:42px;background:rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;padding:0 14px;}
+.pricing-screenshot-dot{width:10px;height:10px;border-radius:999px;background:rgba(56,189,248,.9);}
+.pricing-screenshot-line{height:12px;border-radius:999px;background:rgba(255,255,255,.08);margin:12px 14px;}
+.pricing-screenshot-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;position:absolute;bottom:14px;left:14px;right:14px;}
+.pricing-screenshot-card{padding:14px;border-radius:16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);color:var(--tx);}
+.pricing-faq{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;}
+.pricing-faq .faq-item{padding:20px;border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);}
+.pricing-cta{padding:32px 28px;text-align:center;border-radius:24px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);}
+.pricing-cta .btn{min-width:180px;}
+@media(max-width:950px){.pricing-hero-stats{grid-template-columns:1fr}.pricing-grid,.pricing-faq{grid-template-columns:1fr}.pricing-screenshot-row{grid-template-columns:1fr;position:static;}.pricing-table table{min-width:0;}}
 .item{transition:transform .16s ease,border-color .2s ease,background .2s ease}
 .item:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.16);background:rgba(255,255,255,.035)}
  input,select,textarea,button{background:rgba(5,8,20,.78)}
@@ -4248,7 +4283,99 @@ function renderFeedback(){return '<div class="card"><h3>Feedback Command Setting
 function renderAppeal(){return renderFeedback()}
 function renderStats(){const t=state.statistics&&state.statistics.totals?state.statistics.totals:{activeTickets:0,totalClaimed:0,totalClosed:0};return '<div class="grid"><div class="card"><h3>Numbers (14d)</h3><div class="row"><div class="item"><div class="muted">Active tickets</div><strong>'+t.activeTickets+'</strong></div><div class="item"><div class="muted">Claimed</div><strong>'+t.totalClaimed+'</strong></div><div class="item"><div class="muted">Closed</div><strong>'+t.totalClosed+'</strong></div></div><div class="muted" style="margin-top:8px">Claimed/Closed exclude self-opened tickets when that data is available.</div></div><div class="card"><h3>Support Member Lookup</h3><label>User (ID or mention)</label><input id="staffLookupQuery" placeholder="<@123> or 123..." /><div class="row" style="margin-top:10px"><button id="staffLookupBtn" class="btn">Lookup</button><button id="staffLookupClear" class="btn-soft">Clear</button></div><div id="staffLookupResult" class="list" style="margin-top:10px"></div></div></div>'}
 function renderBranding(){const templates=state.botConfig.embedTemplates||defaultEmbedTemplates;const keys=Object.keys(templates);const firstKey=keys[0]||'ticketClaimed';const first=templates[firstKey]||{title:'',description:'',color:'#5865F2'};return '<div class="grid"><div class="card"><h3>Visual Components V2 Template Editor</h3><p class="muted">Template workflow: pick a template, edit text, preview live, then save. These templates render into Components V2 containers (accent color applies only when the bot decides the message is success/error).</p><div class="item" style="margin-top:10px"><div class="muted">Separators: add <code>[[divider]]</code>, <code>[[divider:large]]</code>, <code>[[space]]</code>, or <code>[[space:large]]</code> on their own line inside <strong>Description</strong> to insert dividers/spacers.</div></div><div class="row"><div><label>Template</label><select id="brandingKey">'+keys.map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join('')+'</select></div><div><label>Accent Color</label><input id="brandingColor" value="'+esc(first.color||'#5865F2')+'" placeholder="#5865F2" /></div></div><label>Title</label><input id="brandingTitle" value="'+esc(first.title||'')+'" /><label>Description</label><textarea id="brandingDescription" style="min-height:160px">'+esc(first.description||'')+'</textarea><div class="row" style="margin-top:10px"><button id="applyBrandingTemplate" class="btn-soft">Apply to Template</button><button id="saveBranding" class="btn">Save Templates</button></div><div class="row" style="margin-top:10px"><button id="resetBrandingDefaults" class="btn-soft">Reset to Defaults</button><button id="formatBrandingJson" class="btn-soft">Format JSON</button></div></div><div class="card"><h3>Live Preview</h3><div class="preview-shell"><div class="preview-msg"><div class="preview-avatar"></div><div class="preview-content"><div class="preview-name">Tickets Bot <span class="preview-tag">BOT</span></div><div id="brandingPreviewEmbed" class="preview-embed"><div id="brandingPreviewBar" class="preview-bar"></div><div class="preview-main"><div id="brandingPreviewTitle" class="preview-title"></div><div id="brandingPreviewDesc" class="preview-desc"></div></div></div></div></div></div><label style="margin-top:14px">Advanced JSON</label><textarea id="brandingTemplates" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(templates,null,2))+'</textarea></div></div>'}
-function renderPricing(){const plans=[{name:'Free',price:'$0',tag:'Available',features:['Ticket panels and categories','Staff teams and tags','Transcripts and feedback','Basic dashboard access'],active:true},{name:'Plus',price:'Coming soon',tag:'Soon',features:['More automation controls','Priority support tools','Expanded branding options'],active:false},{name:'Pro',price:'Coming soon',tag:'Soon',features:['Advanced AI workflows','Higher limits','Premium operational tooling'],active:false}];return '<div class="grid">'+plans.map(p=>'<div class="card"><div class="item-top"><h3 style="margin:0">'+esc(p.name)+'</h3><span class="pill '+(p.active?'ok':'warn')+'">'+esc(p.tag)+'</span></div><div style="font-size:34px;font-weight:900;margin:12px 0">'+esc(p.price)+'</div><div class="list">'+p.features.map(f=>'<div class="item"><strong>'+esc(f)+'</strong></div>').join('')+'</div><div style="margin-top:16px">'+(p.active?'<button class="btn" type="button">Current Plan</button>':'<button class="btn-soft" type="button" disabled>Coming Soon</button>')+'</div></div>').join('')+'</div>'}
+function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Starter support for small communities',features:['Unlimited tickets','Custom panels','Logs & transcripts','Dashboard access'],cta:'Current plan',active:true},{name:'Premium',price:'$12/mo',description:'Modern support automation for growing teams',features:['AI Moderation','Unlimited tickets','Custom panels','Logging','Priority support'],cta:'Most popular',active:false,featured:true},{name:'Enterprise',price:'Custom',description:'Tailored support for large servers and service teams',features:['Dedicated onboarding','Custom integrations','Advanced analytics','Priority SLA','Custom panels'],cta:'Contact sales',active:false}];const rows=[['AI Moderation','—','Yes','Yes'],['Unlimited Tickets','Yes','Yes','Yes'],['Custom Panels','Yes','Yes','Yes'],['Logging','Yes','Yes','Yes'],['Priority Support','—','Yes','Yes']];const faqs=[{q:'Can I start on the Free plan and upgrade later?','a':'Yes. The Free plan is available immediately, and you can upgrade anytime without losing configuration.'},{q:'What does “Custom” include?','a':'Enterprise includes dedicated setup support, custom integrations, higher limits, and SLA-based response times.'},{q:'Does Premium include AI Moderation?','a':'Yes. Premium includes AI-assisted moderation workflows for tickets and posts.'},{q:'How does billing work?','a':'Premium is billed monthly. Enterprise billing is handled through a custom agreement with your team.'}];return '<div class="page-shell pricing-page">'+
+    '<section class="pricing-hero card">'+
+      '<div class="row" style="align-items:flex-start;gap:24px">'+
+        '<div style="max-width:640px">'+
+          '<div class="page-kicker">Pricing</div>'+
+          '<h3 style="margin:0 0 14px">Simple billing for ticket support and staff operations.</h3>'+
+          '<p class="muted" style="max-width:620px">Pick the right plan for your community: Free for basic ticket workflows, Premium for AI and priority support, or Enterprise for fully custom server operations.</p>'+
+          '<div class="row" style="gap:10px;flex-wrap:wrap;margin-top:22px">'+
+            '<a class="btn primary" href="#plans">View plans</a>'+
+            '<a class="btn-soft" href="#faq">Read FAQ</a>'+
+          '</div>'+
+        '</div>'+
+        '<div class="pricing-hero-stats">'+
+          '<div class="pricing-stat"><strong>5 modules</strong><span>Tickets, Logs, Automod, Welcome, Analytics</span></div>'+
+          '<div class="pricing-stat"><strong>Live previews</strong><span>Dashboard, panel, and analytics previews between sections</span></div>'+
+        '</div>'+
+      '</div>'+
+    '</section>'+
+    '<section class="pricing-preview">'+
+      '<div class="pricing-screenshot">'+
+        '<div class="pricing-screenshot-title">Dashboard preview</div>'+
+        '<div class="pricing-screenshot-thumb">'+
+          '<div class="pricing-screenshot-bar"><span class="pricing-screenshot-dot"></span><span style="font-size:12px;color:rgba(255,255,255,.72)">eazyDesk • Overview</span></div>'+
+          '<div class="pricing-screenshot-line" style="width:45%;margin-top:64px"></div>'+
+          '<div class="pricing-screenshot-line" style="width:30%"></div>'+
+          '<div class="pricing-screenshot-row">'+
+            '<div class="pricing-screenshot-card"><div style="height:64px;border-radius:14px;background:rgba(255,255,255,.06)"></div><div style="margin-top:12px;height:10px;background:rgba(255,255,255,.08);border-radius:999px"></div></div>'+
+            '<div class="pricing-screenshot-card"><div style="height:64px;border-radius:14px;background:rgba(255,255,255,.06)"></div><div style="margin-top:12px;height:10px;background:rgba(255,255,255,.08);border-radius:999px"></div></div>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+ 
+    '</section>'+
+    '<section id="plans" class="grid pricing-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:18px">'+
+      plans.map(plan=>'<div class="pricing-card'+(plan.featured?' featured':'')+'">'+
+        '<div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px">'+
+          '<div><div class="plan-name">'+esc(plan.name)+'</div><div class="plan-note">'+esc(plan.description)+'</div></div>'+ 
+          (plan.featured?'<span class="plan-badge">Most Popular</span>':'')+
+        '</div>'+ 
+        '<div class="plan-price">'+esc(plan.price)+'</div>'+ 
+        '<div class="pricing-feature-list">'+
+          plan.features.map(feature=>'<div class="pricing-feature"><span class="dot"></span><div>'+esc(feature)+'</div></div>').join('')+
+        '</div>'+ 
+        '<div class="plan-action">'+
+          (plan.active?'<button class="btn" type="button">Current plan</button>':'plan.featured?'<button class="btn" type="button">Upgrade now</button>':'<button class="btn-soft" type="button">Contact sales</button>')+
+        '</div>'+ 
+      '</div>').join('')+
+    '</section>'+ 
+    '<section class="pricing-preview">'+
+      '<div class="pricing-screenshot">'+
+        '<div class="pricing-screenshot-title">Ticket panel preview</div>'+
+        '<div class="pricing-screenshot-thumb">'+
+          '<div class="pricing-screenshot-bar"><span class="pricing-screenshot-dot"></span><span style="font-size:12px;color:rgba(255,255,255,.72)">Ticket panel • Live</span></div>'+ 
+          '<div class="pricing-screenshot-line" style="width:58%;margin-top:64px"></div>'+
+          '<div class="pricing-screenshot-line" style="width:65%"></div>'+ 
+          '<div class="pricing-screenshot-line" style="width:38%"></div>'+ 
+        '</div>'+ 
+      '</div>'+ 
+    '</section>'+ 
+    '<section class="pricing-table card">'+
+      '<h3 style="margin:0 0 16px">Compare plans</h3>'+ 
+      '<div style="overflow-x:auto">'+
+        '<table><thead><tr><th style="min-width:220px">Feature</th>'+
+          '<th>Free</th><th>Premium</th><th>Enterprise</th></tr></thead><tbody>'+ 
+          rows.map(row=>'<tr><td>'+esc(row[0])+'</td><td class="'+(row[1]==='Yes'?'active':'')+'">'+esc(row[1])+'</td><td class="'+(row[2]==='Yes'?'active':'')+'">'+esc(row[2])+'</td><td class="'+(row[3]==='Yes'?'active':'')+'">'+esc(row[3])+'</td></tr>').join('')+
+        '</tbody></table>'+ 
+      '</div>'+ 
+    '</section>'+ 
+    '<section class="pricing-preview">'+
+      '<div class="pricing-screenshot">'+
+        '<div class="pricing-screenshot-title">Analytics preview</div>'+
+        '<div class="pricing-screenshot-thumb">'+
+          '<div class="pricing-screenshot-bar"><span class="pricing-screenshot-dot"></span><span style="font-size:12px;color:rgba(255,255,255,.72)">Analytics • Trends</span></div>'+ 
+          '<div class="pricing-screenshot-line" style="width:55%;margin-top:56px"></div>'+ 
+          '<div class="pricing-screenshot-row">'+
+            '<div class="pricing-screenshot-card"><div style="height:110px;border-radius:16px;background:rgba(255,255,255,.06)"></div></div>'+ 
+            '<div class="pricing-screenshot-card"><div style="height:110px;border-radius:16px;background:rgba(255,255,255,.06)"></div></div>'+ 
+          '</div>'+ 
+        '</div>'+ 
+      '</div>'+ 
+    '</section>'+ 
+    '<section id="faq" class="pricing-faq">'+
+      faqs.map(item=>'<div class="faq-item"><strong>'+esc(item.q)+'</strong><p class="muted" style="margin:10px 0 0">'+esc(item.a)+'</p></div>').join('')+
+    '</section>'+ 
+    '<section class="pricing-cta card">'+
+      '<div style="max-width:760px;margin:0 auto">'+
+        '<div class="page-kicker">Ready to choose?</div><h3 style="margin:0 0 12px">Start with a plan that fits your team.</h3><p class="muted">No matter the size of your server, you can keep ticket flow clean, staff handoffs simple, and admin work centralized.</p>'+ 
+        '<div class="row" style="justify-content:center;gap:12px;margin-top:20px;flex-wrap:wrap">'+
+          '<button class="btn primary" type="button">Upgrade to Premium</button>'+ 
+          '<button class="btn-soft" type="button">Contact sales</button>'+ 
+        '</div>'+ 
+      '</div>'+ 
+    '</section>'+ 
+  '</div>'}
 function renderTutorials(){
  const tutorials=Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[];
  const cards=tutorials.map((tutorial,index)=>'<button type="button" class="card tutorialCard" data-tutorial-open="'+index+'" style="text-align:left;padding:0;overflow:hidden">'+
