@@ -478,6 +478,15 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     .item.can-manage{border-color:var(--cardOutline);box-shadow:0 0 0 1px color-mix(in srgb,var(--acc) 10%, transparent) inset,0 0 26px color-mix(in srgb,var(--acc) 16%, transparent)}
     .item strong{font-size:14px}
     .pill{padding:3px 10px;border-radius:999px;border:1px solid color-mix(in srgb,var(--acc) 35%, transparent);background:color-mix(in srgb,var(--acc) 12%, transparent);color:var(--tx);font-size:12px;box-shadow:0 0 16px color-mix(in srgb,var(--acc) 12%, transparent)}
+    body[data-view="staff"] .wrap{max-width:1280px}
+    body[data-view="staff"] .server-grid{grid-template-columns:1fr}
+    body[data-view="staff"] .server-card{display:grid;grid-template-columns:minmax(0,1fr);min-height:auto;align-items:start}
+    body[data-view="staff"] .server-card > .row:last-child{align-self:start;justify-content:flex-start}
+    body[data-view="staff"] .server-card .grid{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))!important}
+    body[data-view="staff"] .item,body[data-view="staff"] .card,body[data-view="staff"] .muted,body[data-view="staff"] strong,body[data-view="staff"] a{min-width:0;overflow-wrap:anywhere;word-break:break-word}
+    body[data-view="staff"] .pill{white-space:normal;overflow-wrap:anywhere;line-height:1.25}
+    body[data-view="staff"] .btn{max-width:100%;white-space:normal;text-align:center;line-height:1.2;min-height:42px}
+    body[data-view="staff"] .btn span:not(.btn-icon){min-width:0;overflow-wrap:anywhere}
     .theme-nav{position:relative}
     .theme-menu{position:absolute;right:0;top:calc(100% + 8px);display:none;min-width:180px;padding:8px;border-radius:16px;border:1px solid var(--bd);background:var(--panel);box-shadow:var(--cardGlow)}
     .theme-nav.open .theme-menu{display:grid;gap:6px}
@@ -3832,6 +3841,8 @@ const app=document.getElementById('app'),notice=document.getElementById('notice'
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const note=(t,m='')=>{notice.textContent=t||'';notice.className='notice '+m};
 async function api(path,opt={}){const h={'Content-Type':'application/json',...(opt.headers||{})};const tok=localStorage.getItem(tokenKey);if(tok)h['x-dashboard-token']=tok;const csrf=(state&&state.csrfToken)||'';if(csrf&&String(opt.method||'GET').toUpperCase()!=='GET')h['x-csrf-token']=csrf;const r=await fetch(path,{credentials:'include',...opt,headers:h});if(r.status===401){const next=encodeURIComponent(location.pathname+location.search);window.location='/login?next='+next;throw new Error('Unauthorized')}const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+function navTitleForPath(p){return ({ '/overview':'Home','/settings':'Settings','/availability':'Availability','/tutorials':'Tutorials','/commands/ticket-types':'Ticket Types','/commands/tag':'Tags','/tickets':'Tickets','/transcripts':'Transcripts','/commands/feedback':'Feedback','/statistics':'Statistics','/embed-editor':'Embed Editor','/documentation':'Documentation'}[p]||'Dashboard')}
+function pageDescForPath(p){return ({ '/overview':'A cleaner snapshot of ticket activity, queue health, and the most common next actions.','/settings':'Core server configuration, routing, and system behavior in one place.','/availability':'Adjust queue expectations per ticket type without digging through commands.','/tutorials':'Guides, walkthroughs, and internal onboarding material for your staff.','/commands/ticket-types':'Shape each ticket flow, assign support coverage, and keep categories tidy.','/commands/tag':'Store reusable answers and keep repeat support responses consistent.','/tickets':'Review active conversations, add notes, and handle escalations quickly.','/transcripts':'Browse saved transcripts and archive history without leaving the dashboard.','/commands/feedback':'Control where feedback lands and how the flow is presented.','/statistics':'Track recent performance, close reasons, and staff activity trends.','/embed-editor':'Update reusable bot message templates with a simpler editing workflow.','/documentation':'Reference placeholders, templates, and dashboard usage notes.'}[p]||'Manage this part of the dashboard with a simpler, more focused layout.')}
 function parseEmoji(raw){const s=String(raw||'').trim();if(!s)return null;const m=s.match(/^<(a?):([a-zA-Z0-9_]+):(\d{17,20})>$/);if(m)return{animated:m[1]==='a',name:m[2],id:m[3],raw:s};return{unicode:s,raw:s}}
 function emojiHtml(raw){const e=parseEmoji(raw);if(!e)return '';if(e.id){const ext=e.animated?'gif':'png';return '<span class="emoji-inline"><img src="https://cdn.discordapp.com/emojis/'+e.id+'.'+ext+'?size=64&quality=lossless" alt="'+esc(e.name||'emoji')+'" /></span>'}return '<span class="emoji-inline">'+esc(e.unicode)+'</span>'}
 function teamLabel(team){const src=team&&typeof team==='object'?team:{};const e=emojiHtml(src.emoji||'');return (e?e+' ':'')+esc(src.name||'')}
@@ -4349,9 +4360,9 @@ function wire(){
  document.querySelectorAll('.downloadTranscript').forEach(b=>b.onclick=()=>{const id=b.dataset.id||'';if(!id)return;window.open('/transcripts/'+encodeURIComponent(id)+'?download=1','_blank','noopener')});
  document.querySelectorAll('.deleteTranscript').forEach(b=>b.onclick=async()=>{try{const id=b.dataset.id||'';if(!id)return;const confirmText=prompt('Type DELETE to remove transcript '+id+' from disk.');if(confirmText!=='DELETE')return;await api('/api/transcript/delete',{method:'POST',body:JSON.stringify({channelId:id})});note('Transcript deleted.','ok');await boot()}catch(e){note(e.message,'danger')}});
  const transcriptSearch=document.getElementById('transcriptSearch');if(transcriptSearch)transcriptSearch.oninput=()=>{const q=(transcriptSearch.value||'').toLowerCase().trim();document.querySelectorAll('.transcriptItem').forEach(it=>{const hay=String(it.getAttribute('data-hay')||'');const show=!q||hay.includes(q);it.style.display=show?'':'none'})};
-  const saveTeam=document.getElementById('saveTeam');if(saveTeam)saveTeam.onclick=async()=>{try{await api('/api/support-team/upsert',{method:'POST',body:JSON.stringify({name:stName.value.trim(),emoji:stEmoji.value.trim(),roleIds:selectedRoles('stRoles')})});ui.selectedTeam=stName.value.trim();saveUi();note('Support team saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+  const saveTeam=document.getElementById('saveTeam');if(saveTeam)saveTeam.onclick=async()=>{try{await api('/api/support-team/upsert',{method:'POST',body:JSON.stringify({guildId:state.guildId,name:stName.value.trim(),emoji:stEmoji.value.trim(),roleIds:selectedRoles('stRoles')})});ui.selectedTeam=stName.value.trim();saveUi();note('Support team saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
 const resetTeam=document.getElementById('resetTeam');if(resetTeam)resetTeam.onclick=()=>{stName.value='';stEmoji.value='';setRoleSelection('stRoles',[])};
-  const saveType=document.getElementById('saveType');if(saveType)saveType.onclick=async()=>{try{await api('/api/ticket-type/upsert',{method:'POST',body:JSON.stringify({name:ttName.value.trim(),emoji:ttEmoji.value.trim(),embedColor:ttColor.value.trim(),format:ttFormat.value.trim(),categoryId:(document.getElementById('ttCategory')?.value||'').trim(),aliases:ttAliases.value,roleIds:selectedRoles('ttRoles'),openTitle:ttOpenTitle.value.trim(),openDescription:ttOpenDescription.value,requireReason:ttRequireReason.checked,allowAttachments:ttAllowFiles.checked})});ui.selectedType=ttName.value.trim();saveUi();note('Ticket type saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+  const saveType=document.getElementById('saveType');if(saveType)saveType.onclick=async()=>{try{await api('/api/ticket-type/upsert',{method:'POST',body:JSON.stringify({guildId:state.guildId,name:ttName.value.trim(),emoji:ttEmoji.value.trim(),embedColor:ttColor.value.trim(),format:ttFormat.value.trim(),categoryId:(document.getElementById('ttCategory')?.value||'').trim(),aliases:ttAliases.value,roleIds:selectedRoles('ttRoles'),openTitle:ttOpenTitle.value.trim(),openDescription:ttOpenDescription.value,requireReason:ttRequireReason.checked,allowAttachments:ttAllowFiles.checked})});ui.selectedType=ttName.value.trim();saveUi();note('Ticket type saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
   const resetType=document.getElementById('resetType');if(resetType)resetType.onclick=()=>{['ttName','ttEmoji','ttFormat','ttAliases','ttOpenTitle','ttOpenDescription'].forEach(id=>document.getElementById(id).value='');const catEl=document.getElementById('ttCategory');if(catEl)catEl.value='';const catLabel=document.getElementById('ttCategoryLabel');if(catLabel)catLabel.textContent=categoryLabel('', 'Use default ticket category');ttColor.value='#5865F2';ttRequireReason.checked=true;ttAllowFiles.checked=true;setRoleSelection('ttRoles',[])};
 const saveBranding=document.getElementById('saveBranding');if(saveBranding)saveBranding.onclick=async()=>{try{const parsed=getBrandingTemplates();await api('/api/config/embeds',{method:'POST',body:JSON.stringify({embedTemplates:parsed})});note('Branding templates saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
 const applyBrandingTemplate=document.getElementById('applyBrandingTemplate');if(applyBrandingTemplate)applyBrandingTemplate.onclick=()=>applyBrandingFormToTemplate();
@@ -4386,7 +4397,7 @@ const brandingColor=document.getElementById('brandingColor');if(brandingColor)br
         const name=String(ui.selectedType||'').trim();
         if(!name)return;
         if(!confirm('Delete ticket type \"'+name+'\"?'))return;
-        try{await api('/api/ticket-type/delete',{method:'POST',body:JSON.stringify({name})});ui.selectedType='';saveUi();note('Ticket type deleted.','ok');await boot()}catch(e){note(e.message,'danger')}
+        try{await api('/api/ticket-type/delete',{method:'POST',body:JSON.stringify({guildId:state.guildId,name})});ui.selectedType='';saveUi();note('Ticket type deleted.','ok');await boot()}catch(e){note(e.message,'danger')}
       },
       initialPick:()=>{if(ui.selectedType){fillType(ui.selectedType)}}
     });
@@ -4405,7 +4416,7 @@ const brandingColor=document.getElementById('brandingColor');if(brandingColor)br
         const name=String(ui.selectedTag||'').trim();
         if(!name)return;
         if(!confirm('Delete tag \"'+name+'\"?'))return;
-        try{await api('/api/tag/delete',{method:'POST',body:JSON.stringify({name})});ui.selectedTag='';saveUi();note('Tag deleted.','ok');await boot()}catch(e){note(e.message,'danger')}
+        try{await api('/api/tag/delete',{method:'POST',body:JSON.stringify({guildId:state.guildId,name})});ui.selectedTag='';saveUi();note('Tag deleted.','ok');await boot()}catch(e){note(e.message,'danger')}
       },
       initialPick:()=>{if(ui.selectedTag){fillTag(ui.selectedTag)}}
     });
@@ -4424,7 +4435,7 @@ const brandingColor=document.getElementById('brandingColor');if(brandingColor)br
         const name=String(ui.selectedTeam||'').trim();
         if(!name)return;
         if(!confirm('Delete support team \"'+name+'\"?'))return;
-        try{await api('/api/support-team/delete',{method:'POST',body:JSON.stringify({name})});ui.selectedTeam='';saveUi();note('Support team deleted.','ok');await boot()}catch(e){note(e.message,'danger')}
+        try{await api('/api/support-team/delete',{method:'POST',body:JSON.stringify({guildId:state.guildId,name})});ui.selectedTeam='';saveUi();note('Support team deleted.','ok');await boot()}catch(e){note(e.message,'danger')}
       },
       initialPick:()=>{if(ui.selectedTeam){fillTeam(ui.selectedTeam)}}
     });
@@ -4434,10 +4445,10 @@ wireRoleMultiSelect('stRoles');
 wireChannelSelect('feedbackId','Select feedback channel');
 wireChannelSelect('feedbackConfigId','Select feedback channel');
 wireCategorySelect('ttCategory','Use default ticket category');
-const saveTag=document.getElementById('saveTag');if(saveTag)saveTag.onclick=async()=>{try{await api('/api/tag/upsert',{method:'POST',body:JSON.stringify({name:tagName.value.trim(),kind:tagKind.value,title:tagTitle.value.trim(),description:tagDesc.value,keywords:tagKeys.value})});ui.selectedTag=tagName.value.trim();saveUi();note('Tag saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+const saveTag=document.getElementById('saveTag');if(saveTag)saveTag.onclick=async()=>{try{await api('/api/tag/upsert',{method:'POST',body:JSON.stringify({guildId:state.guildId,name:tagName.value.trim(),kind:tagKind.value,title:tagTitle.value.trim(),description:tagDesc.value,keywords:tagKeys.value})});ui.selectedTag=tagName.value.trim();saveUi();note('Tag saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
 const resetTag=document.getElementById('resetTag');if(resetTag)resetTag.onclick=()=>{['tagName','tagTitle','tagDesc','tagKeys'].forEach(id=>document.getElementById(id).value='');if(document.getElementById('tagKind'))document.getElementById('tagKind').value='suggestion'};
 /* Dyno-style pick list handles tag selection/deletion */
- document.querySelectorAll('.availSelect').forEach(sel=>{sel.onchange=async()=>{try{await api('/api/availability',{method:'POST',body:JSON.stringify({ticketType:sel.dataset.name,status:sel.value})});note('Availability updated.','ok');await boot()}catch(e){note(e.message,'danger')}}});
+ document.querySelectorAll('.availSelect').forEach(sel=>{sel.onchange=async()=>{try{await api('/api/availability',{method:'POST',body:JSON.stringify({guildId:state.guildId,ticketType:sel.dataset.name,status:sel.value})});note('Availability updated.','ok');await boot()}catch(e){note(e.message,'danger')}}});
  const staffLookupBtn=document.getElementById('staffLookupBtn');if(staffLookupBtn)staffLookupBtn.onclick=async()=>{try{const q=(document.getElementById('staffLookupQuery').value||'').trim();const r=await api('/api/staff/lookup',{method:'POST',body:JSON.stringify({query:q})});const box=document.getElementById('staffLookupResult');if(box){const tag=r.user&&r.user.tag?r.user.tag:('User '+esc(r.user.id));const mk=(label,val)=>'<div class="item"><div class="item-top"><strong>'+label+'</strong><span>'+val+'</span></div></div>';box.innerHTML=[mk('User',esc(tag)+' ('+esc(r.user.id)+')'),mk('Last 7d','Claimed '+(r.stats.days7.claimed||0)+' / Closed '+(r.stats.days7.closed||0)),mk('Last 14d','Claimed '+(r.stats.days14.claimed||0)+' / Closed '+(r.stats.days14.closed||0)),mk('Last 30d','Claimed '+(r.stats.days30.claimed||0)+' / Closed '+(r.stats.days30.closed||0))].join('')}note('Lookup complete.','ok')}catch(e){note(e.message,'danger')}};
  const staffLookupClear=document.getElementById('staffLookupClear');if(staffLookupClear)staffLookupClear.onclick=()=>{const q=document.getElementById('staffLookupQuery');const box=document.getElementById('staffLookupResult');if(q)q.value='';if(box)box.innerHTML='';note('', '')};
  const formatTutorials=document.getElementById('formatTutorials');if(formatTutorials)formatTutorials.onclick=()=>{try{const box=document.getElementById('tutorialsJson');if(box)box.value=JSON.stringify(JSON.parse(box.value),null,2)}catch(e){note('Tutorial JSON is invalid.','danger')}};
@@ -4509,8 +4520,8 @@ function renderOverview(){
  '</div></div>'}
 function renderAnnouncementBar(){const box=document.getElementById('announcementBar');if(!box)return;const ann=(state&&state.botConfig&&state.botConfig.siteAnnouncement)||{};if(!ann.enabled||!ann.text){box.innerHTML='';return}box.innerHTML='<div class="card" style="margin-bottom:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px"><div><strong>Announcement</strong><div class="muted">'+esc(ann.text)+'</div></div>'+(ann.ctaLabel&&ann.linkUrl?'<a class="btn" href="'+esc(ann.linkUrl)+'" target="_blank" rel="noreferrer">'+esc(ann.ctaLabel)+'</a>':'')+'</div>'}
 function renderPageHero(path){
- const title=navTitleForPath(path);
- const desc=pageDescriptionForPath(path);
+  const title=navTitleForPath(path);
+  const desc=pageDescForPath(path);
  const access=(state&&state.access)||{};
  const chips=[];
  if(state&&state.guildId)chips.push('<span class="pill">Guild '+esc(state.guildId)+'</span>');
