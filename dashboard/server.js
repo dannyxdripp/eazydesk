@@ -590,7 +590,7 @@ function createServerPickerHtml(options = {}) {
       const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function renderPerms(g){const tags=[];tags.push(g.botInServer?'<span class="pill">Bot in server</span>':'<span class="pill">Bot not in server</span>');tags.push(g.isOwner?'<span class="pill">Owner</span>':'');tags.push(g.isAdmin?'<span class="pill">Administrator</span>':'');tags.push(!g.isAdmin&&g.canManageGuild?'<span class="pill">Manage Server</span>':'');tags.push(!g.isAdmin&&!g.canManageGuild&&g.canManageChannels?'<span class="pill">Manage Channels</span>':'');return tags.filter(Boolean).join('')}
-      function renderAction(g){if(ownerView&&g.botInServer)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a>';if(g.botInServer&&g.canAccessDashboard)return '<span class="pill">Can edit ticket config</span>';if(g.botInServer)return '<span class="muted">No dashboard permissions</span>';return '<span class="muted">Bot is not in this server</span>'}
+      function renderAction(g){if(g.botInServer&&g.canAccessDashboard)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a><a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1">Setup</a>';if(g.botInServer)return '<span class="muted">No dashboard permissions</span>';return '<span class="muted">Bot is not in this server</span>'}
       function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=Array.isArray(g.permissionSummary)&&g.permissionSummary.length?g.permissionSummary.map(esc).join(' • '):'No elevated permissions';const cls='item server-card'+(g.canAccessDashboard?' can-manage':'');return '<div class="'+cls+'">'+
         '<div style="display:grid;gap:8px;min-width:0">'+
           '<div class="row" style="gap:10px">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class="pill">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
@@ -707,6 +707,21 @@ function createSetupHtml(req = null) {
         .setup-finish-overlay.show{display:flex}
         .setup-finish-card{max-width:520px;width:100%;text-align:center;padding:28px 24px}
         .setup-finish-card h3{margin:0 0 8px;font-size:28px}
+        .setup-native-select{position:absolute!important;left:-9999px!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important}
+        .custom-select{position:relative;cursor:pointer;transition:300ms}
+        .cs-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(42,47,59,.55);border:1px solid rgba(255,255,255,.10);border-radius:14px;padding:10px 12px;color:var(--tx);box-shadow:0 10px 24px rgba(0,0,0,.18);transition:transform 220ms ease,background 220ms ease,border-color 220ms ease}
+        .cs-trigger:hover{transform:translateY(-1px);background:rgba(50,55,65,.55);border-color:rgba(56,189,248,.24)}
+        .cs-trigger:disabled{opacity:.55;cursor:not-allowed;transform:none}
+        .cs-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
+        .cs-caret{opacity:.75;font-size:11px;transition:transform 300ms ease}
+        .custom-select.open .cs-caret{transform:rotate(180deg)}
+        .cs-menu{position:absolute;left:0;right:0;top:calc(100% + 8px);z-index:50;background:rgba(42,47,59,.94);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:8px;box-shadow:0 18px 40px rgba(0,0,0,.45);backdrop-filter:blur(16px);opacity:0;transform:translateY(-12px) scale(.985);pointer-events:none;transition:opacity 300ms ease,transform 300ms ease}
+        .custom-select.open .cs-menu{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+        .cs-search{margin-bottom:8px}
+        .cs-list{max-height:220px;overflow:auto;display:grid;gap:6px}
+        .cs-opt{width:100%;text-align:left;padding:9px 10px;border-radius:10px;border:1px solid transparent;background:rgba(255,255,255,.04);display:flex;gap:8px;align-items:center;transition:300ms}
+        .cs-opt:hover{background:rgba(50,55,65,.65);border-color:rgba(56,189,248,.22)}
+        .cs-opt.active{background:rgba(56,189,248,.16);border-color:rgba(56,189,248,.40)}
         @keyframes setupFade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
         @keyframes setupShimmer{0%{transform:translateX(-120%)}100%{transform:translateX(140%)}}
         @media(max-width:940px){.setup-grid,.setup-steps,.setup-choice-grid{grid-template-columns:1fr}.setup-panel{min-height:auto}}
@@ -878,13 +893,17 @@ function createSetupHtml(req = null) {
       let setupLocked=false;
       let setupCompleted=false;
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
+      const setupSelectPlaceholders={guildSelect:'Select a server',parentCategoryId:'Not set',appealsChannelId:'Not set',transcriptsChannelId:'Not set',managerRoleId:'Optional',highEscalationRoleId:'Optional',immediateEscalationRoleId:'Optional'};
+      function closeSetupSelects(){document.querySelectorAll('.custom-select.open').forEach(el=>el.classList.remove('open'))}
+      function refreshSetupSelect(selectEl,placeholder){if(!selectEl)return;let wrap=document.querySelector('[data-setup-cs=\"'+selectEl.id+'\"]');if(!wrap){selectEl.classList.add('setup-native-select');wrap=document.createElement('div');wrap.className='custom-select';wrap.dataset.setupCs=selectEl.id;selectEl.insertAdjacentElement('afterend',wrap)}const options=[...selectEl.options];const selected=options.find(o=>o.value===selectEl.value)||options[selectEl.selectedIndex]||null;wrap.innerHTML='<button type=\"button\" class=\"cs-trigger\" '+(selectEl.disabled?'disabled':'')+'><span class=\"cs-label\">'+esc((selected&&selected.text)||placeholder||'Select')+'</span><span class=\"cs-caret\">v</span></button><div class=\"cs-menu\"><input class=\"cs-search\" placeholder=\"Search\" /><div class=\"cs-list\">'+options.map(o=>'<button type=\"button\" class=\"cs-opt '+(o.value===selectEl.value?'active':'')+'\" data-value=\"'+esc(o.value)+'\">'+esc(o.text||placeholder||'Select')+'</button>').join('')+'</div></div>';const trigger=wrap.querySelector('.cs-trigger');const search=wrap.querySelector('.cs-search');const opts=[...wrap.querySelectorAll('.cs-opt')];if(trigger)trigger.onclick=e=>{e.stopPropagation();if(selectEl.disabled)return;const next=!wrap.classList.contains('open');closeSetupSelects();if(next){wrap.classList.add('open');if(search)search.focus()}};if(search)search.oninput=()=>{const q=search.value.trim().toLowerCase();opts.forEach(btn=>{btn.style.display=!q||btn.textContent.toLowerCase().includes(q)?'flex':'none'})};opts.forEach(btn=>{btn.onclick=()=>{selectEl.value=btn.getAttribute('data-value')||'';selectEl.dispatchEvent(new Event('change',{bubbles:true}));closeSetupSelects();refreshSetupSelect(selectEl,placeholder)}})}
+      function refreshAllSetupSelects(){for(const el of [guildSelect,parentCategoryId,appealsChannelId,transcriptsChannelId,managerRoleId,highEscalationRoleId,immediateEscalationRoleId])refreshSetupSelect(el,setupSelectPlaceholders[el&&el.id]||'Select')}
       const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function opt(id,label,selected){return '<option value=\"'+esc(id)+'\" '+(selected?'selected':'')+'>'+esc(label)+'</option>'}
-      function fillSelect(el,items,emptyLabel,selected){const rows=['<option value=\"\">'+esc(emptyLabel)+'</option>'].concat(items.map(it=>opt(it.id,it.label||it.name||it.id,selected===it.id)));el.innerHTML=rows.join('')}
+      function fillSelect(el,items,emptyLabel,selected){const rows=['<option value=\"\">'+esc(emptyLabel)+'</option>'].concat(items.map(it=>opt(it.id,it.label||it.name||it.id,selected===it.id)));el.innerHTML=rows.join('');refreshSetupSelect(el,emptyLabel)}
       let catalogs={ roles:[], channels:[], categories:[] };
       function syncPageState(){if(guildSelect&&guildSelect.value)qs.set('guild',guildSelect.value);if(currentStep)qs.set('page',String(currentStep));history.replaceState(null,'','?'+qs.toString());if(dashboardLink)dashboardLink.href='/dashboard';}
-      function setLocked(locked){setupLocked=!!locked;for(const el of [guildSelect,parentCategoryId,appealsChannelId,transcriptsChannelId,managerRoleId,highEscalationRoleId,immediateEscalationRoleId,rolePermanence,tutorialEnabled]){if(el)el.disabled=setupLocked}for(const btn of document.querySelectorAll('[data-create-kind],#initTemplate,#saveChannels,#saveRoles,#saveSetup,#markComplete,#stepNext1,#stepNext2,#stepNext3')){if(btn)btn.disabled=setupLocked}if(saveBtn)saveBtn.style.display=setupLocked?'none':'';if(doneBtn)doneBtn.style.display=setupLocked?'none':'';if(completeBanner)completeBanner.classList.toggle('show',setupLocked);}
+      function setLocked(locked){setupLocked=!!locked;for(const el of [guildSelect,parentCategoryId,appealsChannelId,transcriptsChannelId,managerRoleId,highEscalationRoleId,immediateEscalationRoleId,rolePermanence,tutorialEnabled]){if(el)el.disabled=setupLocked}refreshAllSetupSelects();for(const btn of document.querySelectorAll('[data-create-kind],#initTemplate,#saveChannels,#saveRoles,#saveSetup,#markComplete,#stepNext1,#stepNext2,#stepNext3')){if(btn)btn.disabled=setupLocked}if(saveBtn)saveBtn.style.display=setupLocked?'none':'';if(doneBtn)doneBtn.style.display=setupLocked?'none':'';if(completeBanner)completeBanner.classList.toggle('show',setupLocked);}
       function showFinishOverlay(){if(finishOverlay)finishOverlay.classList.add('show')}
       function hideFinishOverlay(){if(finishOverlay)finishOverlay.classList.remove('show')}
       function fireConfetti(){const canvas=document.getElementById('setupConfetti');if(!canvas)return;const ctx=canvas.getContext('2d');if(!ctx)return;const dpr=Math.max(1,window.devicePixelRatio||1);const pieces=Array.from({length:120},(_,i)=>({x:Math.random()*window.innerWidth,y:-20-Math.random()*window.innerHeight*.2,vx:(Math.random()-.5)*5,vy:2+Math.random()*5,size:5+Math.random()*7,rot:Math.random()*Math.PI,color:['#57f287','#38bdf8','#fbbf24','#fb7185','#a78bfa'][i%5]}));canvas.width=Math.floor(window.innerWidth*dpr);canvas.height=Math.floor(window.innerHeight*dpr);canvas.style.width=window.innerWidth+'px';canvas.style.height=window.innerHeight+'px';ctx.scale(dpr,dpr);let frame=0;function tick(){ctx.clearRect(0,0,window.innerWidth,window.innerHeight);for(const p of pieces){p.x+=p.vx;p.y+=p.vy;p.rot+=0.08;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.color;ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*.65);ctx.restore();}frame+=1;if(frame<140){requestAnimationFrame(tick)}else{ctx.clearRect(0,0,window.innerWidth,window.innerHeight)}}tick()}
@@ -901,16 +920,16 @@ function createSetupHtml(req = null) {
         '<div class=\"item\"><div><strong>Immediate Escalation Role</strong><div class=\"muted\">'+esc(readLabel(immediateEscalationRoleId))+'</div></div></div>'+
         '<div class=\"item\"><div><strong>Role Permanence</strong><div class=\"muted\">'+(rolePermanence.checked?'Enabled':'Disabled')+'</div></div></div>'+
         '<div class=\"item\"><div><strong>Tutorial</strong><div class=\"muted\">'+(tutorialEnabled.checked?'Enabled':'Disabled')+'</div></div></div>';}
-      async function loadCatalogs(){const ch=await api('/api/channels');const cats=await api('/api/categories');const roles=await api('/api/roles');catalogs.channels=Array.isArray(ch.channels)?ch.channels:[];catalogs.categories=Array.isArray(cats.categories)?cats.categories:[];catalogs.roles=Array.isArray(roles.roles)?roles.roles:[];fillSelect(parentCategoryId,catalogs.categories,'Not set',null);const texts=catalogs.channels.filter(c=>c.type==='text');fillSelect(appealsChannelId,texts,'Not set',null);fillSelect(transcriptsChannelId,texts,'Not set',null);fillSelect(managerRoleId,catalogs.roles,'Optional',null);fillSelect(highEscalationRoleId,catalogs.roles,'Optional',null);fillSelect(immediateEscalationRoleId,catalogs.roles,'Optional',null)}
-      async function loadGuilds(){const data=await api('/api/my/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];guildSelect.innerHTML=guilds.map(g=>'<option value=\"'+esc(g.id)+'\">'+esc(g.name)+' ('+esc(g.id)+')</option>').join('')||'<option value=\"\">No guilds found</option>';const preset=qs.get('guild');if(preset&&guilds.some(g=>g.id===preset))guildSelect.value=preset;syncPageState()}
-      async function loadConfig(){const gid=guildSelect.value; if(!gid) return; const data=await api('/api/guild-config?guildId='+encodeURIComponent(gid)); const c=data.config||{}; parentCategoryId.value=c.parentCategoryId||''; appealsChannelId.value=c.appealsChannelId||''; transcriptsChannelId.value=c.transcriptsChannelId||''; managerRoleId.value=c.managerRoleId||''; highEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.high)||''; immediateEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.immediate)||''; rolePermanence.checked=c.rolePermanence!==false; tutorialEnabled.checked=!!c.tutorialEnabled; setupCompleted=Boolean(c&&c.setup&&c.setup.completed); setLocked(setupCompleted); const requestedPage=Number(qs.get('page')||0); const configStep=Number(c&&c.setup&&c.setup.step)||1; gotoStep(setupCompleted?4:(requestedPage||configStep));}
+      async function loadCatalogs(){const gid=guildSelect.value;const suffix=gid?('?guildId='+encodeURIComponent(gid)):'';const ch=await api('/api/channels'+suffix);const cats=await api('/api/categories'+suffix);const roles=await api('/api/roles'+suffix);catalogs.channels=Array.isArray(ch.channels)?ch.channels:[];catalogs.categories=Array.isArray(cats.categories)?cats.categories:[];catalogs.roles=Array.isArray(roles.roles)?roles.roles:[];fillSelect(parentCategoryId,catalogs.categories,'Not set',null);const texts=catalogs.channels.filter(c=>c.type==='text');fillSelect(appealsChannelId,texts,'Not set',null);fillSelect(transcriptsChannelId,texts,'Not set',null);fillSelect(managerRoleId,catalogs.roles,'Optional',null);fillSelect(highEscalationRoleId,catalogs.roles,'Optional',null);fillSelect(immediateEscalationRoleId,catalogs.roles,'Optional',null)}
+      async function loadGuilds(){const data=await api('/api/my/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];guildSelect.innerHTML=guilds.map(g=>'<option value=\"'+esc(g.id)+'\">'+esc(g.name)+' ('+esc(g.id)+')</option>').join('')||'<option value=\"\">No guilds found</option>';const preset=qs.get('guild');if(preset&&guilds.some(g=>g.id===preset))guildSelect.value=preset;refreshSetupSelect(guildSelect,'Select a server');syncPageState()}
+      async function loadConfig(){const gid=guildSelect.value; if(!gid) return; const data=await api('/api/guild-config?guildId='+encodeURIComponent(gid)); const c=data.config||{}; parentCategoryId.value=c.parentCategoryId||''; appealsChannelId.value=c.appealsChannelId||''; transcriptsChannelId.value=c.transcriptsChannelId||''; managerRoleId.value=c.managerRoleId||''; highEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.high)||''; immediateEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.immediate)||''; rolePermanence.checked=c.rolePermanence!==false; tutorialEnabled.checked=!!c.tutorialEnabled; refreshAllSetupSelects(); setupCompleted=Boolean(c&&c.setup&&c.setup.completed); const canOverrideCompleted=Boolean(data&&data.access&&data.access.isOwner); setLocked(setupCompleted&&!canOverrideCompleted); const requestedPage=Number(qs.get('page')||0); const configStep=Number(c&&c.setup&&c.setup.step)||1; gotoStep(setupCompleted?4:(requestedPage||configStep));}
       async function saveConfig(extra){const payload={...configPayload(),...(extra||{})};await api('/api/guild-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})}
       saveBtn.onclick=async()=>{try{err.style.display='none';await saveConfig();saveBtn.textContent='Saved';setTimeout(()=>saveBtn.textContent='Save all',1000)}catch(e){err.style.display='block';err.textContent=e.message}};
       doneBtn.onclick=async()=>{try{err.style.display='none';await saveConfig({setupComplete:true,setup:{step:4}});fireConfetti();showFinishOverlay();doneBtn.textContent='Completed';setTimeout(()=>doneBtn.textContent='Mark complete',1200);await loadConfig()}catch(e){err.style.display='block';err.textContent=e.message}};
       initBtn.onclick=async()=>{try{if(setupCompleted)throw new Error('This server setup is already finished.');err.style.display='none';const gid=guildSelect.value;initBtn.disabled=true;await api('/api/guild-config/init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:gid})});await loadConfig();initBtn.textContent='Created';setTimeout(()=>{initBtn.textContent='Create server config';initBtn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;initBtn.disabled=false}};
       document.getElementById('saveChannels').onclick=async()=>{try{err.style.display='none';await saveConfig({setup:{step:2}})}catch(e){err.style.display='block';err.textContent=e.message}};
       document.getElementById('saveRoles').onclick=async()=>{try{err.style.display='none';await saveConfig({setup:{step:3}})}catch(e){err.style.display='block';err.textContent=e.message}};
-      async function createChannel(kind){const gid=guildSelect.value;if(!gid)throw new Error('Pick a guild first.');const defaults={category:'Tickets',feedback:'ticket-feedback',transcripts:'ticket-transcripts'};const label=kind==='category'?'category':'channel';const name=prompt('Name for the new '+label+':',defaults[kind]||'tickets');if(name===null)return false;const trimmed=String(name||'').trim();if(!trimmed)throw new Error('A name is required.');await saveConfig({setup:{step:2}});const result=await api('/api/setup/create-channel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:gid,kind,name:trimmed,parentCategoryId:parentCategoryId.value||null})});await loadCatalogs();if(kind==='category')parentCategoryId.value=result.channel.id;else if(kind==='feedback')appealsChannelId.value=result.channel.id;else if(kind==='transcripts')transcriptsChannelId.value=result.channel.id;renderSummary();return true}
+      async function createChannel(kind){const gid=guildSelect.value;if(!gid)throw new Error('Pick a guild first.');const defaults={category:'Tickets',feedback:'ticket-feedback',transcripts:'ticket-transcripts'};const label=kind==='category'?'category':'channel';const name=prompt('Name for the new '+label+':',defaults[kind]||'tickets');if(name===null)return false;const trimmed=String(name||'').trim();if(!trimmed)throw new Error('A name is required.');await saveConfig({setup:{step:2}});const result=await api('/api/setup/create-channel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:gid,kind,name:trimmed,parentCategoryId:parentCategoryId.value||null})});await loadCatalogs();if(kind==='category')parentCategoryId.value=result.channel.id;else if(kind==='feedback')appealsChannelId.value=result.channel.id;else if(kind==='transcripts')transcriptsChannelId.value=result.channel.id;refreshAllSetupSelects();renderSummary();return true}
       document.querySelectorAll('[data-create-kind]').forEach(btn=>btn.onclick=async()=>{try{err.style.display='none';btn.disabled=true;const created=await createChannel(btn.getAttribute('data-create-kind'));if(created){btn.textContent='Created';setTimeout(()=>{btn.textContent='Create a channel for me';btn.disabled=setupLocked},1100)}else{btn.disabled=setupLocked}}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=setupLocked}});
       document.querySelectorAll('[data-go-step]').forEach(btn=>btn.onclick=()=>gotoStep(btn.getAttribute('data-go-step')));
       document.getElementById('stepNext1').onclick=()=>gotoStep(2);
@@ -920,6 +939,7 @@ function createSetupHtml(req = null) {
       guildSelect.onchange=async()=>{syncPageState();try{await api('/api/dashboard/select-guild',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:guildSelect.value})})}catch{};await loadCatalogs();await loadConfig();};
       if(finishDoneBtn)finishDoneBtn.onclick=()=>{hideFinishOverlay();window.location='/dashboard';};
       if(finishOverlay)finishOverlay.onclick=(e)=>{if(e.target===finishOverlay){hideFinishOverlay();window.location='/dashboard';}};
+      document.addEventListener('click',e=>{if(!e.target.closest('.custom-select'))closeSetupSelects()});
       (async()=>{try{gotoStep(1);await loadGuilds();try{await api('/api/dashboard/select-guild',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:guildSelect.value})})}catch{};await loadCatalogs();await loadConfig();renderSummary()}catch(e){err.style.display='block';err.textContent=e.message}})();
     `;
 
@@ -1036,7 +1056,7 @@ function resolveStaffCapabilities(matchedRoleIds = [], isOwner = false) {
 }
 
 async function getSeniorStaffAccess(client, req) {
-    if (isBotOwnerUser(req)) {
+    if (isStrictOwnerViewer(req)) {
         return {
             allowed: true,
             isOwner: true,
@@ -1366,7 +1386,9 @@ async function getDashboardAccess(client, req, guildId = null) {
     const guildConfig = ticketStore.getGuildConfig(id, storage);
     const managerRoleId = String(guildConfig?.managerRoleId || '').trim();
     const supportRoleIds = getGuildSupportRoleIds(id, storage);
+    const isGuildOwner = String(guild?.ownerId || '') === String(userId);
     const adminLike = Boolean(
+        isGuildOwner ||
         member.permissions?.has?.(PermissionsBitField.Flags.ManageGuild) ||
         member.permissions?.has?.(PermissionsBitField.Flags.Administrator)
     );
@@ -1375,11 +1397,11 @@ async function getDashboardAccess(client, req, guildId = null) {
 
     return {
         guildId: id,
-        level: isManager ? 'manager' : (isStaff ? 'staff' : 'none'),
-        isOwner: false,
+        level: isGuildOwner ? 'guild-owner' : (isManager ? 'manager' : (isStaff ? 'staff' : 'none')),
+        isOwner: isGuildOwner,
         isManager,
         isStaff,
-        canFullDashboard: false,
+        canFullDashboard: isGuildOwner,
         canManageSettings: isManager,
         canManageAvailability: isManager,
         canManageTicketTypes: isManager,
@@ -2299,7 +2321,7 @@ async function handleApi(req, res, url, client) {
             ? ticketStore.getGuildConfig(guildId, ticketStore.getActiveStorage())
             : {};
 
-        sendJson(res, 200, { guildId, config });
+        sendJson(res, 200, { guildId, config, access: await getDashboardAccess(client, req, guildId) });
         return true;
     }
 
@@ -2316,14 +2338,6 @@ async function handleApi(req, res, url, client) {
         }
 
         const activeStorage = ticketStore.getActiveStorage();
-        const currentCfg = typeof ticketStore.getGuildConfig === 'function'
-            ? ticketStore.getGuildConfig(guildId, activeStorage)
-            : {};
-        if (Boolean(currentCfg?.setup?.completed) && !isStrictOwnerViewer(req)) {
-            sendJson(res, 409, { error: 'This server setup is already finished.' });
-            return true;
-        }
-
         const next = {};
         for (const key of ['parentCategoryId', 'appealsChannelId', 'transcriptsChannelId', 'managerRoleId']) {
             const value = String(body[key] || '').trim();
@@ -2520,32 +2534,35 @@ async function handleApi(req, res, url, client) {
     }
 
     if (method === 'GET' && pathname === '/api/roles') {
-        const guildId = getDashboardGuild(client, req)?.id || null;
+        const requestedId = String(url.searchParams.get('guildId') || '').trim();
+        const guildId = /^\d{17,20}$/.test(requestedId) ? requestedId : (getDashboardGuild(client, req)?.id || null);
         if (!(await ensureDashboardPermission(client, req, guildId, 'canManageSettings'))) {
             sendJson(res, 403, { error: 'Forbidden' });
             return true;
         }
-        sendJson(res, 200, { roles: await getRoleCatalog(client, req) });
+        sendJson(res, 200, { roles: await getRoleCatalog(client, { ...req, headers: { ...(req?.headers || {}), cookie: `${req?.headers?.cookie || ''}; dashboard_guild=${guildId}` } }) });
         return true;
     }
 
     if (method === 'GET' && pathname === '/api/channels') {
-        const guildId = getDashboardGuild(client, req)?.id || null;
+        const requestedId = String(url.searchParams.get('guildId') || '').trim();
+        const guildId = /^\d{17,20}$/.test(requestedId) ? requestedId : (getDashboardGuild(client, req)?.id || null);
         if (!(await ensureDashboardPermission(client, req, guildId, 'canManageSettings'))) {
             sendJson(res, 403, { error: 'Forbidden' });
             return true;
         }
-        sendJson(res, 200, { channels: await getTextChannelCatalog(client, req) });
+        sendJson(res, 200, { channels: await getTextChannelCatalog(client, { ...req, headers: { ...(req?.headers || {}), cookie: `${req?.headers?.cookie || ''}; dashboard_guild=${guildId}` } }) });
         return true;
     }
 
     if (method === 'GET' && pathname === '/api/categories') {
-        const guildId = getDashboardGuild(client, req)?.id || null;
+        const requestedId = String(url.searchParams.get('guildId') || '').trim();
+        const guildId = /^\d{17,20}$/.test(requestedId) ? requestedId : (getDashboardGuild(client, req)?.id || null);
         if (!(await ensureDashboardPermission(client, req, guildId, 'canManageSettings'))) {
             sendJson(res, 403, { error: 'Forbidden' });
             return true;
         }
-        sendJson(res, 200, { categories: await getCategoryCatalog(client, req) });
+        sendJson(res, 200, { categories: await getCategoryCatalog(client, { ...req, headers: { ...(req?.headers || {}), cookie: `${req?.headers?.cookie || ''}; dashboard_guild=${guildId}` } }) });
         return true;
     }
 
@@ -4678,7 +4695,7 @@ function startDashboard(client) {
                         sendHtml(res, 403, '<h1>403</h1><p>You do not have access to setup for this server.</p>');
                         return;
                     }
-                    if (!isStrictOwnerViewer(req) && targetGuildId) {
+                    if (!access?.isOwner && !isStrictOwnerViewer(req) && targetGuildId) {
                         const setupConfig = typeof ticketStore.getGuildConfig === 'function'
                             ? ticketStore.getGuildConfig(targetGuildId, ticketStore.getActiveStorage())
                             : {};
