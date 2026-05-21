@@ -488,6 +488,8 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     body[data-view="staff"] .btn{max-width:100%;white-space:normal;text-align:center;line-height:1.2;min-height:42px}
     body[data-view="staff"] .btn span:not(.btn-icon){min-width:0;overflow-wrap:anywhere}
     .theme-nav{position:relative}
+    .theme-secret{display:none!important}
+    body[data-hacker-unlocked="true"] .theme-secret{display:block!important}
     .theme-menu{position:absolute;right:0;top:calc(100% + 8px);display:none;min-width:180px;padding:8px;border-radius:16px;border:1px solid var(--bd);background:var(--panel);box-shadow:var(--cardGlow)}
     .theme-nav.open .theme-menu{display:grid;gap:6px}
     .theme-item{appearance:none;border:1px solid transparent;background:rgba(255,255,255,.03);color:var(--tx);padding:9px 10px;border-radius:12px;text-align:left;cursor:pointer}
@@ -520,7 +522,7 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
           <button class="theme-item" type="button" data-theme-item="light">Light</button>
           <button class="theme-item" type="button" data-theme-item="ocean">Ocean</button>
           <button class="theme-item" type="button" data-theme-item="sunset">Sunset</button>
-          <button class="theme-item" type="button" data-theme-item="hacker">Hacker</button>
+          <button class="theme-item theme-secret" type="button" data-theme-item="hacker">Hacker</button>
         </div>
       </div>
       <a class="btn" href="/logout"><span class="btn-icon">${dashboardIcon('logout')}</span><span>Logout</span></a>
@@ -531,14 +533,17 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
   <script>
     (function(){
       const key='dash_theme';
+      const unlockKey='dash_hacker_unlocked';
+      const unlocked=()=>{try{return localStorage.getItem(unlockKey)==='true'}catch{return false}};
       const allowed=['dark','light','ocean','sunset','hacker'];
-      const normalise=v=>allowed.includes(String(v||'').toLowerCase())?String(v).toLowerCase():'dark';
-      const apply=v=>{document.body.dataset.theme=normalise(v);document.querySelectorAll('[data-theme-item]').forEach(btn=>btn.classList.toggle('active',btn.getAttribute('data-theme-item')===document.body.dataset.theme));};
+      const normalise=v=>{const next=String(v||'').toLowerCase();return allowed.includes(next)&&!(next==='hacker'&&!unlocked())?next:'dark'};
+      const apply=v=>{document.body.dataset.theme=normalise(v);document.body.dataset.hackerUnlocked=unlocked()?'true':'false';document.querySelectorAll('[data-theme-item]').forEach(btn=>btn.classList.toggle('active',btn.getAttribute('data-theme-item')===document.body.dataset.theme));};
       try{apply(localStorage.getItem(key)||'dark')}catch{apply('dark')}
       const nav=document.getElementById('themeNav');
       const btn=document.getElementById('themeBtn');
       if(btn&&nav){btn.onclick=(e)=>{e.stopPropagation();nav.classList.toggle('open')};document.addEventListener('click',()=>nav.classList.remove('open'))}
-      document.querySelectorAll('[data-theme-item]').forEach(item=>item.onclick=(e)=>{e.stopPropagation();const next=normalise(item.getAttribute('data-theme-item'));try{localStorage.setItem(key,next)}catch{}apply(next);if(nav)nav.classList.remove('open')});
+      let darkClicks=0;
+      document.querySelectorAll('[data-theme-item]').forEach(item=>item.onclick=(e)=>{e.stopPropagation();const pick=String(item.getAttribute('data-theme-item')||'');if(pick==='dark'){darkClicks+=1;if(darkClicks>=7){try{localStorage.setItem(unlockKey,'true')}catch{}}}else{darkClicks=0}const next=normalise(pick);try{localStorage.setItem(key,next)}catch{}apply(next);if(nav)nav.classList.remove('open')});
     })();
   </script>
   <script>document.body.dataset.view=${JSON.stringify(staffView ? 'staff' : (ownerView ? 'owner' : 'default'))};</script>
@@ -3323,8 +3328,8 @@ html,body{margin:0;color:var(--tx);font-family:"Readex Pro","Segoe UI","Inter",s
 .title{margin:0;font-size:30px;font-weight:700;letter-spacing:.3px}
 .card{background:linear-gradient(180deg,var(--card),rgba(255,255,255,.03));border:1px solid var(--bd);border-radius:18px;padding:16px;box-shadow:0 16px 50px rgba(0,0,0,.34);backdrop-filter:blur(14px);transition:transform .16s ease,background .2s ease,border-color .2s ease}
 .card:hover{transform:translateY(-4px);background:linear-gradient(180deg,var(--card-strong),rgba(255,255,255,.04));border-color:rgba(255,255,255,.2)}
-.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
-.row{display:grid;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.grid{display:grid;gap:22px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.row{display:grid;gap:14px;grid-template-columns:repeat(2,minmax(0,1fr))}
 label{font-size:12px;color:var(--mt);display:block;margin-bottom:6px;font-weight:600}
 input,select,textarea,button{width:100%;padding:10px 11px;border-radius:13px;border:1px solid var(--bd);background:rgba(2,6,23,.72);color:var(--tx)}
 input:focus,select:focus,textarea:focus{outline:none;border-color:rgba(56,189,248,.65);box-shadow:0 0 0 3px rgba(56,189,248,.18)}
@@ -3341,7 +3346,7 @@ textarea{min-height:84px}button{cursor:pointer}
  .btn:active{transform:translateY(0)}
  .btn-icon{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px}
  .btn-icon svg{width:16px;height:16px;display:block}
- .notice{min-height:20px;margin-bottom:10px}.ok{color:var(--ok)}.danger{color:var(--er)}.list{display:grid;gap:10px}.item{padding:10px;border:1px solid var(--bd);border-radius:12px;background:rgba(255,255,255,.03)}
+.notice{min-height:20px;margin-bottom:16px}.ok{color:var(--ok)}.danger{color:var(--er)}.list{display:grid;gap:14px}.item{padding:12px;border:1px solid var(--bd);border-radius:12px;background:rgba(255,255,255,.03)}
 .item-top{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px}.muted{font-size:12px;color:var(--mt)}
  .roles{display:flex;gap:6px;flex-wrap:wrap}.role{--c:#99AAB5;display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;border:1px solid color-mix(in srgb,var(--c) 45%,transparent);background:color-mix(in srgb,var(--c) 22%,transparent);font-size:12px}.pill{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);font-size:12px;font-weight:700}.pill.ok{border-color:rgba(87,242,135,.35);background:rgba(87,242,135,.12);color:#eafff2}.pill.warn{border-color:rgba(254,231,92,.38);background:rgba(254,231,92,.14);color:#fff9db}.pill.danger{border-color:rgba(237,66,69,.42);background:rgba(237,66,69,.14);color:#ffe9ea}
  .mention{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;border:1px solid rgba(88,101,242,.28);background:rgba(88,101,242,.18);color:#d7dcff;font-weight:800}
@@ -3499,8 +3504,8 @@ details.acc .acc-body{padding:12px 12px;border-top:1px solid rgba(255,255,255,.1
 .ms-chip{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;background:rgba(99,102,241,.24);border:1px solid rgba(129,140,248,.4);font-size:12px}
 .card{background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:14px;box-shadow:0 18px 50px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.12);backdrop-filter:blur(18px)}
 .preview-shell{border:1px solid rgba(255,255,255,.16);border-radius:14px;background:linear-gradient(180deg,rgba(20,23,33,.90),rgba(14,17,25,.86));padding:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.10)}
-.main{padding:20px 22px}
-.topbar{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,rgba(7,7,10,.72),rgba(7,7,10,.30));backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.10);border-radius:18px;padding:14px 16px;margin-bottom:14px}
+.main{padding:24px 26px}
+.topbar{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,rgba(7,7,10,.72),rgba(7,7,10,.30));backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.10);border-radius:18px;padding:14px 16px;margin-bottom:22px}
 .title{margin:0;font-size:26px;letter-spacing:.2px}
 @keyframes pageIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 #app{animation:pageIn .22s ease;transition:opacity .18s ease,transform .18s ease}
@@ -3820,21 +3825,44 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
  .stat-tile{padding:14px;border-radius:16px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03)}
  .stat-tile strong{display:block;font-size:26px;line-height:1.05;margin-top:4px}
  .quick-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
- .module-stack{display:grid;gap:14px}
+  .module-stack{display:grid;gap:22px}
  .list-meta{margin-top:4px;font-size:12px;color:rgba(247,248,255,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  .help{margin-top:6px;font-size:12px;color:rgba(247,248,255,.60)}
  textarea{min-height:110px}
- @media(max-width:1100px){.split{grid-template-columns:1fr}}
+  #app > .grid,#app > .split{grid-template-columns:1fr;gap:24px}
+  #app > .grid > .card,#app > .split > .card{width:100%;min-height:min(620px,calc(100vh - 180px));padding:22px}
+  #app .card + .card{margin-top:2px}
+  .server-icon-btn{width:46px!important;height:46px!important;padding:0!important;border-radius:16px}
+  .topbar-right .server-icon-btn{order:99}
+  .server-icon-btn .btn-icon{width:20px;height:20px}
+  .server-icon-btn .btn-icon svg{width:20px;height:20px}
+  .theme-secret{display:none!important}
+  body[data-hacker-unlocked="true"] .theme-secret{display:flex!important}
+  body[data-theme] .card,body[data-theme] .item,body[data-theme] .preview-shell{color:var(--tx)}
+  body[data-theme] .muted,body[data-theme] .help,body[data-theme] .topnav-copy span{color:var(--mt)}
+  body[data-theme] input,body[data-theme] select,body[data-theme] textarea,body[data-theme] button{color:var(--tx)}
+  body[data-theme] input::placeholder,body[data-theme] textarea::placeholder{color:color-mix(in srgb,var(--mt) 72%, transparent)}
+  body[data-theme] .cs-trigger,body[data-theme] .ms-trigger,body[data-theme] .topnav-item{color:var(--tx)}
+  body[data-theme] .btn{color:#fff}
+  body[data-theme="light"] .btn{color:#fff}
+  body[data-theme="light"] .btn-danger{color:#fff}
+  body[data-theme="light"] .pill.ok{color:#064e3b}
+  body[data-theme="light"] .pill.warn{color:#713f12}
+  body[data-theme="light"] .pill.danger{color:#7f1d1d}
+  @media(max-width:1100px){.split{grid-template-columns:1fr}}
  </style></head>
 <body>
  <div id="auth" class="auth"><div class="auth-card"><h3>Dashboard Login</h3><div class="muted" style="margin-bottom:10px">Sign in with Discord to continue.</div><a id="authDiscord" class="btn" href="/login" style="display:block;text-align:center;text-decoration:none">Sign in with Discord</a><div class="muted" style="margin:12px 0 6px">or use a token</div><label>Token</label><input id="authToken" type="password" /><div class="row" style="margin-top:10px"><button id="authLogin" class="btn">Login</button></div><div id="authMsg" class="notice danger"></div></div></div>
- <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">${pageDescriptionForPath(currentPath)}</div></div></div><div class="topbar-right"><a class="btn-soft" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Servers</span></a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu">${topNavItem('/overview','Home','General','Snapshot and quick actions')}${topNavItem('/settings','Settings','General','Core config and routing')}${topNavItem('/availability','Availability','General','Queue status and overrides')}${topNavItem('/tutorials','Tutorials','General','Guides and walkthroughs')}${topNavItem('/tickets','Tickets','Tickets','Active queue management')}${topNavItem('/transcripts','Transcripts','Tickets','Saved conversation history')}${topNavItem('/commands/ticket-types','Ticket Types','Tickets','Flow design and coverage')}${topNavItem('/commands/tag','Tags','Tickets','Reusable staff replies')}${topNavItem('/commands/feedback','Feedback','Content','Feedback destination and flow')}${topNavItem('/statistics','Statistics','Content','Trends and activity')}${topNavItem('/embed-editor','Embed Editor','Content','Template visuals and copy')}${topNavItem('/documentation','Documentation','Content','Reference notes and placeholders')}</div></div><div id="themeNav" class="topnav"><button id="themeBtn" class="btn-soft topnav-btn" type="button"><span id="themeLabel">Theme</span><span class="chev">v</span></button><div class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-theme-item="dark">Dark <span class="tag">Default</span></button><button type="button" class="topnav-item" data-theme-item="light">Light <span class="tag">Warm</span></button><button type="button" class="topnav-item" data-theme-item="ocean">Ocean <span class="tag">Cool</span></button><button type="button" class="topnav-item" data-theme-item="sunset">Sunset <span class="tag">Bold</span></button><button type="button" class="topnav-item" data-theme-item="hacker">Hacker <span class="tag">Secret</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px"><span class="btn-icon">${dashboardIcon('restart')}</span><span>Refresh</span></button></div></div><div id="announcementBar"></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
+ <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">${pageDescriptionForPath(currentPath)}</div></div></div><div class="topbar-right"><a class="btn-soft server-icon-btn" href="/dashboard" title="Servers" aria-label="Servers"><span class="btn-icon">${dashboardIcon('servers')}</span></a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu">${topNavItem('/overview','Home','General','Snapshot and quick actions')}${topNavItem('/settings','Settings','General','Core config and routing')}${topNavItem('/availability','Availability','General','Queue status and overrides')}${topNavItem('/tutorials','Tutorials','General','Guides and walkthroughs')}${topNavItem('/tickets','Tickets','Tickets','Active queue management')}${topNavItem('/transcripts','Transcripts','Tickets','Saved conversation history')}${topNavItem('/commands/ticket-types','Ticket Types','Tickets','Flow design and coverage')}${topNavItem('/commands/tag','Tags','Tickets','Reusable staff replies')}${topNavItem('/commands/feedback','Feedback','Content','Feedback destination and flow')}${topNavItem('/statistics','Statistics','Content','Trends and activity')}${topNavItem('/embed-editor','Embed Editor','Content','Template visuals and copy')}${topNavItem('/documentation','Documentation','Content','Reference notes and placeholders')}</div></div><div id="themeNav" class="topnav"><button id="themeBtn" class="btn-soft topnav-btn" type="button"><span id="themeLabel">Theme</span><span class="chev">v</span></button><div class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-theme-item="dark">Dark <span class="tag">Default</span></button><button type="button" class="topnav-item" data-theme-item="light">Light <span class="tag">Warm</span></button><button type="button" class="topnav-item" data-theme-item="ocean">Ocean <span class="tag">Cool</span></button><button type="button" class="topnav-item" data-theme-item="sunset">Sunset <span class="tag">Bold</span></button><button type="button" class="topnav-item theme-secret" data-theme-item="hacker">Hacker <span class="tag">Secret</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px"><span class="btn-icon">${dashboardIcon('restart')}</span><span>Refresh</span></button></div></div><div id="announcementBar"></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
 <script>
  let currentPath=${JSON.stringify(currentPath)},tokenKey='dashboard_token_ui',defaultEmbedTemplates=${JSON.stringify(DEFAULT_EMBED_TEMPLATES)};
 const app=document.getElementById('app'),notice=document.getElementById('notice'),auth=document.getElementById('auth'),authDiscord=document.getElementById('authDiscord'),authToken=document.getElementById('authToken'),authMsg=document.getElementById('authMsg');
  const themeKey='dash_theme';
- const inferTheme=()=>{try{const saved=String(localStorage.getItem(themeKey)||'dark').toLowerCase();return ['dark','light','ocean','sunset','hacker'].includes(saved)?saved:'dark'}catch{return 'dark'}};
- document.body.dataset.theme=inferTheme();
+ const hackerUnlockKey='dash_hacker_unlocked';
+ const isHackerUnlocked=()=>{try{return localStorage.getItem(hackerUnlockKey)==='true'}catch{return false}};
+ const inferTheme=()=>{try{const saved=String(localStorage.getItem(themeKey)||'dark').toLowerCase();if(saved==='hacker'&&!isHackerUnlocked())return 'dark';return ['dark','light','ocean','sunset','hacker'].includes(saved)?saved:'dark'}catch{return 'dark'}};
+  document.body.dataset.theme=inferTheme();
+  document.body.dataset.hackerUnlocked=isHackerUnlocked()?'true':'false';
   let state=null;
   let ui=(()=>{try{const raw=sessionStorage.getItem('dash_ui');const parsed=raw?JSON.parse(raw):{};return parsed&&typeof parsed==='object'?parsed:{};}catch{return {}}})();
  const saveUi=()=>{try{sessionStorage.setItem('dash_ui',JSON.stringify(ui||{}))}catch{}};
@@ -3897,23 +3925,10 @@ function categorySelect(id,selectedId,placeholder){const cats=Array.isArray(stat
    '<div class="card">'+
     '<h3>AI Access</h3>'+
     '<div class="pill '+(ai.premiumActive?'ok':ai.trialActive?'warn':ai.expiredTrial?'danger':'')+'">'+esc(ai.statusLabel||'No AI subscription')+'</div>'+
-    '<p class="muted" style="margin-top:10px">'+(isOwner
-      ? 'Control AI availability for this server, including trials and premium access.'
-      : (ai.hasAccess
+    '<p class="muted" style="margin-top:10px">'+(ai.hasAccess
         ? 'AI suggested replies are enabled for this server.'
-        : 'This server does not own a premium AI subscription. Ask the bot owner for access or a trial.'))+'</p>'+
-    (isOwner
-      ? (
-        '<div class="row" style="margin-top:12px;grid-template-columns:1fr 1fr">'+
-          '<button id="aiStartTrial" class="btn">Start 7-Day Trial</button>'+
-          '<button id="aiSetPremium" class="btn-soft">Enable Premium</button>'+
-        '</div>'+
-        '<div class="row" style="margin-top:10px;grid-template-columns:1fr 1fr">'+
-          '<button id="aiToggleEnabled" class="btn-soft">'+(ai.enabled?'Disable AI':'Enable AI')+'</button>'+
-          '<button id="aiClear" class="btn-danger">Clear Access</button>'+
-        '</div>'
-      )
-      : '<div style="margin-top:12px"><button id="aiUpsell" class="btn-soft" type="button">Learn About AI Access</button></div>')+
+        : 'This server does not own a premium AI subscription. Ask the bot owner for access or a trial.')+'</p>'+
+    '<div style="margin-top:12px"><button id="aiUpsell" class="btn-soft" type="button">Learn About AI Access</button></div>'+
    '</div>'+
   '</div>'+
 
@@ -4201,7 +4216,7 @@ function renderTranscripts(){
   return '<div class=\"item transcriptItem\" data-hay=\"'+esc(hay)+'\"><div class=\"item-top\"><strong>'+esc(title)+'</strong><div style=\"display:flex;gap:6px\">'+
    '<button class=\"btn-soft viewTranscript\" data-id=\"'+esc(id)+'\">View</button>'+
    '<button class=\"btn-soft downloadTranscript\" data-id=\"'+esc(id)+'\">Download</button>'+
-   (state.isOwner?'<button class=\"btn-danger deleteTranscript\" data-id=\"'+esc(id)+'\">Delete</button>':'')+
+    ''+
    '</div></div><div class=\"muted\">Type: <strong>'+type+'</strong> &bull; Opened by '+opener+' &bull; Closed by '+closer+(closedAt?' &bull; '+closedAt:'')+' &bull; '+size+(exp?(' &bull; Expires '+esc(exp)):'')+'</div>'+reason+notes+'</div>';
  };
 
@@ -4241,9 +4256,6 @@ function renderTutorials(){
  '</div>';
 }
 function renderDocs(){
- const isOwner=Boolean(state&&state.isOwner);
- const tutorials=Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[];
- const announcement=(state&&state.botConfig&&state.botConfig.siteAnnouncement)||{enabled:false,text:'',ctaLabel:'',linkUrl:''};
  const rows=[['{ticketType}','Ticket type name'],['{requester}','User mention'],['{username}','Requester username'],['{userId}','Requester ID'],['{reason}','Open reason'],['{timestamp}','Discord timestamp'],['{timestampIso}','ISO timestamp'],['{date}','Date YYYY-MM-DD'],['{time}','Time HH:mm:ss UTC'],['{channel}','Ticket channel mention'],['{channelId}','Ticket channel ID']];
  const embedExample=esc(JSON.stringify({content:'Optional message content',embeds:[{title:'Embed title',description:'Embed description',color:5793266,thumbnail:{url:'https://example.com/thumb.png'},image:{url:'https://example.com/image.png'},footer:{text:'Footer text'}}]},null,2));
  const attachmentExample=esc(JSON.stringify({content:'Image from attachment',embeds:[{title:'Proof',image:{url:'attachment://proof.png'}}]},null,2));
@@ -4270,7 +4282,6 @@ function renderDocs(){
    '<pre style="white-space:pre-wrap;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);padding:10px;border-radius:10px;margin-top:10px">'+sepExample+'</pre>'+
    '<div class="item" style="margin-top:10px"><div class="muted">Tip: keep accent colors minimal; the bot applies accent automatically for success/error notices.</div></div>'+
   '</div>'+
-  (isOwner?('<div class="card"><h3>Tutorial Library Content</h3><div class="muted">Edit tutorials here. Each tutorial supports a cover image plus per-step <code>imageUrl</code> or <code>videoUrl</code>. Save as JSON to update the modal cards.</div><textarea id="tutorialsJson" style="min-height:320px;font-family:Consolas,monospace;margin-top:10px">'+esc(JSON.stringify(tutorials,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="saveTutorials" class="btn">Save Tutorials</button><button id="formatTutorials" class="btn-soft" type="button">Format JSON</button></div></div><div class="card"><h3>Site-wide Announcement</h3><label>Enabled</label><select id="announcementEnabled"><option value="false"'+(!announcement.enabled?' selected':'')+'>Disabled</option><option value="true"'+(announcement.enabled?' selected':'')+'>Enabled</option></select><label>Text</label><input id="announcementText" value="'+esc(announcement.text||'')+'" placeholder="Important update for all dashboard users" /><label>CTA Label</label><input id="announcementCta" value="'+esc(announcement.ctaLabel||'')+'" placeholder="Read more" /><label>CTA URL</label><input id="announcementUrl" value="'+esc(announcement.linkUrl||'')+'" placeholder="https://..." /><div class="row" style="margin-top:10px"><button id="saveAnnouncement" class="btn">Save Announcement</button></div></div>'):'')+
  '</div>'}
 function selectedRoles(id){return Array.from(document.querySelectorAll('input[data-ms-check="'+id+'"]:checked')).map(el=>el.value)}
 function setRoleSelection(id,values){const selectedSet=new Set((values||[]).map(String));document.querySelectorAll('input[data-ms-check="'+id+'"]').forEach(el=>{el.checked=selectedSet.has(el.value)});updateRoleSelectionUi(id)}
@@ -4309,14 +4320,14 @@ function wire(){
      const groupForPath=(p)=>{if(p==='/overview'||p==='/settings'||p==='/availability'||p==='/tutorials')return 'general';if(p==='/commands/ticket-types'||p==='/commands/tag'||p==='/tickets'||p==='/transcripts')return 'tickets';return 'content'};
      const allowedPages=()=>{const access=(state&&state.access)||{};const set=new Set(['/documentation','/tutorials']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>set.add(p));return set}if(access.canManageTicketTypes){set.add('/settings');set.add('/commands/ticket-types')}if(access.canManageAvailability)set.add('/availability');if(access.canViewTickets||access.canManageEscalations)set.add('/tickets');if(access.canViewTranscripts)set.add('/transcripts');return set};
      let darkSecretCount=0;
-     const normaliseTheme=(t)=>{const v=String(t||'').trim().toLowerCase();return ['dark','light','ocean','sunset','hacker'].includes(v)?v:'dark'};
+     const normaliseTheme=(t)=>{const v=String(t||'').trim().toLowerCase();if(v==='hacker'&&!isHackerUnlocked())return 'dark';return ['dark','light','ocean','sunset','hacker'].includes(v)?v:'dark'};
      const syncThemeUi=()=>{const cur=normaliseTheme(document.body.dataset.theme);const labels={dark:'Dark',light:'Light',ocean:'Ocean',sunset:'Sunset',hacker:'Hacker'};if(themeLabel)themeLabel.textContent='Theme: '+(labels[cur]||'Dark');themeItems.forEach(btn=>{const v=btn.getAttribute('data-theme-item')||'';btn.classList.toggle('active',v===cur)})};
      const applyTheme=(t)=>{document.body.dataset.theme=normaliseTheme(t);syncThemeUi()};
      const setTheme=(t)=>{const next=normaliseTheme(t);try{localStorage.setItem(themeKey,next)}catch{}applyTheme(next)};
      const registerDarkSecret=()=>false;
      applyTheme(document.body.dataset.theme||'dark');
      if(themeNav&&themeBtn){themeBtn.onclick=(ev)=>{ev.stopPropagation();const next=!themeNav.classList.contains('open');closePickers();if(next)themeNav.classList.add('open');else themeNav.classList.remove('open')}};
-     themeItems.forEach(btn=>{btn.onclick=()=>{const pick=btn.getAttribute('data-theme-item')||'';setTheme(pick);closePickers()}});
+     themeItems.forEach(btn=>{btn.onclick=()=>{const pick=btn.getAttribute('data-theme-item')||'';if(pick==='dark'){darkSecretCount+=1;if(darkSecretCount>=7){try{localStorage.setItem(hackerUnlockKey,'true')}catch{}document.body.dataset.hackerUnlocked='true'}}else{darkSecretCount=0}setTheme(pick);closePickers()}});
      const closeTopNav=()=>{if(topNav)topNav.classList.remove('open')};
    const setTopNavValue=(p)=>{const next=String(p||'');if(topNav)topNav.dataset.value=next;if(topNavLabel)topNavLabel.textContent=navTitleForPath(next);topNavItems.forEach(b=>{const v=b.getAttribute('data-value')||'';b.classList.toggle('active',v===next)})};
    const syncNav=()=>{document.querySelectorAll('.nav-item').forEach(a=>{const p=a.getAttribute('data-nav')||a.getAttribute('href')||'';a.classList.toggle('active',p===currentPath)})};
@@ -4476,15 +4487,7 @@ function renderOverview(){
      imgs.slice(0,3).map(u=>'<a href=\"'+esc(u)+'\" target=\"_blank\" rel=\"noreferrer\" style=\"display:block;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04)\"><img src=\"'+esc(u)+'\" style=\"display:block;width:100%;height:92px;object-fit:cover\" loading=\"lazy\" /></a>').join('')+
     '</div>')
   : '';
- const imagesCard=isOwner
-  ? ('<div class="card"><h3>Landing Page Images</h3><p class="muted">Paste image URLs to show on <strong>/</strong> (optional).</p>'+
-     '<label>Image URL 1</label><input id="homeImg1" value="'+img0+'" placeholder="https://..." />'+
-     '<label>Image URL 2</label><input id="homeImg2" value="'+img1+'" placeholder="https://..." />'+
-     '<label>Image URL 3</label><input id="homeImg3" value="'+img2+'" placeholder="https://..." />'+
-     '<div class="row" style="margin-top:10px"><button id="saveHomeImages" class="btn">Save Images</button><button id="clearHomeImages" class="btn-soft" type="button">Clear</button></div>'+
-     preview+
-    '</div>')
-  : '';
+ const imagesCard='';
  const tutorialCard=tutorialOn
   ? ('<div class="card"><h3>Tutorial Library</h3><div class="muted">Open the tutorial cards for walkthroughs, screenshots, and step-by-step staff flows.</div><div class="row" style="grid-template-columns:1fr;gap:10px;margin-top:12px"><button type="button" class="btn qa" data-go="/tutorials">Open Tutorials</button></div><div class="muted" style="margin-top:10px">'+(rolePermanent?'Role permanence is enabled.':'Role permanence is disabled.')+'</div></div>')
   : '';
