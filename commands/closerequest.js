@@ -5,17 +5,12 @@ const {
     ButtonStyle,
     ContainerBuilder,
     TextDisplayBuilder,
-    MessageFlags,
-    AttachmentBuilder
+    MessageFlags
 } = require('discord.js');
 const ticketStore = require('../utils/ticket-store');
 const transcriptionHandler = require('../handlers/transcription-handler');
-const { archiveTranscript } = require('../utils/transcript-archive');
-const { buildTranscriptSummaryV2 } = require('../utils/transcript-summary');
-const { getPublicBaseUrl } = require('../utils/public-url');
 const { resolveEmbedPayload, resolveEmbedByTitle } = require('../utils/embed-config');
 const { buildV2FromTemplate } = require('../utils/components-v2-messages');
-const { resolveTranscriptsChannelId } = require('../utils/guild-defaults');
 
 const CLOSE_NOW_ID = 'closerequest_close_now';
 const CANCEL_ID = 'closerequest_cancel';
@@ -73,21 +68,6 @@ function scheduleCloseRequestTimer(ticketChannel, timerMinutes) {
     }, timerMinutes * 60 * 1000);
 }
 
-async function trySendUserTranscript(user, payload, file) {
-    if (!user || typeof user.send !== 'function') return false;
-    try {
-        await user.send({ ...payload, files: file ? [file] : [] });
-        return true;
-    } catch {
-        try {
-            await user.send({ ...payload });
-            return true;
-        } catch {
-            return false;
-        }
-    }
-}
-
 async function closeTicketWithTranscript(ticketChannel, reason, closedByUserId = null) {
     const activeStorage = ticketStore.getActiveStorage();
     const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
@@ -99,76 +79,24 @@ async function closeTicketWithTranscript(ticketChannel, reason, closedByUserId =
     await ticketChannel.send(buildEmbed(closedEmbed.title, closedEmbed.description, closedEmbed.color));
 
     try {
-        const transcriptData = await transcriptionHandler.createTranscript(ticketChannel, { includeParticipants: true });
-        const transcriptPath = transcriptData?.transcriptPath || transcriptData;
-        const participantUserIds = Array.isArray(transcriptData?.participantUserIds) ? transcriptData.participantUserIds : [];
-
-        let archiveEntry = null;
-        try {
-            archiveEntry = archiveTranscript({
-                channel: ticketChannel,
-                ticket,
-                transcriptPath,
-                reason,
-                closedByUserId,
-                closedAt,
-                participantUserIds,
-                storage: activeStorage
-            });
-        } catch (error) {
-            console.error('Error archiving transcript:', error);
-        }
-
-        const baseUrl = getPublicBaseUrl();
-        const publicToken = String(archiveEntry?.publicToken || '').trim();
-        const transcriptUrl = publicToken ? `${baseUrl}/t/${publicToken}` : '';
-        const headerUrl = String(process.env.TRANSCRIPT_HEADER_URL || process.env.SUPPORT_SERVER_URL || '').trim();
-        const headerLabel = String(process.env.TRANSCRIPT_HEADER_LABEL || ticketChannel.guild?.name || 'Support Server').trim();
-
-        const fileName = `${ticketChannel.id}.html`;
-        const file = new AttachmentBuilder(transcriptPath, { name: fileName });
-        const payload = buildTranscriptSummaryV2({
-            ticketId: ticketChannel.id,
-            guildName: ticketChannel.guild?.name || 'Support Transcript',
-            brandEmoji: process.env.TRANSCRIPT_BRAND_EMOJI || '',
-            openedBy: ticket?.createdBy || null,
-            openedAt: ticket?.createdAt || null,
-            claimedBy: ticket?.claimedBy || null,
-            claimedAt: ticket?.claimedAt || null,
-            closedBy: closedByUserId || null,
-            closedAt,
-            closeReason: reason,
-            transcriptUrl,
-            headerUrl,
-            headerLabel
-        });
-        const userPayload = {
-            ...payload,
-            components: Array.isArray(payload?.components)
-                ? payload.components.filter(component => {
-                    const text = String(component?.text || component?.data?.text || '').toLowerCase();
-                    return !text.includes('/controller');
-                })
-                : payload.components
-        };
-
-        // 1) Send to transcripts channel (staff archive)
-        const transcriptsChannelId = resolveTranscriptsChannelId(ticketChannel.guild?.id, activeStorage) || null;
-        const transcriptsChannel = transcriptsChannelId
-            ? await ticketChannel.guild.channels.fetch(transcriptsChannelId).catch(() => null)
-            : null;
-        if (transcriptsChannel && typeof transcriptsChannel.send === 'function') {
-            await transcriptsChannel.send({ ...payload, files: [file] }).catch(() => null);
-        }
-
-        // 2) DM the ticket opener (user copy) when possible
+        // Create transcript using the same method as t!transcript command
+        const transcriptPath = await transcriptionHandler.createTranscript(ticketChannel);
+        
+        // Fetch the user who created the ticket for DM delivery
+        let ticketCreator = null;
         if (ticket?.createdBy) {
-            const opener = await ticketChannel.client.users.fetch(String(ticket.createdBy)).catch(() => null);
-            if (opener) {
-                await trySendUserTranscript(opener, userPayload, file);
-            }
+            ticketCreator = await ticketChannel.client.users.fetch(String(ticket.createdBy)).catch(() => null);
         }
+        
+        // Send transcript using the standardized sendTranscript function
+        // This handles link-based delivery instead of file attachments
+        await transcriptionHandler.sendTranscript(ticketChannel, transcriptPath, { 
+            keepFile: false,
+            user: ticketCreator,
+            activeStorage
+        });
     } catch (error) {
+        console.error('Error generating or sending transcript:', error);
         await ticketChannel.send(buildEmbed('Transcript Error', 'Could not generate or send transcript for this ticket.', 0xED4245));
     }
 
