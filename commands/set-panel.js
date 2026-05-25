@@ -9,7 +9,8 @@ const RESPONSES = {
     unknownTicketType: 'Unknown ticket type: "{ticketType}".',
     panelSet: 'Ticket panel has been set up.',
     panelCleared: 'Ticket panel has been set up. Channel restriction cleared.',
-    panelRestricted: 'Ticket panel has been set up. This channel now only opens **{ticketType}** tickets.'
+    panelRestricted: 'Ticket panel has been set up. This channel now only opens **{ticketType}** tickets.',
+    panelUpdated: 'Ticket panel updated with custom name: **{panelName}**'
 };
 
 module.exports = {
@@ -78,6 +79,9 @@ module.exports = {
             const panels = guildConfig.panels && typeof guildConfig.panels === 'object' ? guildConfig.panels : {};
             panels[targetChannel.id] = { ...(panels[targetChannel.id] || {}), name: panelName };
             ticketStore.setGuildConfig(interaction.guildId, { panels }, activeStorage);
+            if (!ticketTypeInput && !clearRestriction) {
+                notice = RESPONSES.panelUpdated.replace('{panelName}', panelName);
+            }
         }
 
         return ticketHandler.createTicketPanel(interaction, { channel: targetChannel, notice, panelName: panelName || undefined });
