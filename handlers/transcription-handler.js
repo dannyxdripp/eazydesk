@@ -286,9 +286,9 @@ function buildTranscriptHtml(channel, messages) {
             <div class="toolbar">
                 <span class="count-pill">${messageCount} messages</span>
                 <select id="themeSelect" aria-label="Theme">
-                    <option value="discord">Discord</option>
-                    <option value="midnight">Midnight</option>
-                    <option value="slate">Slate</option>
+                    <option value="discord">Default</option>
+                    <option value="midnight">Dark</option>
+                    <option value="slate">Light</option>
                 </select>
             </div>
         </div>
@@ -296,7 +296,7 @@ function buildTranscriptHtml(channel, messages) {
     <main class="wrap">
         <section class="hero">
             <div class="meta">Transcript archive</div>
-            <div style="font-size:15px;margin-top:6px">This view mirrors a Discord-style conversation with a calmer archival layout and a built-in theme switcher.</div>
+            <div style="font-size:15px;margin-top:6px">This is an online transcription of the ticket conversation. Some images/content may not load corrcetly.</div>
         </section>
         <section class="messages">
             ${messageCount ? renderMessages(messages) : '<div class="empty">No messages found in this ticket.</div>'}
@@ -352,11 +352,16 @@ module.exports = {
     async sendTranscript(channel, transcriptPath, options = {}) {
         try {
             const keepFile = options.keepFile !== false;
-            const transcriptsChannelId = resolveTranscriptsChannelId(channel.guild?.id);
+            const user = options.user || null;
+            const activeStorage = options.activeStorage || null;
+            const guildId = channel.guild?.id;
+            
+            // Resolve transcripts channel
+            const transcriptsChannelId = resolveTranscriptsChannelId(guildId, activeStorage);
             if (!transcriptsChannelId) {
                 throw new Error('No transcripts channel is configured for this server.');
             }
-            const transcriptsChannel = await channel.guild.channels.fetch(transcriptsChannelId);
+            const transcriptsChannel = await channel.guild.channels.fetch(transcriptsChannelId).catch(() => null);
 
             if (!transcriptsChannel) {
                 throw new Error('Transcripts channel not found.');
@@ -366,6 +371,7 @@ module.exports = {
             const file = new AttachmentBuilder(transcriptPath, { name: fileName });
             const base = buildV2Notice('Ticket Transcript', `Transcript for \`${channel.name}\`\n\n**Channel ID:** \`${channel.id}\``, 0x5865F2);
 
+            // Send to transcripts channel
             await transcriptsChannel.send({
                 ...base,
                 flags: MessageFlags.IsComponentsV2,
@@ -377,7 +383,26 @@ module.exports = {
                         file: { url: `attachment://${fileName}` }
                     }
                 ]
-            });
+            }).catch(() => null);
+
+            // Send DM to user if provided
+            if (user && typeof user.send === 'function') {
+                try {
+                    await user.send({
+                        ...base,
+                        files: [file]
+                    }).catch(async () => {
+                        // Try again without file if it fails (file size might be too large for DM)
+                        await user.send({
+                            content: `Your ticket transcript for #${channel.name} has been saved. You can view it in the support server.`,
+                            ...base
+                        }).catch(() => null);
+                    });
+                } catch {
+                    // Silently fail if user cannot be DMed
+                }
+            }
+
             if (!keepFile) fs.unlinkSync(transcriptPath);
         } catch (error) {
             console.error('Error sending transcript:', error);

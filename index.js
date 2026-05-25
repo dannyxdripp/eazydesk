@@ -483,8 +483,20 @@ async function handleOwnerPrefixCommand(message, input, activeStorage) {
 
         await send('Transcript', `Generating transcript for <#${targetChannelId}>...`, 0x5865F2);
         const transcriptPath = await transcriptionHandler.createTranscript(ticketChannel);
-        await transcriptionHandler.sendTranscript(ticketChannel, transcriptPath, { keepFile: false });
-        await send('Transcript', 'Transcript sent to the transcripts channel.', 0x57F287);
+        
+        // Fetch the user who created the ticket
+        let ticketCreator = null;
+        if (ticket?.createdBy) {
+            ticketCreator = await message.client.users.fetch(String(ticket.createdBy)).catch(() => null);
+        }
+        
+        await transcriptionHandler.sendTranscript(ticketChannel, transcriptPath, { 
+            keepFile: false,
+            user: ticketCreator,
+            activeStorage
+        });
+        const dmNote = ticketCreator ? ' and sent a copy to the ticket creator.' : '.';
+        await send('Transcript', `Transcript sent to the transcripts channel${dmNote}`, 0x57F287);
         return true;
     }
 
