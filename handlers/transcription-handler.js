@@ -4,6 +4,7 @@ const { AttachmentBuilder, MessageFlags } = require('discord.js');
 const { buildV2Notice } = require('../utils/components-v2-messages');
 const { getTranscriptsDir, ensureDir } = require('../utils/storage-paths');
 const { resolveTranscriptsChannelId } = require('../utils/guild-defaults');
+const { getPublicBaseUrl } = require('../utils/public-url');
 
 const TRANSCRIPTS_DIR = getTranscriptsDir();
 
@@ -367,37 +368,29 @@ module.exports = {
                 throw new Error('Transcripts channel not found.');
             }
 
-            const fileName = `${channel.id}.html`;
-            const file = new AttachmentBuilder(transcriptPath, { name: fileName });
-            const base = buildV2Notice('Ticket Transcript', `Transcript for \`${channel.name}\`\n\n**Channel ID:** \`${channel.id}\``, 0x5865F2);
+            // Generate transcript URL
+            const baseUrl = String(getPublicBaseUrl() || 'https://eazydesk.onrender.com').trim();
+            const transcriptUrl = `${baseUrl}/transcripts/${channel.id}`;
+            
+            // Build message with link
+            const transcriptMessage = `**Ticket Transcript:** [${channel.name}](${transcriptUrl})\n**Channel ID:** \`${channel.id}\`\n**View:** ${transcriptUrl}`;
+            const base = buildV2Notice('Ticket Transcript', transcriptMessage, 0x5865F2);
 
-            // Send to transcripts channel
+            // Send to transcripts channel with link
             await transcriptsChannel.send({
                 ...base,
                 flags: MessageFlags.IsComponentsV2,
-                files: [file],
-                components: [
-                    ...base.components,
-                    {
-                        type: 13,
-                        file: { url: `attachment://${fileName}` }
-                    }
-                ]
+                components: base.components || []
             }).catch(() => null);
 
             // Send DM to user if provided
             if (user && typeof user.send === 'function') {
                 try {
+                    const userMessage = `Your ticket transcript for **#${channel.name}** is ready!\n\n**View Transcript:** ${transcriptUrl}`;
                     await user.send({
-                        ...base,
-                        files: [file]
-                    }).catch(async () => {
-                        // Try again without file if it fails (file size might be too large for DM)
-                        await user.send({
-                            content: `Your ticket transcript for #${channel.name} has been saved. You can view it in the support server.`,
-                            ...base
-                        }).catch(() => null);
-                    });
+                        content: userMessage,
+                        ...base
+                    }).catch(() => null);
                 } catch {
                     // Silently fail if user cannot be DMed
                 }
