@@ -4570,7 +4570,7 @@ function renderAvailability(){const types=(state.ticketTypes||[]);const byKey=ne
             <option value="suggestion">Suggestion</option>
             <option value="solution">Solution</option>
           </select>
-          <div class="help">Solutions show a â€œresolvedâ€ button in AI flows.</div>
+          <div class="help">Solutions show a resolved button in AI flows.</div>
         </div>
       </div>
 
@@ -4914,7 +4914,7 @@ function setupStatsChart(){
   ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1;for(let i=0;i<=4;i++){const y=pad+plotH*(i/4);ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke();}
   const x=i=>pad+(labels.length<=1?plotW/2:(plotW*i/(labels.length-1))); const y=v=>pad+plotH-(v/max)*plotH;
   function line(data,color,fill){ctx.beginPath();data.forEach((v,i)=>{if(i)ctx.lineTo(x(i),y(v));else ctx.moveTo(x(i),y(v));});if(fill){ctx.lineTo(x(data.length-1),h-pad);ctx.lineTo(x(0),h-pad);ctx.closePath();ctx.fillStyle=color.replace('1)','.16)');ctx.fill();}ctx.beginPath();data.forEach((v,i)=>{if(i)ctx.lineTo(x(i),y(v));else ctx.moveTo(x(i),y(v));});ctx.strokeStyle=color;ctx.lineWidth=3;ctx.stroke();}
-  if(mode==='bar'){const bw=Math.max(8,plotW/labels.length/3);labels.forEach((_,i)=>{ctx.fillStyle='rgba(56,189,248,.85)';ctx.fillRect(x(i)-bw-2,y(claimed[i]),bw,h-pad-y(claimed[i]));ctx.fillStyle='rgba(87,242,135,.78)';ctx.fillRect(x(i)+2,y(closed[i]),bw,h-pad-y(closed[i]));});}else{line(claimed,'rgba(56,189,248,1)',mode==='area');line(closed,'rgba(87,242,135,1)',mode==='area');}
+  if(mode==='bar'){const bw=Math.max(8,plotW/Math.max(1,labels.length)/3);labels.forEach((_,i)=>{ctx.fillStyle='rgba(56,189,248,.85)';ctx.fillRect(x(i)-bw-2,y(claimed[i]),bw,h-pad-y(claimed[i]));ctx.fillStyle='rgba(87,242,135,.78)';ctx.fillRect(x(i)+2,y(closed[i]),bw,h-pad-y(closed[i]));});}else{line(claimed,'rgba(56,189,248,1)',mode==='area');line(closed,'rgba(87,242,135,1)',mode==='area');}
   ctx.fillStyle='rgba(247,248,255,.72)';ctx.font='12px Inter, sans-serif';ctx.fillText('Claimed',pad,18);ctx.fillText('Closed',pad+78,18);
  }
  document.querySelectorAll('.statsView').forEach(btn=>btn.onclick=()=>{mode=btn.dataset.chart||'bar';draw()});

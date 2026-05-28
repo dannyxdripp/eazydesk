@@ -296,7 +296,7 @@ async function notifyGuildOwnerTrialExpired(guild, aiAccess, storage) {
         const lines = [
             `AI support for **${guild.name}** has been paused because the free AI trial has ended.`,
             '',
-            'Premium AI is required to keep automatic AI replies enabled for this server.'
+            'Pro AI is required to keep automatic AI replies enabled for this server.'
         ];
         await owner.user.send({ content: lines.join('\n') }).catch(() => null);
         ticketStore.setGuildAiAccess(guild.id, {
