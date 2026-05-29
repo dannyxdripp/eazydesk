@@ -148,6 +148,46 @@ async function reportBotEvent(reason, error = null) {
     return sent;
 }
 
+async function reportCustomBotEvent(event, details = {}, error = null) {
+    const now = new Date();
+    const title = event === 'online'
+        ? 'Custom Bot Online'
+        : event === 'stopped'
+            ? 'Custom Bot Stopped'
+            : 'Custom Bot Error';
+    const description = error
+        ? String(error.stack || error.message || error).slice(0, 1400)
+        : String(details.description || 'Custom branded bot lifecycle update.').slice(0, 1400);
+    const fields = [
+        { name: 'Event', value: String(event || 'unknown'), inline: true },
+        { name: 'Guild ID', value: String(details.guildId || 'unknown'), inline: true },
+        { name: 'Bot', value: String(details.botName || details.userTag || 'unknown').slice(0, 256), inline: true },
+        { name: 'App ID', value: String(details.appId || 'not set').slice(0, 256), inline: true },
+        { name: 'Time', value: now.toISOString(), inline: true }
+    ];
+    if (details.reason) {
+        fields.push({ name: 'Reason', value: String(details.reason).slice(0, 900), inline: false });
+    }
+    const payload = {
+        username: 'Tickets Bot Monitor',
+        embeds: [{
+            title,
+            color: event === 'online' ? 0x57F287 : event === 'stopped' ? 0xFEE75C : 0xED4245,
+            description,
+            fields,
+            timestamp: now.toISOString()
+        }]
+    };
+    const sent = await sendWebhook(payload).catch(() => false);
+    setState({
+        lastCustomBotReportAt: now.toISOString(),
+        lastCustomBotEvent: event,
+        lastCustomBotGuildId: details.guildId || null,
+        lastCustomBotWebhookSent: sent
+    });
+    return sent;
+}
+
 async function runMegaSnapshot(reason = 'snapshot') {
     const result = await megaBackup.backupAllJsonNow(reason);
     setState({
@@ -218,6 +258,7 @@ module.exports = {
     formatDuration,
     installProcessMonitoring,
     reportBotEvent,
+    reportCustomBotEvent,
     restoreFromMegaIfConfigured,
     runMegaSnapshot,
     startHourlyMegaBackups

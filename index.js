@@ -8,6 +8,7 @@ const { archiveTranscript } = require('./utils/transcript-archive');
 const closeRequestCommand = require('./commands/closerequest');
 const tagCommand = require('./commands/tag');
 const feedbackCommand = require('./commands/feedback');
+const customBotBrandingHandler = require('./handlers/custom-bot-branding-handler');
 const { startDashboard } = require('./dashboard/server');
 const { loadEnv } = require('./utils/load-env');
 const { pruneTranscriptArchives, getTranscriptRetentionDays } = require('./utils/transcript-archive');
@@ -717,7 +718,7 @@ for (const file of commandFiles) {
 
 const runtimeReady = restoreStorageBeforeRuntime().then(() => {
     // Start dashboard after storage restore so ephemeral hosts can recover data first.
-    startDashboard(client);
+    startDashboard(client, customBotBrandingHandler);
 });
 
 const missingRequiredEnvVars = getMissingRequiredEnvVars();
@@ -733,6 +734,16 @@ client.once('clientReady', async () => {
     storageMonitor.reportBotEvent('startup').catch(() => null);
 
     configurePresenceRotation(client);
+    customBotBrandingHandler.start({
+        hostClient: client,
+        commandMap: client.commands,
+        commandPayloads: commands,
+        handleInteraction: handleRuntimeInteraction,
+        handleMessage: handleRuntimeMessage
+    }).catch(error => {
+        console.error('[Custom Bot] Branding runtime failed to start:', error);
+        storageMonitor.reportCustomBotEvent('error', { reason: 'branding runtime failed to start' }, error).catch(() => null);
+    });
 
     // Refresh and deploy commands
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -760,9 +771,9 @@ client.once('clientReady', async () => {
     }, INACTIVITY_SWEEP_MS);
 });
 
-client.on('interactionCreate', async interaction => {
+async function handleRuntimeInteraction(interaction, runtimeClient = client) {
     if (interaction.isAutocomplete()) {
-        const command = client.commands.get(interaction.commandName);
+        const command = (runtimeClient.commands || client.commands).get(interaction.commandName);
         if (!command || typeof command.autocomplete !== 'function') return;
 
         try {
@@ -771,7 +782,7 @@ client.on('interactionCreate', async interaction => {
             console.error(`[Event \u{1F514}] Error handling autocomplete for ${interaction.commandName}:`, error);
         }
     } else if (interaction.isChatInputCommand()) {
-        const command = client.commands.get(interaction.commandName);
+        const command = (runtimeClient.commands || client.commands).get(interaction.commandName);
 
         if (!command) {
             console.error(`[Event \u{1F514}] No command matching ${interaction.commandName} was found.`);
@@ -867,9 +878,11 @@ client.on('interactionCreate', async interaction => {
             await ticketHandler.handleCloseRequest(interaction, reason);
         }
     }
-});
+}
 
-client.on('messageCreate', async message => {
+client.on('interactionCreate', interaction => handleRuntimeInteraction(interaction, client));
+
+async function handleRuntimeMessage(message) {
     eventLog(`messageCreate in ${message.guild?.id || 'DM'} from ${message.author?.id || 'unknown'}`);
     if (!message.guild || message.author.bot) return;
 
@@ -918,7 +931,9 @@ client.on('messageCreate', async message => {
         ticketStore.setAiControl({ ...aiControl, manualDisabled: false, rateLimitedUntil: null }, activeStorage);
         await message.reply(buildMessage('AI Enabled', 'AI support agent responses are now enabled.', 0x57F287));
     }
-});
+}
+
+client.on('messageCreate', handleRuntimeMessage);
 
 runtimeReady.then(() => loginWithRetry(client, process.env.TOKEN)).catch(error => {
     console.error('[Startup] Discord client failed to start:', error);

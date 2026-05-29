@@ -12,7 +12,7 @@ function loadEnv() {
 
     for (const envPath of candidates) {
         if (!fs.existsSync(envPath)) continue;
-        dotenv.config({ path: envPath, override: false });
+        dotenv.config({ path: envPath, override: false, quiet: true });
         loaded.push(envPath);
     }
 

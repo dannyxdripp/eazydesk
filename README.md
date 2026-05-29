@@ -41,4 +41,6 @@ Set `PUBLIC_BASE_URL` to your deployed dashboard URL so transcript links point t
 
 ## Custom Branded Bot Control
 
-Owner Console -> Custom branded bot lets you save the bot name, avatar, application id, public key, token, and status text. After a token is saved on a Custom plan server, Controller shows an on/off switch for that branded bot. The switch will not turn on until a token is saved.
+Custom bots are created in the Discord Developer Portal first. Create the application/bot there, invite it to the target server, then save the application id, public key, token, display name, avatar URL, and status text in Owner Console -> Custom branded bot.
+
+When a Custom plan server has a saved token, Controller shows an on/off switch. Turning it on starts the branded bot runtime, deploys the same slash commands to that application, checks that the bot is invited to the target server, and records `runtimeStatus`, `lastStartedAt`, or `lastError` in storage. The first successful startup DMs the server owner a short boot-log animation. Custom bot online, stopped, and error events are also sent to the monitoring webhook (`MONITORING_WEBHOOK_URL`, `DATA_LOSS_WEBHOOK_URL`, or `BOT_MONITORING_WEBHOOK_URL`).

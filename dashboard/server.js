@@ -767,7 +767,7 @@ function createControllerHtml(req = null) {
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       const icons={open:${JSON.stringify(dashboardIcon('open'))},setup:${JSON.stringify(dashboardIcon('setup'))},tickets:${JSON.stringify(dashboardIcon('tickets'))},owner:${JSON.stringify(dashboardIcon('owner'))},restart:${JSON.stringify(dashboardIcon('restart'))},bot:${JSON.stringify(dashboardIcon('embed'))}};
       function iconMarkup(g){return g.iconURL?'<span class=\"controller-icon\"><img src=\"'+esc(g.iconURL)+'\" alt=\"\" /></span>':'<span class=\"controller-icon\">'+icons.bot+'</span>'}
-      function customBotBlock(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};if(!ai.isCustom&&!bot.tokenConfigured)return '';const on=!!bot.enabled&&!!bot.tokenConfigured;return '<div class=\"custom-bot-strip\"><div><strong>Custom branded bot</strong><div class=\"muted\">'+esc(bot.botName||g.name+' Support')+' - '+(bot.tokenConfigured?'Token saved':'No token saved')+'</div></div><div class=\"controller-actions\"><span class=\"pill\">'+(on?'Online':'Paused')+'</span><button class=\"btn '+(on?'warning':'primary')+'\" '+(!bot.tokenConfigured?'disabled':'')+' data-custom-bot-toggle=\"'+esc(g.id)+'\" data-next=\"'+(on?'false':'true')+'\"><span class=\"btn-icon\">'+icons.bot+'</span><span>'+(on?'Turn Off':'Turn On')+'</span></button></div></div>'}
+      function customBotBlock(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};if(!ai.isCustom&&!bot.tokenConfigured)return '';const on=!!bot.enabled&&!!bot.tokenConfigured;const status=bot.runtimeStatus||(on?'starting':'paused');return '<div class=\"custom-bot-strip\"><div><strong>Custom branded bot</strong><div class=\"muted\">'+esc(bot.botName||g.name+' Support')+' - '+(bot.tokenConfigured?'Token saved':'No token saved')+(bot.lastError?' - '+esc(bot.lastError):'')+'</div></div><div class=\"controller-actions\"><span class=\"pill\">'+esc(status)+'</span><button class=\"btn '+(on?'warning':'primary')+'\" '+(!bot.tokenConfigured?'disabled':'')+' data-custom-bot-toggle=\"'+esc(g.id)+'\" data-next=\"'+(on?'false':'true')+'\"><span class=\"btn-icon\">'+icons.bot+'</span><span>'+(on?'Turn Off':'Turn On')+'</span></button></div></div>'}
       function item(g){const status=g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Setup step '+esc(g.setupStep||1)+'</span>';const plan=(g.aiAccess&&g.aiAccess.statusLabel)||'Free plan';const bot=(g.aiAccess&&g.aiAccess.customBot)||{};return '<div class=\"card controller-card\">'+
         '<div class=\"controller-head\"><div class=\"controller-title\">'+iconMarkup(g)+'<div><div class=\"controller-name\">'+esc(g.name)+'</div><div class=\"muted\">'+esc(g.id)+(bot.botName?' &middot; '+esc(bot.botName):'')+'</div></div></div><div class=\"controller-meta\">'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+status+'<span class=\"pill\">'+esc(plan)+'</span></div></div>'+customBotBlock(g)+
         '<div class=\"controller-actions\">'+
@@ -1609,7 +1609,10 @@ function getGuildAiUiState(guildId, storage = null) {
             appId: String(customBot.appId || ''),
             publicKey: String(customBot.publicKey || ''),
             statusText: String(customBot.statusText || ''),
-            tokenConfigured: Boolean(String(customBot.token || '').trim())
+            tokenConfigured: Boolean(String(customBot.token || '').trim()),
+            runtimeStatus: String(customBot.runtimeStatus || ''),
+            lastStartedAt: customBot.lastStartedAt || null,
+            lastError: customBot.lastError || null
         }
     };
 }
@@ -2385,7 +2388,7 @@ async function repairGuildChannels(guild, config = {}) {
     };
 }
 
-async function handleApi(req, res, url, client) {
+async function handleApi(req, res, url, client, customBotManager = null) {
     const { pathname } = url;
     const method = req.method || 'GET';
     const startedAt = Date.now();
@@ -3248,6 +3251,11 @@ async function handleApi(req, res, url, client) {
         }
 
         const updated = ticketStore.setGuildAiAccess(guildId, nextPatch, activeStorage);
+        if (customBotManager && typeof customBotManager.syncGuild === 'function') {
+            customBotManager.syncGuild(guildId).catch(error => {
+                console.error('[Custom Bot] Failed to sync branded bot after dashboard change:', error);
+            });
+        }
         sendJson(res, 200, { ok: true, guildId, aiAccess: getGuildAiUiState(guildId, activeStorage), raw: updated });
         return true;
     }
@@ -5537,7 +5545,7 @@ const authLoginBtn=document.getElementById('authLogin');if(authLoginBtn)authLogi
 </script></body></html>`;
 }
 
-function startDashboard(client) {
+function startDashboard(client, customBotManager = null) {
     if (!getDashboardEnabled()) {
         dashboardLog('Dashboard disabled via DASHBOARD_ENABLED=false.');
         return null;
@@ -5564,7 +5572,7 @@ function startDashboard(client) {
             }
 
             if (pathname.startsWith('/api/')) {
-                const handled = await handleApi(req, res, url, client);
+                const handled = await handleApi(req, res, url, client, customBotManager);
                 if (!handled) sendJson(res, 404, { error: 'Not found' });
                 return;
             }
