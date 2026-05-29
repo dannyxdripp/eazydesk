@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { BUNDLED_JSON_DIR, getRuntimeGuildConfigDir } = require('./storage-paths');
+const megaBackup = require('./mega-backup');
 
 const BASE_DIR = getRuntimeGuildConfigDir();
 const BUNDLED_BASE_DIR = path.join(BUNDLED_JSON_DIR, 'guilds');
@@ -41,6 +42,7 @@ function writeJsonAtomic(filePath, value) {
     const tmp = `${filePath}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(value, null, 4));
     fs.renameSync(tmp, filePath);
+    megaBackup.enqueueJsonBackup(filePath, value);
 }
 
 function touchCache(key, entry) {

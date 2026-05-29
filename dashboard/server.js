@@ -719,8 +719,9 @@ function createControllerHtml(req = null) {
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
       const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+      function customBotBlock(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};if(!ai.isCustom)return '';const on=!!bot.enabled;return '<div class=\"item\" style=\"margin-top:10px\"><div><strong>Custom bot</strong><div class=\"muted\">'+esc(bot.botName||g.name+' Support')+' • '+(bot.tokenConfigured?'Token saved':'No token saved')+'</div></div><div class=\"row\"><span class=\"pill\">'+(on?'On':'Off')+'</span><button class=\"btn-soft\" data-custom-bot-toggle=\"'+esc(g.id)+'\" data-next=\"'+(on?'false':'true')+'\">Turn '+(on?'Off':'On')+'</button></div></div>'}
       function item(g){const icon=g.iconURL?'<img src=\"'+esc(g.iconURL)+'\" style=\"width:28px;height:28px;border-radius:10px\" />':'';const status=g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Step '+esc(g.setupStep||1)+'</span>';const plan=(g.aiAccess&&g.aiAccess.statusLabel)||'Free plan';const bot=(g.aiAccess&&g.aiAccess.customBot)||{};return '<div class=\"item\">'+
-        '<div class=\"row\" style=\"gap:10px\">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class=\"muted\">'+esc(g.id)+(bot.botName?' • '+esc(bot.botName):'')+'</div></div>'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+status+'<span class=\"pill\">'+esc(plan)+'</span>'+'</div>'+
+        '<div class=\"row\" style=\"gap:10px\">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class=\"muted\">'+esc(g.id)+(bot.botName?' • '+esc(bot.botName):'')+'</div></div>'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+status+'<span class=\"pill\">'+esc(plan)+'</span>'+'</div>'+customBotBlock(g)+
         '<div class=\"row\">'+
           '<a class=\"btn primary\" href=\"/overview?guild='+encodeURIComponent(g.id)+'\">Open Dashboard</a>'+
           '<a class=\"btn\" href=\"/setup?guild='+encodeURIComponent(g.id)+'&page=1\">Open Setup</a>'+
@@ -729,7 +730,7 @@ function createControllerHtml(req = null) {
           '<button class=\"btn\" data-restart=\"'+esc(g.id)+'\">Restart Setup</button>'+
         '</div>'+
       '</div>'}
-      async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class=\"muted\">No guilds found. (Bot may not be ready yet.)</div>';for(const btn of document.querySelectorAll('[data-restart]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/controller/setup/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-restart')})});btn.textContent='Restarted';setTimeout(()=>{btn.textContent='Restart Setup';btn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}}catch(e){err.style.display='block';err.textContent=e.message}}load();
+      async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class=\"muted\">No guilds found. (Bot may not be ready yet.)</div>';for(const btn of document.querySelectorAll('[data-custom-bot-toggle]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-custom-bot-toggle'),action:'custom-bot-toggle',enabled:btn.getAttribute('data-next')==='true'})});await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-restart]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/controller/setup/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-restart')})});btn.textContent='Restarted';setTimeout(()=>{btn.textContent='Restart Setup';btn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
 
     return baseDashboardPage({ title: 'Controller', body, script, ownerView: true, showStaffLink: true });
@@ -1554,6 +1555,7 @@ function getGuildAiUiState(guildId, storage = null) {
         isProOrHigher: ['pro', 'custom', 'pro_trial', 'custom_trial'].includes(access.plan) && access.hasAccess,
         isCustom: ['custom', 'custom_trial'].includes(access.plan) && access.hasAccess,
         customBot: {
+            enabled: customBot.enabled !== false,
             botName: String(customBot.botName || ''),
             avatarUrl: String(customBot.avatarUrl || ''),
             appId: String(customBot.appId || ''),
@@ -3144,6 +3146,7 @@ async function handleApi(req, res, url, client) {
                 ? String(body.plan).trim().toLowerCase()
                 : 'plus';
             const customBot = body.customBot && typeof body.customBot === 'object' ? {
+                enabled: body.customBot.enabled === undefined ? current.customBot?.enabled !== false : body.customBot.enabled !== false,
                 botName: String(body.customBot.botName || '').trim().slice(0, 80),
                 avatarUrl: /^https?:\/\//i.test(String(body.customBot.avatarUrl || '').trim()) ? String(body.customBot.avatarUrl).trim().slice(0, 500) : '',
                 appId: String(body.customBot.appId || '').trim().slice(0, 30),
@@ -3159,7 +3162,18 @@ async function handleApi(req, res, url, client) {
                 notifiedTrialExpiredAt: null,
                 grantedByOwnerId: ownerId,
                 grantedAt: new Date().toISOString(),
-                customBot: plan === 'custom' ? customBot : current.customBot
+                customBot: plan === 'custom' ? { ...customBot, enabled: customBot.enabled !== false } : current.customBot
+            };
+        } else if (action === 'custom-bot-toggle') {
+            if (!['custom', 'custom_trial'].includes(current.plan)) {
+                sendJson(res, 400, { error: 'Custom bot controls require the Custom plan' });
+                return true;
+            }
+            nextPatch = {
+                customBot: {
+                    ...(current.customBot && typeof current.customBot === 'object' ? current.customBot : {}),
+                    enabled: body.enabled !== false
+                }
             };
         } else if (action === 'disable') {
             nextPatch = { enabled: false };

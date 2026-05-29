@@ -13,6 +13,7 @@ const { pruneTranscriptArchives, getTranscriptRetentionDays } = require('./utils
 const { getPublicBaseUrl } = require('./utils/public-url');
 const { resolveEmbedByTitle } = require('./utils/embed-config');
 const { buildV2FromTemplate } = require('./utils/components-v2-messages');
+const storageMonitor = require('./utils/storage-monitor');
 const {
     TWELVE_HOURS_MS,
     getLastActivityMs,
@@ -20,6 +21,8 @@ const {
     updateTicketChannelMetadata
 } = require('./utils/ticket-metadata');
 const loadedEnvFiles = loadEnv();
+
+storageMonitor.installProcessMonitoring();
 
 // Warm JSON caches early to reduce latency on first interactions (especially modal opens).
 ticketStore.getTicketTypes();
@@ -50,6 +53,8 @@ try {
 } catch (error) {
     console.error('[Event \u{1F514}] Transcript retention sweep failed:', error);
 }
+
+storageMonitor.startHourlyMegaBackups();
 
 const rawConsoleError = console.error.bind(console);
 const rawConsoleWarn = console.warn.bind(console);
@@ -649,6 +654,9 @@ client.on('guildCreate', async guild => {
                 guildName: guild.name
             }
         }, activeStorage);
+        storageMonitor.runMegaSnapshot(`guild-create-${guild.id}`).catch(error => {
+            console.warn('[MEGA Backup] New server snapshot failed:', error?.message || error);
+        });
 
         const baseUrl = getPublicBaseUrl();
         const setupUrl = `${baseUrl}/setup?guild=${encodeURIComponent(guild.id)}`;
@@ -694,6 +702,7 @@ logStartupWarnings();
 client.once('clientReady', async () => {
     loginLog(`Logged in as ${client.user.tag}`);
     appLog('Application startup complete.');
+    storageMonitor.reportBotEvent('startup').catch(() => null);
 
     configurePresenceRotation(client);
 
@@ -887,6 +896,5 @@ loginWithRetry(client, process.env.TOKEN).catch(error => {
     console.error('[Startup] Discord client failed to start:', error);
     process.exit(1);
 });
-
 
 

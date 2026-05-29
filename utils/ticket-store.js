@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { BUNDLED_JSON_DIR, getRuntimeJsonDir, ensureJsonFile } = require('./storage-paths');
+const megaBackup = require('./mega-backup');
 
 const JSON_DIR = getRuntimeJsonDir();
 const ACTIVE_STORAGE_PATH = path.join(JSON_DIR, 'active-storage.json');
@@ -71,6 +72,7 @@ function writeJsonAtomic(filePath, value) {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(tempPath, JSON.stringify(value, null, 4), 'utf8');
     fs.renameSync(tempPath, resolved);
+    megaBackup.enqueueJsonBackup(resolved, value);
 }
 
 function rotateBackups(prefix, keep = 10) {
