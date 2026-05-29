@@ -195,6 +195,9 @@ function installProcessMonitoring() {
     const close = async (reason, error = null, exitCode = 0) => {
         if (closing) return;
         closing = true;
+        if (error) {
+            console.error(`[Storage Monitor] ${reason}:`, error);
+        }
         try {
             await runMegaSnapshot(`shutdown-${reason}`).catch(() => null);
             await reportBotEvent(reason, error).catch(() => null);

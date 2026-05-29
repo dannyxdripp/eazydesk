@@ -665,6 +665,14 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     .btn.subtle{background:color-mix(in srgb,var(--panel) 80%, rgba(255,255,255,.03));border-color:var(--bd)}
     .btn.warning{background:color-mix(in srgb,#fee75c 14%, transparent);border-color:rgba(254,231,92,.32)}
     .custom-bot-strip{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px;border-radius:14px;border:1px solid color-mix(in srgb,var(--acc) 26%, transparent);background:color-mix(in srgb,var(--acc) 8%, transparent)}
+    .owner-console{display:grid;gap:14px;min-width:0;overflow:hidden}
+    .owner-console .owner-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;min-width:0}
+    .owner-console .owner-guilds{display:grid;grid-template-columns:1fr;gap:12px;min-width:0}
+    .owner-console .server-card{display:block;min-height:0;width:100%;overflow:hidden}
+    .owner-console .server-card .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    .owner-console .server-card .grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+    .owner-console .btn,.owner-console .btn-soft,.owner-console .btn-danger{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .owner-console input{min-width:0}
     .empty-state{padding:22px;text-align:center}
     .upgrade-reward{position:relative;overflow:hidden;min-height:70vh;display:grid;place-items:center;text-align:center;padding:56px 28px}
     .upgrade-word{position:absolute;color:color-mix(in srgb,var(--acc) 70%, white);opacity:.16;font-weight:900;font-size:clamp(24px,5vw,72px);animation:floatReward 7s ease-in-out infinite}
@@ -877,13 +885,13 @@ function createStaffHtml(options = {}) {
 
 function createOwnerHtml(req = null) {
     const body = `
-      <div class="card">
+      <div class="card owner-console">
         <h2 style="margin:0 0 6px">Owner Console</h2>
         <div class="muted">Owner includes every staff capability, plus plan grants, AI access, live viewers, API requests, and audit history.</div>
         <div id="ownerError" class="err" style="display:none;margin-top:12px"></div>
         <div id="ownerSuccess" class="card" style="display:none;margin-top:12px;padding:12px 14px"></div>
-        <div id="ownerSummary" class="grid" style="margin-top:12px"></div>
-        <div id="ownerGuilds" class="list server-grid"></div>
+        <div id="ownerSummary" class="owner-summary" style="margin-top:12px"></div>
+        <div id="ownerGuilds" class="owner-guilds"></div>
       </div>
     `;
 
