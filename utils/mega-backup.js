@@ -90,6 +90,24 @@ function getChildren(node) {
     return [];
 }
 
+function parseBackupFileName(name) {
+    const match = String(name || '').match(/^(.+?)(?:\.([a-z0-9_-]+))?\.(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)\.json$/i);
+    if (!match) return null;
+    return {
+        targetKey: match[1],
+        reason: match[2] || '',
+        timestamp: match[3]
+    };
+}
+
+function targetPathForBackupKey(targetKey) {
+    const key = String(targetKey || '').trim();
+    if (!key || key.includes('..')) return null;
+    const parts = key.split('__').filter(Boolean);
+    if (!parts.length || !parts[parts.length - 1].endsWith('.json')) return null;
+    return path.join(getRuntimeJsonDir(), ...parts);
+}
+
 async function getBackupFolder(storage) {
     const cfg = getConfig();
     const root = storage.root || storage;
@@ -106,6 +124,11 @@ async function uploadToNode(node, name, buffer) {
     if (upload && upload.complete && typeof upload.complete.then === 'function') return upload.complete;
     if (upload && typeof upload.then === 'function') return upload;
     return upload;
+}
+
+async function downloadNodeBuffer(node) {
+    if (!node || typeof node.downloadBuffer !== 'function') throw new Error('MEGA download target is unavailable');
+    return node.downloadBuffer({});
 }
 
 async function uploadJsonBackup(filePath, value) {
@@ -176,6 +199,43 @@ async function backupAllJsonNow(reason = 'snapshot') {
     }
 }
 
+async function restoreLatestJsonBackups() {
+    if (!canUseMega()) return { ok: false, skipped: true, reason: 'MEGA backup is not configured', restored: 0, bytes: 0 };
+    const storage = await getStorage();
+    if (!storage) return { ok: false, skipped: true, reason: 'MEGA SDK unavailable', restored: 0, bytes: 0 };
+    const result = { ok: true, restored: 0, bytes: 0, files: [] };
+    try {
+        const folder = await getBackupFolder(storage);
+        const latest = new Map();
+        for (const child of getChildren(folder)) {
+            const parsed = parseBackupFileName(child?.name);
+            if (!parsed) continue;
+            const targetPath = targetPathForBackupKey(parsed.targetKey);
+            if (!targetPath) continue;
+            const current = latest.get(parsed.targetKey);
+            if (!current || parsed.timestamp > current.parsed.timestamp) {
+                latest.set(parsed.targetKey, { child, parsed, targetPath });
+            }
+        }
+        for (const item of latest.values()) {
+            const buffer = await downloadNodeBuffer(item.child);
+            fs.mkdirSync(path.dirname(item.targetPath), { recursive: true });
+            fs.writeFileSync(item.targetPath, buffer);
+            result.restored += 1;
+            result.bytes += buffer.length;
+            result.files.push({ path: item.targetPath, name: item.child.name, bytes: buffer.length });
+        }
+        return result;
+    } catch (error) {
+        lastBackupError = { at: new Date().toISOString(), message: error?.message || String(error) };
+        throw error;
+    } finally {
+        if (storage && typeof storage.close === 'function') {
+            storage.close().catch(() => {});
+        }
+    }
+}
+
 function enqueueJsonBackup(filePath, value) {
     if (!canUseMega()) return;
     queue = queue
@@ -211,6 +271,7 @@ module.exports = {
     enqueueFullBackup,
     uploadJsonBackup,
     backupAllJsonNow,
+    restoreLatestJsonBackups,
     getBackupStatus,
     listJsonFiles
 };

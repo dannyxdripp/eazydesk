@@ -160,6 +160,19 @@ async function runMegaSnapshot(reason = 'snapshot') {
     return result;
 }
 
+async function restoreFromMegaIfConfigured() {
+    const result = await megaBackup.restoreLatestJsonBackups();
+    setState({
+        lastRestoreAttemptAt: new Date().toISOString(),
+        lastRestoreOk: Boolean(result?.ok),
+        lastRestoreSkipped: Boolean(result?.skipped),
+        lastRestoreFiles: Number(result?.restored || 0),
+        lastRestoreBytes: Number(result?.bytes || 0),
+        lastRestoreReason: result?.reason || null
+    });
+    return result;
+}
+
 function startHourlyMegaBackups(options = {}) {
     const intervalMs = Math.max(60 * 1000, Number(options.intervalMs || process.env.MEGA_BACKUP_INTERVAL_MS || 60 * 60 * 1000));
     const run = () => runMegaSnapshot('hourly').catch(error => {
@@ -202,6 +215,7 @@ module.exports = {
     formatDuration,
     installProcessMonitoring,
     reportBotEvent,
+    restoreFromMegaIfConfigured,
     runMegaSnapshot,
     startHourlyMegaBackups
 };

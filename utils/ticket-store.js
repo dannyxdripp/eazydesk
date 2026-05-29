@@ -121,6 +121,11 @@ function writeJsonCached(filePath, value) {
     }
 }
 
+function clearCaches() {
+    jsonCache.clear();
+    if (typeof guildConfigStore.clearCache === 'function') guildConfigStore.clearCache();
+}
+
 function getTicketTypes() {
     const data = readJsonCached(TICKET_TYPES_PATH, { ticketTypes: [] });
     return Array.isArray(data.ticketTypes) ? data.ticketTypes : [];
@@ -966,6 +971,7 @@ function setRestrictedTicketTypeForChannel(channelId, ticketTypeInput, storage =
 
 module.exports = {
     getTestGuildId,
+    clearCaches,
     isTestGuild,
     normalizeType,
     toTicketSelectValue,

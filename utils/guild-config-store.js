@@ -116,9 +116,14 @@ function deleteGuildConfig(guildId) {
     return false;
 }
 
+function clearCache() {
+    cache.clear();
+}
+
 module.exports = {
     BASE_DIR,
     getGuildConfig,
     setGuildConfig,
-    deleteGuildConfig
+    deleteGuildConfig,
+    clearCache
 };

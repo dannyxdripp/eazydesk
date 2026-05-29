@@ -83,6 +83,20 @@ function loginLog(message) {
     console.log('[Logging In \u{1F5DD}\uFE0F] ' + message);
 }
 
+async function restoreStorageBeforeRuntime() {
+    try {
+        const result = await storageMonitor.restoreFromMegaIfConfigured();
+        if (result?.restored) {
+            ticketStore.clearCaches?.();
+            appLog(`Restored ${result.restored} JSON file(s) from MEGA before startup.`);
+        } else if (result?.skipped) {
+            appLog(`MEGA restore skipped: ${result.reason || 'not configured'}.`);
+        }
+    } catch (error) {
+        console.warn('[MEGA Backup] Startup restore failed:', error?.message || error);
+    }
+}
+
 function buildMessage(title, description, color = 0x5865F2) {
     return buildV2FromTemplate(ticketStore, resolveEmbedByTitle, title, description, color);
 }
@@ -689,8 +703,10 @@ for (const file of commandFiles) {
     }
 }
 
-// Start dashboard as soon as the process boots so panel access does not depend on Discord ready/login.
-startDashboard(client);
+const runtimeReady = restoreStorageBeforeRuntime().then(() => {
+    // Start dashboard after storage restore so ephemeral hosts can recover data first.
+    startDashboard(client);
+});
 
 const missingRequiredEnvVars = getMissingRequiredEnvVars();
 if (missingRequiredEnvVars.length) {
@@ -892,9 +908,8 @@ client.on('messageCreate', async message => {
     }
 });
 
-loginWithRetry(client, process.env.TOKEN).catch(error => {
+runtimeReady.then(() => loginWithRetry(client, process.env.TOKEN)).catch(error => {
     console.error('[Startup] Discord client failed to start:', error);
     process.exit(1);
 });
-
 
