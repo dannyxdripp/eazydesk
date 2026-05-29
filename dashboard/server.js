@@ -4439,7 +4439,76 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
   body[data-theme="light"] .pill.ok{color:#064e3b}
   body[data-theme="light"] .pill.warn{color:#713f12}
   body[data-theme="light"] .pill.danger{color:#7f1d1d}
+
+  /* Clean module skin inspired by compact settings dashboards. */
+  body[data-theme="dark"],body[data-theme="ocean"],body[data-theme="sunset"],body[data-theme="hacker"]{
+    background:#0f1117;
+  }
+  body[data-theme="diamond"]{
+    background:radial-gradient(900px 520px at 18% 8%,rgba(103,232,249,.18),transparent 60%),linear-gradient(160deg,#071018,#0f1117 58%,#111827);
+  }
+  .main{width:min(1180px,100%);padding:30px}
+  .topbar{margin-bottom:24px;padding:0 0 18px;border:0;border-bottom:1px solid #262b36;border-radius:0;background:transparent;box-shadow:none}
+  .title{font-size:32px;line-height:1.12;margin-bottom:6px}
+  .titles .muted,#pageHint,.muted,.help,.list-meta{color:#9ca3af}
+  .card,.item,.page-hero,.stat-tile,.pricing-card,.pricing-preview,.pricing-faq .faq-item,.pricing-cta{
+    background:#171a22;
+    border:1px solid #262b36;
+    border-radius:14px;
+    box-shadow:none;
+    backdrop-filter:none;
+    transform:none;
+  }
+  .card:hover,.item:hover,.stat-tile:hover,.pricing-card:hover{transform:none;background:#171a22;border-color:#303848;box-shadow:none}
+  .page-hero{padding:24px;margin-bottom:20px}
+  .page-hero:before,.welcome:before{display:none}
+  .page-hero h3,.card h3{font-size:22px;line-height:1.2;margin-bottom:8px}
+  .grid{gap:20px}
+  .split,#app > .split{grid-template-columns:minmax(260px,.82fr) minmax(0,1.35fr);gap:20px}
+  .list-card{align-self:start}
+  .item{padding:16px}
+  .stat-strip{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;margin-bottom:20px}
+  .stat-tile{padding:18px}
+  .stat-tile strong{font-size:24px;margin-top:10px}
+  .stat-tile .muted{font-size:14px}
+  label{font-size:14px;color:#9ca3af;margin:12px 0 8px}
+  input,select,textarea,.cs-trigger,.ms-trigger{
+    background:#11141b;
+    border:1px solid #303848;
+    border-radius:8px;
+    color:#fff;
+    padding:12px;
+    box-shadow:none;
+  }
+  textarea{min-height:100px;resize:vertical}
+  input:focus,select:focus,textarea:focus{border-color:#5865f2;box-shadow:0 0 0 3px rgba(88,101,242,.18)}
+  .custom-select .cs-menu,.role-ms .ms-menu,.topnav-menu{background:#171a22;border-color:#303848;border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.36);backdrop-filter:none}
+  .cs-opt,.ms-item,.topnav-item{background:#1e222d;border:1px solid #2d3442;border-radius:8px}
+  .cs-opt:hover,.ms-item:hover,.topnav-item:hover,.cs-opt.active{background:#232838;border-color:#5865f2;transform:none}
+  .btn{
+    background:#5865f2;
+    border:1px solid #6974ff;
+    border-radius:10px;
+    padding:12px 16px;
+    box-shadow:none;
+    font-weight:800;
+  }
+  .btn:hover{filter:brightness(1.04);transform:none;box-shadow:none}
+  .btn-soft{
+    background:#1e222d;
+    border:1px solid #2d3442;
+    border-radius:10px;
+    color:#f8fafc;
+    box-shadow:none;
+  }
+  .btn-soft:hover{background:#232838;border-color:#5865f2;transform:none}
+  .btn-danger{border-radius:10px;box-shadow:none}
+  .pill{background:#1e222d;border:1px solid #2d3442;color:#f8fafc}
+  .list-btn{background:#1e222d;border:1px solid #2d3442;border-radius:12px}
+  .list-btn.active,.list-btn:hover{border-color:#5865f2;background:#232838;box-shadow:none;transform:none}
+  .preview-shell,.preview-embed{background:#11141b;border-color:#303848;border-radius:12px}
   @media(max-width:1100px){.split{grid-template-columns:1fr}}
+  @media(max-width:900px){.main{padding:18px}.topbar{align-items:flex-start}.row{grid-template-columns:1fr}.split,#app > .split{grid-template-columns:1fr}}
  </style></head>
 <body>
  <div id="auth" class="auth"><div class="auth-card"><h3>Dashboard Login</h3><div class="muted" style="margin-bottom:10px">Sign in with Discord to continue.</div><a id="authDiscord" class="btn" href="/login" style="display:block;text-align:center;text-decoration:none">Sign in with Discord</a><div class="muted" style="margin:12px 0 6px">or use a token</div><label>Token</label><input id="authToken" type="password" /><div class="row" style="margin-top:10px"><button id="authLogin" class="btn">Login</button></div><div id="authMsg" class="notice danger"></div></div></div>
