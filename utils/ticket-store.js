@@ -383,7 +383,9 @@ function getGuildAiAccess(guildId, storage = null) {
             trialStartedAt: null,
             trialEndsAt: null,
             notifiedTrialExpiredAt: null,
-            grantedByOwnerId: null
+            grantedByOwnerId: null,
+            grantedAt: null,
+            customBot: {}
         };
     }
     const activeStorage = storage || getActiveStorage();
@@ -394,12 +396,14 @@ function getGuildAiAccess(guildId, storage = null) {
     const normalized = current && typeof current === 'object' ? current : {};
     return {
         guildId: id,
-        plan: ['none', 'trial', 'premium', 'plus', 'pro', 'plus_trial', 'pro_trial'].includes(String(normalized.plan || '').trim()) ? String(normalized.plan).trim() : 'none',
+        plan: ['none', 'trial', 'premium', 'plus', 'pro', 'custom', 'plus_trial', 'pro_trial', 'custom_trial'].includes(String(normalized.plan || '').trim()) ? String(normalized.plan).trim() : 'none',
         enabled: Boolean(normalized.enabled),
         trialStartedAt: normalized.trialStartedAt || null,
         trialEndsAt: normalized.trialEndsAt || null,
         notifiedTrialExpiredAt: normalized.notifiedTrialExpiredAt || null,
-        grantedByOwnerId: normalized.grantedByOwnerId ? String(normalized.grantedByOwnerId) : null
+        grantedByOwnerId: normalized.grantedByOwnerId ? String(normalized.grantedByOwnerId) : null,
+        grantedAt: normalized.grantedAt || null,
+        customBot: normalized.customBot && typeof normalized.customBot === 'object' ? normalized.customBot : {}
     };
 }
 
@@ -417,12 +421,14 @@ function setGuildAiAccess(guildId, patch, storage = null) {
         ...incoming,
         guildId: id
     };
-    next.plan = ['none', 'trial', 'premium', 'plus', 'pro', 'plus_trial', 'pro_trial'].includes(String(next.plan || '').trim()) ? String(next.plan).trim() : 'none';
+    next.plan = ['none', 'trial', 'premium', 'plus', 'pro', 'custom', 'plus_trial', 'pro_trial', 'custom_trial'].includes(String(next.plan || '').trim()) ? String(next.plan).trim() : 'none';
     next.enabled = Boolean(next.enabled);
     next.trialStartedAt = next.trialStartedAt || null;
     next.trialEndsAt = next.trialEndsAt || null;
     next.notifiedTrialExpiredAt = next.notifiedTrialExpiredAt || null;
     next.grantedByOwnerId = next.grantedByOwnerId ? String(next.grantedByOwnerId) : null;
+    next.grantedAt = next.grantedAt || null;
+    next.customBot = next.customBot && typeof next.customBot === 'object' ? next.customBot : {};
     activeStorage.aiGuildAccess[id] = next;
     saveActiveStorage(activeStorage);
     return next;
@@ -432,10 +438,10 @@ function getEffectiveGuildAiAccess(guildId, storage = null) {
     const access = getGuildAiAccess(guildId, storage);
     const now = Date.now();
     const trialEndsAtMs = Date.parse(access.trialEndsAt || '');
-    const isTrialPlan = ['trial', 'plus_trial', 'pro_trial'].includes(access.plan);
+    const isTrialPlan = ['trial', 'plus_trial', 'pro_trial', 'custom_trial'].includes(access.plan);
     const trialActive = isTrialPlan && !Number.isNaN(trialEndsAtMs) && now < trialEndsAtMs;
     const expiredTrial = isTrialPlan && !Number.isNaN(trialEndsAtMs) && now >= trialEndsAtMs;
-    const premiumActive = ['premium', 'plus', 'pro'].includes(access.plan);
+    const premiumActive = ['premium', 'plus', 'pro', 'custom'].includes(access.plan);
     return {
         ...access,
         premiumActive,
