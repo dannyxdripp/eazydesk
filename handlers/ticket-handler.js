@@ -126,14 +126,24 @@ function resolveOpenTicketEmbed(ticketConfig, ticketType, user, reason, ticketCh
     };
 }
 
-function buildOpenSupportRow() {
+function buildOpenSupportRow(options = {}) {
+    const label = String(options?.buttonLabel || 'Select a prompt').trim().slice(0, 80) || 'Select a prompt';
+    const ticketType = String(options?.ticketType || '').trim();
+    const customId = ticketType ? `open-ticket-type:${ticketType}` : 'p_275287590028972042';
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-            .setCustomId('p_275287590028972042')
-            .setLabel('Select a prompt')
+            .setCustomId(customId)
+            .setLabel(label)
             .setEmoji({ id: '1477691338718974194', name: 'headset', animated: false })
             .setStyle(ButtonStyle.Secondary)
     );
+}
+
+function parseHexColor(raw, fallback = 0x5865F2) {
+    const value = String(raw || '').trim().replace(/^#/, '');
+    if (!/^[0-9a-f]{6}$/i.test(value)) return fallback;
+    const parsed = Number.parseInt(value, 16);
+    return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function resolveParentCategoryId(guild, ticketConfig) {
@@ -565,7 +575,6 @@ module.exports = {
                 return sendEphemeral(interaction, buildInfoMessage('Invalid Channel', 'Unable to send the ticket panel to that channel.', 0xED4245));
             }
 
-            const actionRow = buildOpenSupportRow();
             const supportsV2Panel =
                 typeof ContainerBuilder === 'function' &&
                 typeof TextDisplayBuilder === 'function' &&
@@ -578,16 +587,31 @@ module.exports = {
 
             const activeStorage = ticketStore.getActiveStorage();
             const guildConfig = interaction.guildId ? ticketStore.getGuildConfig(interaction.guildId, activeStorage) : {};
-            const storedPanelName = String(guildConfig?.panels?.[targetChannel.id]?.name || '').trim();
+            const storedPanel = guildConfig?.panels?.[targetChannel.id] && typeof guildConfig.panels[targetChannel.id] === 'object'
+                ? guildConfig.panels[targetChannel.id]
+                : {};
+            const storedPanelName = String(storedPanel.name || storedPanel.title || '').trim();
             const panelConfig = guildConfig?.panelConfig && typeof guildConfig.panelConfig === 'object' ? guildConfig.panelConfig : {};
+            const storedTicketType = String(storedPanel.ticketType || '').trim();
+            const directTicketType = storedPanel.mode === 'single' && storedTicketType
+                ? ticketStore.resolveTicketTypeSelectValue(storedTicketType, interaction.guildId, activeStorage)
+                : '';
+            const branding = guildConfig?.branding && typeof guildConfig.branding === 'object' ? guildConfig.branding : {};
+            const accentColor = parseHexColor(storedPanel.accentColor || branding.accentColor, 0x5865F2);
+            const actionRow = buildOpenSupportRow({
+                buttonLabel: options?.buttonLabel || storedPanel.buttonLabel || panelConfig.buttonLabel || 'Select a prompt',
+                ticketType: directTicketType
+            });
             const panelName = String(options?.panelName || storedPanelName || panelConfig.title || 'Support Desk').trim();
             const panelDescription = String(
                 options?.panelDescription ||
+                storedPanel.description ||
                 panelConfig.description ||
                 `> At Codex Customs, we are committed to providing high quality support to all customers, regardless of their needs therefore we have a support system for customers to contact our dedicated team when in need.\n\n> If you're needing to contact support, please click the "select a prompt" button below & select which option best fits your needs to get in touch with us. Please remain patient throughout the whole process; a response from us may take up to 24 hours.`
             ).trim();
             const panelAdvisory = String(
                 options?.panelAdvisory ||
+                storedPanel.advisory ||
                 panelConfig.advisory ||
                 `**Advisories:**\n> All tickets are monitored and logged for training and security purposes.\n> By opening a ticket, you are agreeing to our https://discord.com/channels/1327842668734185492/1327846022159929474`
             ).trim();
@@ -595,7 +619,7 @@ module.exports = {
 
             const components = [
                 new ContainerBuilder()
-                    .setAccentColor(0x5865F2)
+                    .setAccentColor(accentColor)
                     .addTextDisplayComponents(
                         new TextDisplayBuilder().setContent(`${header}\n\n${panelDescription}`)
                     )

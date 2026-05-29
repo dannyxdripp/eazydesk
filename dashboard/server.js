@@ -8,7 +8,8 @@ const { MessageFlags, ChannelType, PermissionsBitField } = require('discord.js')
 const ticketStore = require('../utils/ticket-store');
 const { getPublicBaseUrl } = require('../utils/public-url');
 const { DEFAULT_EMBED_TEMPLATES } = require('../utils/embed-config');
-const { getEffectiveAvailability } = require('../handlers/ticket-handler');
+const ticketHandler = require('../handlers/ticket-handler');
+const { getEffectiveAvailability } = ticketHandler;
 const { buildV2Notice } = require('../utils/components-v2-messages');
 const closeRequestCommand = require('../commands/closerequest');
 const { getTranscriptRetentionDays, resolveTranscriptPath, deleteTranscriptArchive } = require('../utils/transcript-archive');
@@ -2149,7 +2150,9 @@ async function getDashboardState(client, req = null) {
             setup: guildConfig?.setup || {},
             tutorialEnabled: Boolean(guildConfig?.tutorialEnabled),
             rolePermanence: guildConfig?.rolePermanence !== false,
+            branding: guildConfig?.branding && typeof guildConfig.branding === 'object' ? guildConfig.branding : {},
             panelConfig: guildConfig?.panelConfig && typeof guildConfig.panelConfig === 'object' ? guildConfig.panelConfig : {},
+            panels: guildConfig?.panels && typeof guildConfig.panels === 'object' ? guildConfig.panels : {},
             escalationRoles: guildConfig?.escalationRoles && typeof guildConfig.escalationRoles === 'object' ? guildConfig.escalationRoles : {}
         },
         availability: ticketTypes.map(type => ({
@@ -2729,7 +2732,18 @@ async function handleApi(req, res, url, client) {
             next.panelConfig = {
                 title: String(body.panelConfig.title || '').trim().slice(0, 120),
                 description: String(body.panelConfig.description || '').trim().slice(0, 4000),
-                advisory: String(body.panelConfig.advisory || '').trim().slice(0, 4000)
+                advisory: String(body.panelConfig.advisory || '').trim().slice(0, 4000),
+                buttonLabel: String(body.panelConfig.buttonLabel || '').trim().slice(0, 80)
+            };
+        }
+
+        if (body.branding && typeof body.branding === 'object') {
+            const accent = String(body.branding.accentColor || '').trim();
+            next.branding = {
+                botName: String(body.branding.botName || '').trim().slice(0, 80),
+                avatarUrl: /^https?:\/\//i.test(String(body.branding.avatarUrl || '').trim()) ? String(body.branding.avatarUrl).trim().slice(0, 500) : '',
+                accentColor: /^#?[0-9a-f]{6}$/i.test(accent) ? (accent.startsWith('#') ? accent : `#${accent}`) : '#5865F2',
+                footerText: String(body.branding.footerText || '').trim().slice(0, 120)
             };
         }
 
@@ -2756,6 +2770,88 @@ async function handleApi(req, res, url, client) {
             : null;
 
         sendJson(res, 200, { ok: true, guildId, config: updated || next });
+        return true;
+    }
+
+    if (method === 'POST' && pathname === '/api/panel/upsert') {
+        const body = await readBody(req);
+        const guildId = String(body.guildId || '').trim();
+        const channelId = String(body.channelId || '').trim();
+        if (!/^\d{17,20}$/.test(guildId) || !/^\d{17,20}$/.test(channelId)) {
+            sendJson(res, 400, { error: 'Invalid guildId or channelId' });
+            return true;
+        }
+        if (!(await ensureDashboardPermission(client, req, guildId, 'canManageSettings'))) {
+            sendJson(res, 403, { error: 'Forbidden' });
+            return true;
+        }
+
+        const mode = String(body.mode || 'multi').trim() === 'single' ? 'single' : 'multi';
+        const ticketTypeInput = String(body.ticketType || '').trim();
+        const activeStorage = ticketStore.getActiveStorage();
+        const ticketType = ticketTypeInput ? ticketStore.resolveTicketTypeSelectValue(ticketTypeInput, guildId, activeStorage) : '';
+        if (mode === 'single' && !ticketType) {
+            sendJson(res, 400, { error: 'Single-panel mode needs a valid ticket type.' });
+            return true;
+        }
+
+        const guildConfig = ticketStore.getGuildConfig(guildId, activeStorage);
+        const panels = guildConfig.panels && typeof guildConfig.panels === 'object' ? guildConfig.panels : {};
+        panels[channelId] = {
+            ...(panels[channelId] && typeof panels[channelId] === 'object' ? panels[channelId] : {}),
+            name: String(body.title || '').trim().slice(0, 120) || 'Support Desk',
+            title: String(body.title || '').trim().slice(0, 120) || 'Support Desk',
+            description: String(body.description || '').trim().slice(0, 4000),
+            advisory: String(body.advisory || '').trim().slice(0, 4000),
+            buttonLabel: String(body.buttonLabel || '').trim().slice(0, 80) || 'Select a prompt',
+            mode,
+            ticketType: mode === 'single' ? ticketType : null
+        };
+
+        if (mode === 'single') {
+            ticketStore.setRestrictedTicketTypeForChannel(channelId, ticketType, activeStorage, guildId);
+        } else {
+            ticketStore.setRestrictedTicketTypeForChannel(channelId, null, activeStorage, guildId);
+        }
+        const updated = ticketStore.setGuildConfig(guildId, { panels }, activeStorage);
+        sendJson(res, 200, { ok: true, guildId, panels: updated?.panels || panels });
+        return true;
+    }
+
+    if (method === 'POST' && pathname === '/api/panel/publish') {
+        const body = await readBody(req);
+        const guildId = String(body.guildId || '').trim();
+        const channelId = String(body.channelId || '').trim();
+        if (!/^\d{17,20}$/.test(guildId) || !/^\d{17,20}$/.test(channelId)) {
+            sendJson(res, 400, { error: 'Invalid guildId or channelId' });
+            return true;
+        }
+        if (!(await ensureDashboardPermission(client, req, guildId, 'canManageSettings'))) {
+            sendJson(res, 403, { error: 'Forbidden' });
+            return true;
+        }
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+        if (!channel || channel.type !== ChannelType.GuildText || typeof channel.send !== 'function') {
+            sendJson(res, 404, { error: 'Channel not found or not sendable.' });
+            return true;
+        }
+        const me = channel.guild?.members?.me;
+        if (me && !channel.permissionsFor(me)?.has(PermissionsBitField.Flags.SendMessages)) {
+            sendJson(res, 403, { error: 'I cannot send messages in that channel.' });
+            return true;
+        }
+        const fakeInteraction = {
+            guildId,
+            channelId,
+            channel,
+            user: { id: getDashboardSessionUserId(req) || getBotOwnerId() || 'dashboard' },
+            reply: async () => null,
+            editReply: async () => null,
+            deferred: false,
+            replied: false
+        };
+        await ticketHandler.createTicketPanel(fakeInteraction, { channel, notice: 'Ticket panel has been published from the dashboard.' });
+        sendJson(res, 200, { ok: true, guildId, channelId });
         return true;
     }
 
@@ -3534,6 +3630,10 @@ function navItem(path, label, currentPath) {
             icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg>',
             desc: 'Build ticket flows'
         },
+        '/panels': {
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>',
+            desc: 'Panel designer'
+        },
         '/commands/tag': {
             icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10V4H14L4 14l6 6 10-10z"/><circle cx="15" cy="7" r="1"/></svg>',
             desc: 'Reusable responses'
@@ -3587,7 +3687,7 @@ function getAllowedDashboardPages(access = {}) {
     pages.add('/pricing');
     pages.add('/upgrade');
     if (access?.canFullDashboard || access?.isOwner) {
-        ['/overview', '/settings', '/availability', '/commands/ticket-types', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/tutorials', '/pricing', '/upgrade', '/setup', '/controller'].forEach(page => pages.add(page));
+        ['/overview', '/settings', '/availability', '/commands/ticket-types', '/panels', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/tutorials', '/pricing', '/upgrade', '/setup', '/controller'].forEach(page => pages.add(page));
         return pages;
     }
     if (access?.canManageSettings) pages.add('/setup');
@@ -3595,6 +3695,8 @@ function getAllowedDashboardPages(access = {}) {
     if (access?.canManageTicketTypes) {
         pages.add('/settings');
         pages.add('/commands/ticket-types');
+        pages.add('/panels');
+        pages.add('/embed-editor');
     }
     if (access?.canManageEscalations || access?.canViewTickets) pages.add('/tickets');
     if (access?.canViewTranscripts) pages.add('/transcripts');
@@ -3614,7 +3716,8 @@ function pageTitleForPath(path) {
         '/commands/feedback': 'Feedback',
         '/commands/appeal': 'Feedback',
         '/statistics': 'Statistics',
-        '/embed-editor': 'Embed Editor',
+        '/panels': 'Panels',
+        '/embed-editor': 'Branding',
         '/pricing': 'Pricing',
         '/upgrade': 'Upgrade',
         '/documentation': 'Documentation'
@@ -3634,7 +3737,8 @@ function pageDescriptionForPath(path) {
         '/transcripts': 'Browse saved transcripts and archive history without leaving the dashboard.',
         '/commands/feedback': 'Control where feedback lands and how the flow is presented.',
         '/statistics': 'Track recent performance, close reasons, and staff activity trends.',
-        '/embed-editor': 'Update reusable bot message templates with a simpler editing workflow.',
+        '/panels': 'Design and publish channel-specific ticket panels.',
+        '/embed-editor': 'Customize server branding and reusable bot message templates.',
         '/pricing': 'Compare plans and see what is available for this server.',
         '/upgrade': 'Upgrade to Plus or contact sales for Pro plans.',
         '/documentation': 'Reference placeholders, templates, and dashboard usage notes.'
@@ -3654,6 +3758,7 @@ function topNavItem(path, label, group, description) {
         '/commands/tag': 'tag',
         '/commands/feedback': 'feedback',
         '/statistics': 'diagnostics',
+        '/panels': 'panels',
         '/embed-editor': 'embed',
         '/pricing': 'pricing',
         '/upgrade': 'owner',
@@ -4293,7 +4398,7 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
  </style></head>
 <body>
  <div id="auth" class="auth"><div class="auth-card"><h3>Dashboard Login</h3><div class="muted" style="margin-bottom:10px">Sign in with Discord to continue.</div><a id="authDiscord" class="btn" href="/login" style="display:block;text-align:center;text-decoration:none">Sign in with Discord</a><div class="muted" style="margin:12px 0 6px">or use a token</div><label>Token</label><input id="authToken" type="password" /><div class="row" style="margin-top:10px"><button id="authLogin" class="btn">Login</button></div><div id="authMsg" class="notice danger"></div></div></div>
- <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">${pageDescriptionForPath(currentPath)}</div></div></div><div class="topbar-right"><a class="btn-soft server-icon-btn" href="/dashboard" title="Servers" aria-label="Servers"><span class="btn-icon">${dashboardIcon('servers')}</span></a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu">${topNavItem('/overview','Home','General','Snapshot and quick actions')}${topNavItem('/settings','Settings','General','Core config and routing')}${topNavItem('/availability','Availability','General','Queue status and overrides')}${topNavItem('/tutorials','Tutorials','General','Guides and walkthroughs')}${topNavItem('/tickets','Tickets','Tickets','Active queue management')}${topNavItem('/transcripts','Transcripts','Tickets','Saved conversation history')}${topNavItem('/commands/ticket-types','Ticket Types','Tickets','Flow design and coverage')}${topNavItem('/commands/tag','Tags','Tickets','Reusable staff replies')}${topNavItem('/commands/feedback','Feedback','Content','Feedback destination and flow')}${topNavItem('/statistics','Statistics','Content','Trends and activity')}${topNavItem('/embed-editor','Embed Editor','Content','Template visuals and copy')}${topNavItem('/pricing','Pricing','Billing','Plans and access')}${topNavItem('/upgrade','Upgrade','Billing','Upgrade options and sales')}${topNavItem('/documentation','Documentation','Content','Reference notes and placeholders')}</div></div><div id="themeNav" class="topnav"><button id="themeBtn" class="btn-soft topnav-btn" type="button"><span id="themeLabel">Theme</span><span class="chev">v</span></button><div class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-theme-item="dark">Dark <span class="tag">Default</span></button><button type="button" class="topnav-item" data-theme-item="light">Light <span class="tag">Warm</span></button><button type="button" class="topnav-item" data-theme-item="ocean">Ocean <span class="tag">Cool</span></button><button type="button" class="topnav-item" data-theme-item="sunset">Sunset <span class="tag">Bold</span></button><button type="button" class="topnav-item theme-secret" data-theme-item="hacker">Hacker <span class="tag">Secret</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px"><span class="btn-icon">${dashboardIcon('restart')}</span><span>Refresh</span></button></div></div><div id="announcementBar"></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
+<div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">${pageDescriptionForPath(currentPath)}</div></div></div><div class="topbar-right"><a class="btn-soft server-icon-btn" href="/dashboard" title="Servers" aria-label="Servers"><span class="btn-icon">${dashboardIcon('servers')}</span></a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu">${topNavItem('/overview','Home','General','Snapshot and quick actions')}${topNavItem('/settings','Settings','General','Core config and routing')}${topNavItem('/availability','Availability','General','Queue status and overrides')}${topNavItem('/tutorials','Tutorials','General','Guides and walkthroughs')}${topNavItem('/tickets','Tickets','Tickets','Active queue management')}${topNavItem('/transcripts','Transcripts','Tickets','Saved conversation history')}${topNavItem('/commands/ticket-types','Ticket Types','Tickets','Flow design and coverage')}${topNavItem('/panels','Panels','Tickets','Panel design and publishing')}${topNavItem('/commands/tag','Tags','Tickets','Reusable staff replies')}${topNavItem('/commands/feedback','Feedback','Content','Feedback destination and flow')}${topNavItem('/statistics','Statistics','Content','Trends and activity')}${topNavItem('/embed-editor','Branding','Content','Server identity and templates')}${topNavItem('/pricing','Pricing','Billing','Plans and access')}${topNavItem('/upgrade','Upgrade','Billing','Upgrade options and sales')}${topNavItem('/documentation','Documentation','Content','Reference notes and placeholders')}</div></div><div id="themeNav" class="topnav"><button id="themeBtn" class="btn-soft topnav-btn" type="button"><span id="themeLabel">Theme</span><span class="chev">v</span></button><div class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-theme-item="dark">Dark <span class="tag">Default</span></button><button type="button" class="topnav-item" data-theme-item="light">Light <span class="tag">Warm</span></button><button type="button" class="topnav-item" data-theme-item="ocean">Ocean <span class="tag">Cool</span></button><button type="button" class="topnav-item" data-theme-item="sunset">Sunset <span class="tag">Bold</span></button><button type="button" class="topnav-item theme-secret" data-theme-item="hacker">Hacker <span class="tag">Secret</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px"><span class="btn-icon">${dashboardIcon('restart')}</span><span>Refresh</span></button></div></div><div id="announcementBar"></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
 <script>
  let currentPath=${JSON.stringify(currentPath)},tokenKey='dashboard_token_ui',defaultEmbedTemplates=${JSON.stringify(DEFAULT_EMBED_TEMPLATES)};
 const app=document.getElementById('app'),notice=document.getElementById('notice'),auth=document.getElementById('auth'),authDiscord=document.getElementById('authDiscord'),authToken=document.getElementById('authToken'),authMsg=document.getElementById('authMsg');
@@ -4310,8 +4415,8 @@ const app=document.getElementById('app'),notice=document.getElementById('notice'
 const createToastContainer=()=>{let container=document.getElementById('toast-container');if(!container){container=document.createElement('div');container.id='toast-container';container.className='toast-container';document.body.appendChild(container)}return container};
 const note=(t,m='')=>{const container=createToastContainer();if(!t||!t.trim()){notice.textContent='';notice.className='notice';return}notice.textContent=t;notice.className='notice '+m;const toast=document.createElement('div');toast.className='toast toast-'+m;const icon=m==='ok'?'✓':m==='danger'?'✕':'ℹ';toast.innerHTML='<span class="toast-icon">'+icon+'</span><div class="toast-content"><strong class="toast-title">'+{'ok':'Success','danger':'Error','warn':'Warning'}[m]||'Info'+'</strong><div class="toast-message">'+esc(t)+'</div></div><button class="toast-close" type="button">×</button>';const close=()=>{toast.style.animation='toastSlideOut 300ms ease forwards';setTimeout(()=>{toast.remove();if(container.children.length===0)container.style.display='none'},300)};toast.querySelector('.toast-close').onclick=close;container.appendChild(toast);container.style.display='flex';setTimeout(close,5000)};
 async function api(path,opt={}){const h={'Content-Type':'application/json',...(opt.headers||{})};const tok=localStorage.getItem(tokenKey);if(tok)h['x-dashboard-token']=tok;const csrf=(state&&state.csrfToken)||'';if(csrf&&String(opt.method||'GET').toUpperCase()!=='GET')h['x-csrf-token']=csrf;const r=await fetch(path,{credentials:'include',...opt,headers:h});if(r.status===401){const next=encodeURIComponent(location.pathname+location.search);window.location='/login?next='+next;throw new Error('Unauthorized')}const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
-function navTitleForPath(p){return ({ '/overview':'Home','/settings':'Settings','/availability':'Availability','/tutorials':'Tutorials','/commands/ticket-types':'Ticket Types','/commands/tag':'Tags','/tickets':'Tickets','/transcripts':'Transcripts','/commands/feedback':'Feedback','/statistics':'Statistics','/embed-editor':'Embed Editor','/pricing':'Pricing','/upgrade':'Upgrade','/documentation':'Documentation'}[p]||'Dashboard')}
-function pageDescForPath(p){return ({ '/overview':'A cleaner snapshot of ticket activity, queue health, and the most common next actions.','/settings':'Core server configuration, routing, and system behavior in one place.','/availability':'Adjust queue expectations per ticket type without digging through commands.','/tutorials':'Guides, walkthroughs, and internal onboarding material for your staff.','/commands/ticket-types':'Shape each ticket flow, assign support coverage, and keep categories tidy.','/commands/tag':'Store reusable answers and keep repeat support responses consistent.','/tickets':'Review active conversations, add notes, and handle escalations quickly.','/transcripts':'Browse saved transcripts and archive history without leaving the dashboard.','/commands/feedback':'Control where feedback lands and how the flow is presented.','/statistics':'Track recent performance, close reasons, and staff activity trends.','/embed-editor':'Update reusable bot message templates with a simpler editing workflow.','/pricing':'Compare plans and see what is available for this server.','/upgrade':'Upgrade to Plus or contact sales for Pro plans.','/documentation':'Reference placeholders, templates, and dashboard usage notes.'}[p]||'Manage this part of the dashboard with a simpler, more focused layout.')}
+function navTitleForPath(p){return ({ '/overview':'Home','/settings':'Settings','/availability':'Availability','/tutorials':'Tutorials','/commands/ticket-types':'Ticket Types','/panels':'Panels','/commands/tag':'Tags','/tickets':'Tickets','/transcripts':'Transcripts','/commands/feedback':'Feedback','/statistics':'Statistics','/embed-editor':'Branding','/pricing':'Pricing','/upgrade':'Upgrade','/documentation':'Documentation'}[p]||'Dashboard')}
+function pageDescForPath(p){return ({ '/overview':'A cleaner snapshot of ticket activity, queue health, and the most common next actions.','/settings':'Core server configuration, routing, and system behavior in one place.','/availability':'Adjust queue expectations per ticket type without digging through commands.','/tutorials':'Guides, walkthroughs, and internal onboarding material for your staff.','/commands/ticket-types':'Shape each ticket flow, assign support coverage, and keep categories tidy.','/panels':'Design, save, and publish channel-specific ticket panels.','/commands/tag':'Store reusable answers and keep repeat support responses consistent.','/tickets':'Review active conversations, add notes, and handle escalations quickly.','/transcripts':'Browse saved transcripts and archive history without leaving the dashboard.','/commands/feedback':'Control where feedback lands and how the flow is presented.','/statistics':'Track recent performance, close reasons, and staff activity trends.','/embed-editor':'Customize server branding and reusable bot message templates.','/pricing':'Compare plans and see what is available for this server.','/upgrade':'Upgrade to Plus or contact sales for Pro plans.','/documentation':'Reference placeholders, templates, and dashboard usage notes.'}[p]||'Manage this part of the dashboard with a simpler, more focused layout.')}
 function parseEmoji(raw){const s=String(raw||'').trim();if(!s)return null;const m=s.match(/^<(a?):([a-zA-Z0-9_]+):(\d{17,20})>$/);if(m)return{animated:m[1]==='a',name:m[2],id:m[3],raw:s};return{unicode:s,raw:s}}
 function emojiHtml(raw){const e=parseEmoji(raw);if(!e)return '';if(e.id){const ext=e.animated?'gif':'png';return '<span class="emoji-inline"><img src="https://cdn.discordapp.com/emojis/'+e.id+'.'+ext+'?size=64&quality=lossless" alt="'+esc(e.name||'emoji')+'" /></span>'}return '<span class="emoji-inline">'+esc(e.unicode)+'</span>'}
 function teamLabel(team){const src=team&&typeof team==='object'?team:{};const e=emojiHtml(src.emoji||'');return (e?e+' ':'')+esc(src.name||'')}
@@ -4666,6 +4771,7 @@ function renderTranscripts(){
   '<div class=\"card\"><h3>Saved Transcripts</h3><div id=\"transcriptsList\" class=\"list\" style=\"margin-top:10px\">'+(items.length?items.map(row).join(''):'<div class=\"muted\">No transcripts saved yet.</div>')+'</div></div>'+
  '</div>';
 }
+function renderPanels(){const panels=(state.guildConfigSummary&&state.guildConfigSummary.panels)||{};const selected=String((ui&&ui.selectedPanelChannel)||Object.keys(panels)[0]||'');const panel=selected&&panels[selected]&&typeof panels[selected]==='object'?panels[selected]:{};const typeOptions=['<option value="">Select ticket type</option>'].concat((state.ticketTypes||[]).map(t=>{const v=String(t.name||'');const sel=(String(panel.ticketType||'')===v||String(panel.ticketType||'')===String(t.selectValue||''))?' selected':'';return '<option value="'+esc(v)+'"'+sel+'>'+esc(v)+'</option>'})).join('');const rows=Object.entries(panels).map(([id,p])=>'<button type="button" class="list-btn panelPick '+(id===selected?'active':'')+'" data-id="'+esc(id)+'"><div class="list-title">'+esc(p.title||p.name||channelLabel(id,'Panel'))+'</div><div class="list-meta">'+esc(channelLabel(id,'No channel'))+' · '+esc((p.mode==='single'?'Single type':'Multi selector'))+'</div></button>').join('')||'<div class="muted">No custom panels yet.</div>';return '<div class="split"><div class="card list-card"><div class="list-head"><div><h3 style="margin:0">Panel Library</h3><div class="muted">Each channel can have its own panel copy and button.</div></div><button id="newPanelBtn" class="btn-soft" style="width:auto">New</button></div><div class="list list-compact" id="panelsList" style="margin-top:10px">'+rows+'</div></div><div class="card"><h3>'+(selected?'Edit Panel':'Create Panel')+'</h3><label>Destination Channel</label>'+channelSelect('panelChannel',selected,'Select panel channel')+'<div class="row"><div><label>Panel Mode</label><select id="panelMode"><option value="multi" '+(panel.mode!=='single'?'selected':'')+'>Multi-panel selector</option><option value="single" '+(panel.mode==='single'?'selected':'')+'>Single ticket type</option></select></div><div><label>Ticket Type</label><select id="panelTicketType">'+typeOptions+'</select></div></div><label>Panel Title</label><input id="panelEditTitle" value="'+esc(panel.title||panel.name||'Support Desk')+'" /><label>Panel Description</label><textarea id="panelEditDescription" style="min-height:150px" placeholder="Explain what this panel is for.">'+esc(panel.description||'')+'</textarea><label>Button Text</label><input id="panelButtonLabel" value="'+esc(panel.buttonLabel||'Select a prompt')+'" maxlength="80" /><label>Advisory</label><textarea id="panelEditAdvisory" placeholder="Rules, policy notes, or expected response times.">'+esc(panel.advisory||'')+'</textarea><div class="row" style="margin-top:12px;grid-template-columns:1fr 1fr"><button id="savePanelDesign" class="btn">Save Panel</button><button id="publishPanelDesign" class="btn-soft">Publish Panel</button></div><div class="preview-shell" style="margin-top:14px"><div class="preview-msg"><div class="preview-avatar"></div><div class="preview-content"><div class="preview-name">'+esc((state.guildConfigSummary&&state.guildConfigSummary.branding&&state.guildConfigSummary.branding.botName)||'Tickets Bot')+' <span class="preview-tag">BOT</span></div><div class="preview-embed"><div class="preview-bar"></div><div class="preview-main"><div class="preview-title" id="panelPreviewTitle"></div><div class="preview-desc" id="panelPreviewDesc"></div><button type="button" class="btn-soft" id="panelPreviewButton" style="width:auto;margin-top:12px"></button></div></div></div></div></div></div></div>'}
 function renderFeedback(){return '<div class="card"><h3>Feedback Command Settings</h3><label>Feedback Channel</label>'+channelSelect('feedbackConfigId',state.botConfig.appealsChannelId||'','Select feedback channel')+'<div style="margin-top:10px"><button id="saveFeedback" class="btn">Save</button></div></div>'}
 function renderAppeal(){return renderFeedback()}
 function renderStats(){const stats=state.statistics||{};const t=stats.totals||{activeTickets:0,totalClaimed:0,totalClosed:0};const top=(stats.topCloseReasons||[]).slice(0,6);const tags=(stats.tagUsage||[]).slice(0,6);return '<div class="grid">'+
@@ -4675,7 +4781,7 @@ function renderStats(){const stats=state.statistics||{};const t=stats.totals||{a
  '<div class="card"><h3>Popular Tags</h3><div class="list">'+(tags.length?tags.map(r=>'<div class="item"><strong>'+esc(r.name||'Unknown')+'</strong><span class="pill">'+esc(r.count||0)+'</span></div>').join(''):'<div class="muted">No tag data yet.</div>')+'</div></div>'+
  '<div class="card"><h3>Support Member Lookup</h3><label>User (ID or mention)</label><input id="staffLookupQuery" placeholder="<@123> or 123..." /><div class="row" style="margin-top:10px"><button id="staffLookupBtn" class="btn">Lookup</button><button id="staffLookupClear" class="btn-soft">Clear</button></div><div id="staffLookupResult" class="list" style="margin-top:10px"></div></div>'+
  '</div>'}
-function renderBranding(){const templates=state.botConfig.embedTemplates||defaultEmbedTemplates;const keys=Object.keys(templates);const firstKey=keys[0]||'ticketClaimed';const first=templates[firstKey]||{title:'',description:'',color:'#5865F2'};return '<div class="grid"><div class="card"><h3>Visual Components V2 Template Editor</h3><p class="muted">Template workflow: pick a template, edit text, preview live, then save. These templates render into Components V2 containers (accent color applies only when the bot decides the message is success/error).</p><div class="item" style="margin-top:10px"><div class="muted">Separators: add <code>[[divider]]</code>, <code>[[divider:large]]</code>, <code>[[space]]</code>, or <code>[[space:large]]</code> on their own line inside <strong>Description</strong> to insert dividers/spacers.</div></div><div class="row"><div><label>Template</label><select id="brandingKey">'+keys.map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join('')+'</select></div><div><label>Accent Color</label><input id="brandingColor" value="'+esc(first.color||'#5865F2')+'" placeholder="#5865F2" /></div></div><label>Title</label><input id="brandingTitle" value="'+esc(first.title||'')+'" /><label>Description</label><textarea id="brandingDescription" style="min-height:160px">'+esc(first.description||'')+'</textarea><div class="row" style="margin-top:10px"><button id="applyBrandingTemplate" class="btn-soft">Apply to Template</button><button id="saveBranding" class="btn">Save Templates</button></div><div class="row" style="margin-top:10px"><button id="resetBrandingDefaults" class="btn-soft">Reset to Defaults</button><button id="formatBrandingJson" class="btn-soft">Format JSON</button></div></div><div class="card"><h3>Live Preview</h3><div class="preview-shell"><div class="preview-msg"><div class="preview-avatar"></div><div class="preview-content"><div class="preview-name">Tickets Bot <span class="preview-tag">BOT</span></div><div id="brandingPreviewEmbed" class="preview-embed"><div id="brandingPreviewBar" class="preview-bar"></div><div class="preview-main"><div id="brandingPreviewTitle" class="preview-title"></div><div id="brandingPreviewDesc" class="preview-desc"></div></div></div></div></div></div><label style="margin-top:14px">Advanced JSON</label><textarea id="brandingTemplates" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(templates,null,2))+'</textarea></div></div>'}
+function renderBranding(){const templates=state.botConfig.embedTemplates||defaultEmbedTemplates;const keys=Object.keys(templates);const firstKey=keys[0]||'ticketClaimed';const first=templates[firstKey]||{title:'',description:'',color:'#5865F2'};const brand=(state.guildConfigSummary&&state.guildConfigSummary.branding)||{};return '<div class="grid"><div class="card"><h3>Server Branding</h3><p class="muted">Set the server-facing identity used by panel previews and branded ticket surfaces.</p><label>Bot Display Name</label><input id="serverBrandName" value="'+esc(brand.botName||'Tickets Bot')+'" placeholder="Tickets Bot" /><label>Avatar URL</label><input id="serverBrandAvatar" value="'+esc(brand.avatarUrl||'')+'" placeholder="https://..." /><div class="row"><div><label>Accent Color</label><input id="serverBrandAccent" value="'+esc(brand.accentColor||'#5865F2')+'" placeholder="#5865F2" /></div><div><label>Footer Text</label><input id="serverBrandFooter" value="'+esc(brand.footerText||'')+'" placeholder="Powered by support" /></div></div><div style="margin-top:12px"><button id="saveServerBranding" class="btn">Save Branding</button></div></div><div class="card"><h3>Message Templates</h3><p class="muted">Pick one template at a time, edit the copy, preview it, then save the template set.</p><div class="item" style="margin-top:10px"><div class="muted">Separators: add <code>[[divider]]</code>, <code>[[divider:large]]</code>, <code>[[space]]</code>, or <code>[[space:large]]</code> on their own line inside <strong>Description</strong>.</div></div><div class="row"><div><label>Template</label><select id="brandingKey">'+keys.map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join('')+'</select></div><div><label>Accent Color</label><input id="brandingColor" value="'+esc(first.color||'#5865F2')+'" placeholder="#5865F2" /></div></div><label>Title</label><input id="brandingTitle" value="'+esc(first.title||'')+'" /><label>Description</label><textarea id="brandingDescription" style="min-height:160px">'+esc(first.description||'')+'</textarea><div class="row" style="margin-top:10px"><button id="applyBrandingTemplate" class="btn-soft">Apply to Template</button><button id="saveBranding" class="btn">Save Templates</button></div><div class="row" style="margin-top:10px"><button id="resetBrandingDefaults" class="btn-soft">Reset to Defaults</button><button id="formatBrandingJson" class="btn-soft">Format JSON</button></div></div><div class="card"><h3>Live Preview</h3><div class="preview-shell"><div class="preview-msg"><div class="preview-avatar" id="brandingPreviewAvatar"></div><div class="preview-content"><div class="preview-name" id="brandingPreviewName">'+esc(brand.botName||'Tickets Bot')+' <span class="preview-tag">BOT</span></div><div id="brandingPreviewEmbed" class="preview-embed"><div id="brandingPreviewBar" class="preview-bar"></div><div class="preview-main"><div id="brandingPreviewTitle" class="preview-title"></div><div id="brandingPreviewDesc" class="preview-desc"></div></div></div></div></div></div><label style="margin-top:14px">Advanced JSON</label><textarea id="brandingTemplates" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(templates,null,2))+'</textarea></div></div>'}
 function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Starter support for small communities',features:['Unlimited tickets','Custom panels','Logs & transcripts','Dashboard access'],cta:'Current plan',active:true},{name:'Plus',price:'$12/mo',description:'Modern support automation for growing teams',features:['AI Moderation','Unlimited tickets','Custom panels','Logging','Priority support'],cta:'Most popular',active:false,featured:true},{name:'Pro',price:'Custom',description:'Tailored support for large servers and service teams',features:['Dedicated onboarding','Custom integrations','Advanced analytics','Priority SLA','Custom panels'],cta:'Contact sales',active:false}];const rows=[['AI Moderation','—','Yes','Yes'],['Unlimited Tickets','Yes','Yes','Yes'],['Custom Panels','Yes','Yes','Yes'],['Logging','Yes','Yes','Yes'],['Priority Support','—','Yes','Yes']];const faqs=[{q:'Can I start on the Free plan and upgrade later?','a':'Yes. The Free plan is available immediately, and you can upgrade anytime without losing configuration.'},{q:'What does “Custom” include?','a':'Pro includes dedicated setup support, custom integrations, higher limits, and SLA-based response times.'},{q:'Does Plus include AI Moderation?','a':'Yes. Plus includes AI-assisted moderation workflows for tickets and posts.'},{q:'How does billing work?','a':'Plus is billed monthly. Pro billing is handled through a custom agreement with your team.'}];return '<div class="page-shell pricing-page">'+
     '<section class="pricing-hero card">'+
       '<div class="row" style="align-items:flex-start;gap:24px">'+
@@ -4939,10 +5045,10 @@ function wire(){
     const closeMenu=()=>{try{document.body.classList.remove('menu-open')}catch{}};
     if(menuBtn)menuBtn.onclick=()=>{document.body.classList.toggle('menu-open')};
     if(menuOverlay)menuOverlay.onclick=()=>closeMenu();
-    const navTitleForPath=(p)=>({ '/overview':'Home','/settings':'Settings','/availability':'Availability','/tutorials':'Tutorials','/commands/ticket-types':'Ticket Types','/commands/tag':'Tags','/tickets':'Tickets','/transcripts':'Transcripts','/commands/feedback':'Feedback','/statistics':'Statistics','/embed-editor':'Embed Editor','/documentation':'Documentation'}[p]||'Dashboard');
-    const pageDescForPath=(p)=>({ '/overview':'A cleaner snapshot of ticket activity, queue health, and the most common next actions.','/settings':'Core server configuration, routing, and system behavior in one place.','/availability':'Adjust queue expectations per ticket type without digging through commands.','/tutorials':'Guides, walkthroughs, and internal onboarding material for your staff.','/commands/ticket-types':'Shape each ticket flow, assign support coverage, and keep categories tidy.','/commands/tag':'Store reusable answers and keep repeat support responses consistent.','/tickets':'Review active conversations, add notes, and handle escalations quickly.','/transcripts':'Browse saved transcripts and archive history without leaving the dashboard.','/commands/feedback':'Control where feedback lands and how the flow is presented.','/statistics':'Track recent performance, close reasons, and staff activity trends.','/embed-editor':'Update reusable bot message templates with a simpler editing workflow.','/documentation':'Reference placeholders, templates, and dashboard usage notes.'}[p]||'Manage this part of the dashboard with a simpler, more focused layout.');
+    const navTitleForPath=(p)=>({ '/overview':'Home','/settings':'Settings','/availability':'Availability','/tutorials':'Tutorials','/commands/ticket-types':'Ticket Types','/panels':'Panels','/commands/tag':'Tags','/tickets':'Tickets','/transcripts':'Transcripts','/commands/feedback':'Feedback','/statistics':'Statistics','/embed-editor':'Branding','/documentation':'Documentation'}[p]||'Dashboard');
+    const pageDescForPath=(p)=>({ '/overview':'A cleaner snapshot of ticket activity, queue health, and the most common next actions.','/settings':'Core server configuration, routing, and system behavior in one place.','/availability':'Adjust queue expectations per ticket type without digging through commands.','/tutorials':'Guides, walkthroughs, and internal onboarding material for your staff.','/commands/ticket-types':'Shape each ticket flow, assign support coverage, and keep categories tidy.','/panels':'Design, save, and publish channel-specific ticket panels.','/commands/tag':'Store reusable answers and keep repeat support responses consistent.','/tickets':'Review active conversations, add notes, and handle escalations quickly.','/transcripts':'Browse saved transcripts and archive history without leaving the dashboard.','/commands/feedback':'Control where feedback lands and how the flow is presented.','/statistics':'Track recent performance, close reasons, and staff activity trends.','/embed-editor':'Customize server branding and reusable bot message templates.','/documentation':'Reference placeholders, templates, and dashboard usage notes.'}[p]||'Manage this part of the dashboard with a simpler, more focused layout.');
      const groupForPath=(p)=>{if(p==='/overview'||p==='/settings'||p==='/availability'||p==='/tutorials')return 'general';if(p==='/commands/ticket-types'||p==='/commands/tag'||p==='/tickets'||p==='/transcripts')return 'tickets';return 'content'};
-     const allowedPages=()=>{const access=(state&&state.access)||{};const set=new Set(['/documentation','/tutorials']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>set.add(p));return set}if(access.canManageTicketTypes){set.add('/settings');set.add('/commands/ticket-types')}if(access.canManageAvailability)set.add('/availability');if(access.canViewTickets||access.canManageEscalations)set.add('/tickets');if(access.canViewTranscripts)set.add('/transcripts');return set};
+     const allowedPages=()=>{const access=(state&&state.access)||{};const set=new Set(['/documentation','/tutorials']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/panels','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor'].forEach(p=>set.add(p));return set}if(access.canManageTicketTypes){set.add('/settings');set.add('/commands/ticket-types');set.add('/panels');set.add('/embed-editor')}if(access.canManageAvailability)set.add('/availability');if(access.canViewTickets||access.canManageEscalations)set.add('/tickets');if(access.canViewTranscripts)set.add('/transcripts');return set};
      let darkSecretCount=0;
      const normaliseTheme=(t)=>{const v=String(t||'').trim().toLowerCase();if(v==='hacker'&&!isHackerUnlocked())return 'dark';return ['dark','light','ocean','sunset','hacker'].includes(v)?v:'dark'};
      const syncThemeUi=()=>{const cur=normaliseTheme(document.body.dataset.theme);const labels={dark:'Dark',light:'Light',ocean:'Ocean',sunset:'Sunset',hacker:'Hacker'};if(themeLabel)themeLabel.textContent='Theme: '+(labels[cur]||'Dark');themeItems.forEach(btn=>{const v=btn.getAttribute('data-theme-item')||'';btn.classList.toggle('active',v===cur)})};
@@ -5157,7 +5263,7 @@ function renderPageHero(path){
  else if(access.isStaff)chips.push('<span class="pill">Staff access</span>');
  return '<div class="card page-hero"><div class="page-hero-head"><div><div class="page-kicker">Module</div><h3>'+esc(title)+'</h3><p>'+esc(desc)+'</p></div><div class="page-pill-row">'+chips.join('')+'</div></div></div>';
 }
-function render(){const access=(state&&state.access)||{};const allowed=new Set(['/documentation','/tutorials','/pricing','/upgrade']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor','/pricing','/upgrade'].forEach(p=>allowed.add(p))}else{if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types')}if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This section is not available for your role in the selected server.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderPageHero(currentPath)+renderSettings();else if(currentPath==='/availability')html=renderPageHero(currentPath)+renderAvailability();else if(currentPath==='/tutorials')html=renderPageHero(currentPath)+renderTutorials();else if(currentPath==='/commands/ticket-types')html=renderPageHero(currentPath)+renderTypes();else if(currentPath==='/commands/tag')html=renderPageHero(currentPath)+renderTags();else if(currentPath==='/tickets')html=renderPageHero(currentPath)+renderTickets();else if(currentPath==='/transcripts')html=renderPageHero(currentPath)+renderTranscripts();else if(currentPath==='/commands/feedback')html=renderPageHero(currentPath)+renderFeedback();else if(currentPath==='/commands/appeal')html=renderPageHero(currentPath)+renderAppeal();else if(currentPath==='/statistics')html=renderPageHero(currentPath)+renderStats();else if(currentPath==='/embed-editor')html=renderPageHero(currentPath)+renderBranding();else if(currentPath==='/pricing')html=renderPageHero(currentPath)+renderPricing();else if(currentPath==='/upgrade')html=renderPageHero(currentPath)+renderUpgrade();else html=renderPageHero(currentPath)+renderDocs();document.title=${JSON.stringify(BRAND_NAME + ' • ')}+({"/overview":"Home","/settings":"Settings","/availability":"Availability","/tutorials":"Tutorials","/commands/ticket-types":"Ticket Types","/commands/tag":"Tags","/tickets":"Tickets","/transcripts":"Transcripts","/commands/feedback":"Feedback","/statistics":"Statistics","/embed-editor":"Embed Editor","/pricing":"Pricing","/upgrade":"Upgrade","/documentation":"Documentation"}[currentPath]||'Dashboard');renderAnnouncementBar();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire()})})}
+function render(){const access=(state&&state.access)||{};const allowed=new Set(['/documentation','/tutorials','/pricing','/upgrade']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/panels','/commands/tag','/tickets','/transcripts','/commands/feedback','/statistics','/embed-editor','/pricing','/upgrade'].forEach(p=>allowed.add(p))}else{if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types');allowed.add('/panels');allowed.add('/embed-editor')}if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This section is not available for your role in the selected server.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderPageHero(currentPath)+renderSettings();else if(currentPath==='/availability')html=renderPageHero(currentPath)+renderAvailability();else if(currentPath==='/tutorials')html=renderPageHero(currentPath)+renderTutorials();else if(currentPath==='/commands/ticket-types')html=renderPageHero(currentPath)+renderTypes();else if(currentPath==='/panels')html=renderPageHero(currentPath)+renderPanels();else if(currentPath==='/commands/tag')html=renderPageHero(currentPath)+renderTags();else if(currentPath==='/tickets')html=renderPageHero(currentPath)+renderTickets();else if(currentPath==='/transcripts')html=renderPageHero(currentPath)+renderTranscripts();else if(currentPath==='/commands/feedback')html=renderPageHero(currentPath)+renderFeedback();else if(currentPath==='/commands/appeal')html=renderPageHero(currentPath)+renderAppeal();else if(currentPath==='/statistics')html=renderPageHero(currentPath)+renderStats();else if(currentPath==='/embed-editor')html=renderPageHero(currentPath)+renderBranding();else if(currentPath==='/pricing')html=renderPageHero(currentPath)+renderPricing();else if(currentPath==='/upgrade')html=renderPageHero(currentPath)+renderUpgrade();else html=renderPageHero(currentPath)+renderDocs();document.title=${JSON.stringify(BRAND_NAME + ' • ')}+({"/overview":"Home","/settings":"Settings","/availability":"Availability","/tutorials":"Tutorials","/commands/ticket-types":"Ticket Types","/panels":"Panels","/commands/tag":"Tags","/tickets":"Tickets","/transcripts":"Transcripts","/commands/feedback":"Feedback","/statistics":"Statistics","/embed-editor":"Branding","/pricing":"Pricing","/upgrade":"Upgrade","/documentation":"Documentation"}[currentPath]||'Dashboard');renderAnnouncementBar();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire()})})}
 async function boot(){state=await api('/api/state'+(location.search||''));render()}
 document.getElementById('refreshStateBtn').onclick=async()=>{try{await boot();note('Dashboard refreshed.','ok')}catch(e){note(e.message,'danger')}};
 document.getElementById('authLogin').onclick=async()=>{try{localStorage.setItem(tokenKey,authToken.value.trim());await api('/api/auth/login',{method:'POST',body:JSON.stringify({token:authToken.value.trim()})});auth.style.display='none';authMsg.textContent='';await boot()}catch(e){authMsg.textContent=e.message||'Login failed'}};
@@ -5762,7 +5868,7 @@ function startDashboard(client) {
                 return;
             }
 
-            const pages = new Set(['/overview', '/settings', '/availability', '/tutorials', '/commands/ticket-types', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/documentation']);
+            const pages = new Set(['/overview', '/settings', '/availability', '/tutorials', '/commands/ticket-types', '/panels', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/documentation']);
             if (pages.has(pathname)) {
                 if (!isAuthed(req)) {
                     if (hasDiscordOAuthConfigured()) {
