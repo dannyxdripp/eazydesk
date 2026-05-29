@@ -355,6 +355,7 @@ module.exports = {
             const keepFile = options.keepFile !== false;
             const user = options.user || null;
             const activeStorage = options.activeStorage || null;
+            const archiveEntry = options.archiveEntry || null;
             const guildId = channel.guild?.id;
             
             // Resolve transcripts channel
@@ -370,7 +371,10 @@ module.exports = {
 
             // Generate transcript URL
             const baseUrl = String(getPublicBaseUrl() || 'https://eazydesk.onrender.com').trim();
-            const transcriptUrl = `${baseUrl}/transcripts/${channel.id}`;
+            const publicToken = String(archiveEntry?.publicToken || '').trim();
+            const transcriptUrl = publicToken
+                ? `${baseUrl}/t/${encodeURIComponent(publicToken)}`
+                : `${baseUrl}/transcripts/${channel.id}`;
             
             // Build message with link
             const transcriptMessage = `**Ticket Transcript:** [${channel.name}](${transcriptUrl})\n**Channel ID:** \`${channel.id}\`\n**View:** ${transcriptUrl}`;
@@ -386,10 +390,13 @@ module.exports = {
             // Send DM to user if provided
             if (user && typeof user.send === 'function') {
                 try {
-                    const userMessage = `Your ticket transcript for **#${channel.name}** is ready!\n\n**View Transcript:** ${transcriptUrl}`;
+                    const userMessage = `Your ticket transcript for **#${channel.name}** is ready.\n\nView: ${transcriptUrl}`;
+                    const files = fs.existsSync(transcriptPath)
+                        ? [new AttachmentBuilder(transcriptPath, { name: `${channel.id}.html` })]
+                        : [];
                     await user.send({
                         content: userMessage,
-                        ...base
+                        files
                     }).catch(() => null);
                 } catch {
                     // Silently fail if user cannot be DMed

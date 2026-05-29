@@ -88,6 +88,60 @@ function renderTemplate(text, values) {
     return output;
 }
 
+function slugChannelPart(value, fallback = 'ticket') {
+    const slug = String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .replace(/-{2,}/g, '-');
+    return slug || fallback;
+}
+
+function nextTicketNumber(storage, guildId) {
+    const activeStorage = storage || ticketStore.getActiveStorage();
+    if (!activeStorage.ticketCounters || typeof activeStorage.ticketCounters !== 'object') {
+        activeStorage.ticketCounters = {};
+    }
+    const key = String(guildId || 'global');
+    const current = Number(activeStorage.ticketCounters[key] || 0);
+    const next = Number.isFinite(current) ? current + 1 : 1;
+    activeStorage.ticketCounters[key] = next;
+    return next;
+}
+
+function resolveTicketChannelName(ticketConfig, ticketType, user, storage, guildId, options = {}) {
+    const ticketNumber = nextTicketNumber(storage, guildId);
+    const suffix = Date.now().toString(36).slice(-4);
+    const priority = options.urgentConfirmed
+        ? 'urgent'
+        : options.statusInfo?.status === 'reduced_assistance'
+            ? 'reduced'
+            : options.statusInfo?.status === 'increased_volume'
+                ? 'limited'
+                : 'normal';
+    const template = String(ticketConfig?.format || 'ticket-{number}').trim() || 'ticket-{number}';
+    const values = {
+        number: ticketNumber,
+        ticketNumber,
+        id: ticketNumber,
+        user: user.id || '',
+        userId: user.id || '',
+        username: user.username || 'user',
+        displayName: user.globalName || user.displayName || user.username || 'user',
+        type: ticketType,
+        ticketType,
+        priority,
+        suffix
+    };
+
+    return renderTemplate(template.replace(/^#/, ''), values)
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .replace(/-{2,}/g, '-')
+        .slice(0, 95) || `ticket-${ticketNumber}`;
+}
+
 function resolveOpenTicketEmbed(ticketConfig, ticketType, user, reason, ticketChannel = null, attachments = []) {
     const template = ticketConfig?.openEmbed || {};
     const titleTemplate = template.title || 'Ticket: {ticketType}';
@@ -430,11 +484,11 @@ module.exports = {
             const teamRoleIds = ticketStore.getSupportTeamRoleIds(matchingTeam);
             const allowAttachments = ticketConfig?.allowAttachments !== false;
 
-            const suffix = Date.now().toString(36).slice(-4);
-            const channelName = `ticket-${interaction.user.username}-${suffix}`
-                .toLowerCase()
-                .replace(/[^a-z0-9-]/g, '-')
-                .slice(0, 95);
+            const statusInfo = options.statusInfo || getEffectiveAvailability(activeStorage, ticketType, interaction.guildId);
+            const channelName = resolveTicketChannelName(ticketConfig, ticketType, interaction.user, activeStorage, interaction.guildId, {
+                ...options,
+                statusInfo
+            });
 
             const permissionOverwrites = [
                 { id: interaction.guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.AttachFiles] },
@@ -468,7 +522,6 @@ module.exports = {
                 permissionOverwrites
             });
 
-            const statusInfo = options.statusInfo || getEffectiveAvailability(activeStorage, ticketType, interaction.guildId);
             const mentionText = teamRoleIds.length ? teamRoleIds.map(roleId => `<@&${roleId}>`).join(' ') : '';
             if (mentionText) {
                 await ticketChannel.send({ content: mentionText });

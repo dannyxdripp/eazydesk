@@ -4,6 +4,7 @@ const path = require('path');
 const { REST, Routes } = require('discord.js');
 const ticketStore = require('./utils/ticket-store');
 const transcriptionHandler = require('./handlers/transcription-handler');
+const { archiveTranscript } = require('./utils/transcript-archive');
 const closeRequestCommand = require('./commands/closerequest');
 const tagCommand = require('./commands/tag');
 const feedbackCommand = require('./commands/feedback');
@@ -501,7 +502,17 @@ async function handleOwnerPrefixCommand(message, input, activeStorage) {
         }
 
         await send('Transcript', `Generating transcript for <#${targetChannelId}>...`, 0x5865F2);
-        const transcriptPath = await transcriptionHandler.createTranscript(ticketChannel);
+        const transcript = await transcriptionHandler.createTranscript(ticketChannel, { includeParticipants: true });
+        const transcriptPath = transcript.transcriptPath;
+        const archiveEntry = archiveTranscript({
+            channel: ticketChannel,
+            ticket,
+            transcriptPath,
+            reason: 'Generated manually with transcript command.',
+            closedByUserId: message.author.id,
+            participantUserIds: transcript.participantUserIds,
+            storage: activeStorage
+        });
         
         // Fetch the user who created the ticket
         let ticketCreator = null;
@@ -510,9 +521,10 @@ async function handleOwnerPrefixCommand(message, input, activeStorage) {
         }
         
         await transcriptionHandler.sendTranscript(ticketChannel, transcriptPath, { 
-            keepFile: false,
+            keepFile: true,
             user: ticketCreator,
-            activeStorage
+            activeStorage,
+            archiveEntry
         });
         const dmNote = ticketCreator ? ' and sent a copy to the ticket creator.' : '.';
         await send('Transcript', `Transcript sent to the transcripts channel${dmNote}`, 0x57F287);
@@ -912,4 +924,3 @@ runtimeReady.then(() => loginWithRetry(client, process.env.TOKEN)).catch(error =
     console.error('[Startup] Discord client failed to start:', error);
     process.exit(1);
 });
-

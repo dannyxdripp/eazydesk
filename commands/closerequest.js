@@ -9,6 +9,7 @@ const {
 } = require('discord.js');
 const ticketStore = require('../utils/ticket-store');
 const transcriptionHandler = require('../handlers/transcription-handler');
+const { archiveTranscript } = require('../utils/transcript-archive');
 const { resolveEmbedPayload, resolveEmbedByTitle } = require('../utils/embed-config');
 const { buildV2FromTemplate } = require('../utils/components-v2-messages');
 
@@ -79,8 +80,18 @@ async function closeTicketWithTranscript(ticketChannel, reason, closedByUserId =
     await ticketChannel.send(buildEmbed(closedEmbed.title, closedEmbed.description, closedEmbed.color));
 
     try {
-        // Create transcript using the same method as t!transcript command
-        const transcriptPath = await transcriptionHandler.createTranscript(ticketChannel);
+        const transcript = await transcriptionHandler.createTranscript(ticketChannel, { includeParticipants: true });
+        const transcriptPath = transcript.transcriptPath;
+        const archiveEntry = archiveTranscript({
+            channel: ticketChannel,
+            ticket,
+            transcriptPath,
+            reason,
+            closedByUserId,
+            closedAt,
+            participantUserIds: transcript.participantUserIds,
+            storage: activeStorage
+        });
         
         // Fetch the user who created the ticket for DM delivery
         let ticketCreator = null;
@@ -91,9 +102,10 @@ async function closeTicketWithTranscript(ticketChannel, reason, closedByUserId =
         // Send transcript using the standardized sendTranscript function
         // This handles link-based delivery instead of file attachments
         await transcriptionHandler.sendTranscript(ticketChannel, transcriptPath, { 
-            keepFile: false,
+            keepFile: true,
             user: ticketCreator,
-            activeStorage
+            activeStorage,
+            archiveEntry
         });
     } catch (error) {
         console.error('Error generating or sending transcript:', error);
