@@ -1,4 +1,4 @@
-Ôªøconst http = require('http');
+const http = require('http');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -104,7 +104,7 @@ const DEFAULT_TUTORIALS = [
 
 function createDocumentTitle(pageName = 'Home') {
     const clean = String(pageName || 'Home').trim() || 'Home';
-    return `${BRAND_NAME} ‚Ä¢ ${clean}`;
+    return `${BRAND_NAME} ï ${clean}`;
 }
 
 function dashboardIcon(name) {
@@ -437,6 +437,8 @@ function createHomeHtml(options = {}) {
     const year = new Date().getFullYear();
     const protectedMode = Boolean(getDashboardToken());
     const botConfig = ticketStore.getBotConfig();
+    const inviteUrl = getBotInviteUrl();
+    const supportUrl = String(process.env.SUPPORT_SERVER_URL || process.env.DISCORD_SUPPORT_URL || 'https://discord.gg/JSUX9GQP6J').trim();
     const homeImages = options.showOwnerGallery && Array.isArray(botConfig.homeImages) ? botConfig.homeImages : [];
     const safeImages = homeImages
         .map(url => String(url || '').trim())
@@ -485,6 +487,9 @@ function createHomeHtml(options = {}) {
       </div>
     </div>
     <nav class="nav">
+      ${inviteUrl ? `<a class="nav-link" href="${inviteUrl}" target="_blank" rel="noreferrer">Invite Bot</a>` : ''}
+      <a class="nav-link" href="${supportUrl}" target="_blank" rel="noreferrer">Support</a>
+      <a class="nav-link" href="/pricing">Plans</a>
       <a class="nav-link" href="/documentation">Documentation</a>
       <a class="nav-link" href="/dashboard">Dashboard</a>
     </nav>
@@ -500,7 +505,13 @@ function createHomeHtml(options = {}) {
       </p>
       <div class="cta">
         <a class="btn primary" href="/dashboard">Visit your Dashboard</a>
+        ${inviteUrl ? `<a class="btn ghost" href="${inviteUrl}" target="_blank" rel="noreferrer">Invite the Bot</a>` : ''}
         <a class="btn ghost" href="/documentation">Documentation</a>
+      </div>
+      <div class="quick-access" aria-label="Quick access">
+        ${inviteUrl ? `<a class="quick-card" href="${inviteUrl}" target="_blank" rel="noreferrer"><span>Invite</span><strong>Add eazyDesk to a server</strong></a>` : ''}
+        <a class="quick-card" href="${supportUrl}" target="_blank" rel="noreferrer"><span>Support</span><strong>Join our support server</strong></a>
+        <a class="quick-card" href="/pricing"><span>Plans</span><strong>Upgrade plans</strong></a>
       </div>
       <div class="note">
         <span class="pill">${securityNote}</span>
@@ -637,6 +648,24 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     .pricing-faq{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
     .pricing-faq .faq-item{padding:20px;border-radius:18px;border:1px solid var(--bd);background:rgba(255,255,255,.03)}
     .pricing-cta{text-align:center;padding:36px 28px}
+    .controller-shell{display:grid;gap:16px}
+    .controller-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;padding:20px}
+    .controller-hero h2{margin:0 0 6px;font-size:26px;letter-spacing:-.02em}
+    .controller-grid{display:grid;gap:14px}
+    .controller-card{display:grid;gap:14px;align-items:start}
+    .controller-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+    .controller-title{display:flex;align-items:center;gap:12px;min-width:0}
+    .controller-icon{width:44px;height:44px;border-radius:14px;border:1px solid var(--bd);background:color-mix(in srgb,var(--acc) 13%, transparent);display:inline-flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 0 22px color-mix(in srgb,var(--acc) 14%, transparent)}
+    .controller-icon img{width:100%;height:100%;object-fit:cover}
+    .controller-icon svg{width:22px;height:22px}
+    .controller-name{font-size:16px;font-weight:850;line-height:1.15}
+    .controller-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .controller-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .controller-actions .btn{min-height:40px;padding:9px 11px;border-radius:12px}
+    .btn.subtle{background:color-mix(in srgb,var(--panel) 80%, rgba(255,255,255,.03));border-color:var(--bd)}
+    .btn.warning{background:color-mix(in srgb,#fee75c 14%, transparent);border-color:rgba(254,231,92,.32)}
+    .custom-bot-strip{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px;border-radius:14px;border:1px solid color-mix(in srgb,var(--acc) 26%, transparent);background:color-mix(in srgb,var(--acc) 8%, transparent)}
+    .empty-state{padding:22px;text-align:center}
     .upgrade-reward{position:relative;overflow:hidden;min-height:70vh;display:grid;place-items:center;text-align:center;padding:56px 28px}
     .upgrade-word{position:absolute;color:color-mix(in srgb,var(--acc) 70%, white);opacity:.16;font-weight:900;font-size:clamp(24px,5vw,72px);animation:floatReward 7s ease-in-out infinite}
     .upgrade-word.w1{left:6%;top:12%}.upgrade-word.w2{right:8%;top:20%;animation-delay:1s}.upgrade-word.w3{left:18%;bottom:12%;animation-delay:2s}.upgrade-word.w4{right:15%;bottom:18%;animation-delay:3s}
@@ -705,11 +734,20 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
 
 function createControllerHtml(req = null) {
     const body = `
-      <div class="card">
-        <h2 style="margin:0 0 6px">Controller Panel</h2>
-        <div class="muted">Choose a server, jump into its dashboard, or restart setup when you need a clean pass.</div>
+      <div class="controller-shell">
+      <div class="card controller-hero">
+        <div>
+          <div class="pricing-kicker">Controller</div>
+          <h2>Server operations</h2>
+          <div class="muted">Open dashboards, jump into setup, manage ticket queues, and toggle custom branded bots from one clean control surface.</div>
+        </div>
+        <div class="controller-actions">
+          <a class="btn primary" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Servers</span></a>
+          <a class="btn subtle" href="/owner"><span class="btn-icon">${dashboardIcon('owner')}</span><span>Owner Console</span></a>
+        </div>
+      </div>
         <div id="ctrlError" class="err" style="display:none;margin-top:12px"></div>
-        <div id="guildList" class="list"></div>
+        <div id="guildList" class="controller-grid"></div>
       </div>
     `;
 
@@ -719,18 +757,20 @@ function createControllerHtml(req = null) {
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
       const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
-      function customBotBlock(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};if(!ai.isCustom)return '';const on=!!bot.enabled;return '<div class=\"item\" style=\"margin-top:10px\"><div><strong>Custom bot</strong><div class=\"muted\">'+esc(bot.botName||g.name+' Support')+' ‚Ä¢ '+(bot.tokenConfigured?'Token saved':'No token saved')+'</div></div><div class=\"row\"><span class=\"pill\">'+(on?'On':'Off')+'</span><button class=\"btn-soft\" data-custom-bot-toggle=\"'+esc(g.id)+'\" data-next=\"'+(on?'false':'true')+'\">Turn '+(on?'Off':'On')+'</button></div></div>'}
-      function item(g){const icon=g.iconURL?'<img src=\"'+esc(g.iconURL)+'\" style=\"width:28px;height:28px;border-radius:10px\" />':'';const status=g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Step '+esc(g.setupStep||1)+'</span>';const plan=(g.aiAccess&&g.aiAccess.statusLabel)||'Free plan';const bot=(g.aiAccess&&g.aiAccess.customBot)||{};return '<div class=\"item\">'+
-        '<div class=\"row\" style=\"gap:10px\">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class=\"muted\">'+esc(g.id)+(bot.botName?' ‚Ä¢ '+esc(bot.botName):'')+'</div></div>'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+status+'<span class=\"pill\">'+esc(plan)+'</span>'+'</div>'+customBotBlock(g)+
-        '<div class=\"row\">'+
-          '<a class=\"btn primary\" href=\"/overview?guild='+encodeURIComponent(g.id)+'\">Open Dashboard</a>'+
-          '<a class=\"btn\" href=\"/setup?guild='+encodeURIComponent(g.id)+'&page=1\">Open Setup</a>'+
-          '<a class=\"btn\" href=\"/tickets?guild='+encodeURIComponent(g.id)+'\">Tickets</a>'+
-          '<a class=\"btn\" href=\"/owner\">Plans</a>'+
-          '<button class=\"btn\" data-restart=\"'+esc(g.id)+'\">Restart Setup</button>'+
+      const icons={open:${JSON.stringify(dashboardIcon('open'))},setup:${JSON.stringify(dashboardIcon('setup'))},tickets:${JSON.stringify(dashboardIcon('tickets'))},owner:${JSON.stringify(dashboardIcon('owner'))},restart:${JSON.stringify(dashboardIcon('restart'))},bot:${JSON.stringify(dashboardIcon('embed'))}};
+      function iconMarkup(g){return g.iconURL?'<span class=\"controller-icon\"><img src=\"'+esc(g.iconURL)+'\" alt=\"\" /></span>':'<span class=\"controller-icon\">'+icons.bot+'</span>'}
+      function customBotBlock(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};if(!ai.isCustom)return '';const on=!!bot.enabled;return '<div class=\"custom-bot-strip\"><div><strong>Custom branded bot</strong><div class=\"muted\">'+esc(bot.botName||g.name+' Support')+' &middot; '+(bot.tokenConfigured?'Token saved':'No token saved')+'</div></div><div class=\"controller-actions\"><span class=\"pill\">'+(on?'Online':'Paused')+'</span><button class=\"btn '+(on?'warning':'primary')+'\" data-custom-bot-toggle=\"'+esc(g.id)+'\" data-next=\"'+(on?'false':'true')+'\"><span class=\"btn-icon\">'+icons.bot+'</span><span>'+(on?'Turn Off':'Turn On')+'</span></button></div></div>'}
+      function item(g){const status=g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Setup step '+esc(g.setupStep||1)+'</span>';const plan=(g.aiAccess&&g.aiAccess.statusLabel)||'Free plan';const bot=(g.aiAccess&&g.aiAccess.customBot)||{};return '<div class=\"card controller-card\">'+
+        '<div class=\"controller-head\"><div class=\"controller-title\">'+iconMarkup(g)+'<div><div class=\"controller-name\">'+esc(g.name)+'</div><div class=\"muted\">'+esc(g.id)+(bot.botName?' &middot; '+esc(bot.botName):'')+'</div></div></div><div class=\"controller-meta\">'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+status+'<span class=\"pill\">'+esc(plan)+'</span></div></div>'+customBotBlock(g)+
+        '<div class=\"controller-actions\">'+
+          '<a class=\"btn primary\" href=\"/overview?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.open+'</span><span>Dashboard</span></a>'+
+          '<a class=\"btn subtle\" href=\"/setup?guild='+encodeURIComponent(g.id)+'&page=1\"><span class=\"btn-icon\">'+icons.setup+'</span><span>Setup</span></a>'+
+          '<a class=\"btn subtle\" href=\"/tickets?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.tickets+'</span><span>Tickets</span></a>'+
+          '<a class=\"btn subtle\" href=\"/owner\"><span class=\"btn-icon\">'+icons.owner+'</span><span>Plans</span></a>'+
+          '<button class=\"btn warning\" data-restart=\"'+esc(g.id)+'\"><span class=\"btn-icon\">'+icons.restart+'</span><span>Restart Setup</span></button>'+
         '</div>'+
       '</div>'}
-      async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class=\"muted\">No guilds found. (Bot may not be ready yet.)</div>';for(const btn of document.querySelectorAll('[data-custom-bot-toggle]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-custom-bot-toggle'),action:'custom-bot-toggle',enabled:btn.getAttribute('data-next')==='true'})});await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-restart]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/controller/setup/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-restart')})});btn.textContent='Restarted';setTimeout(()=>{btn.textContent='Restart Setup';btn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}}catch(e){err.style.display='block';err.textContent=e.message}}load();
+      async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class=\"card empty-state\"><strong>No guilds found</strong><div class=\"muted\">Bot may not be ready yet.</div></div>';for(const btn of document.querySelectorAll('[data-custom-bot-toggle]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-custom-bot-toggle'),action:'custom-bot-toggle',enabled:btn.getAttribute('data-next')==='true'})});await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-restart]')){btn.onclick=async()=>{try{btn.disabled=true;const original=btn.innerHTML;await api('/api/controller/setup/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-restart')})});btn.innerHTML='<span>Restarted</span>';setTimeout(()=>{btn.innerHTML=original;btn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
 
     return baseDashboardPage({ title: 'Controller', body, script, ownerView: true, showStaffLink: true });
@@ -758,7 +798,7 @@ function createServerPickerHtml(options = {}) {
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function renderPerms(g){const tags=[];tags.push(g.botInServer?'<span class="pill">Bot in server</span>':'<span class="pill">Bot not in server</span>');tags.push(g.isOwner?'<span class="pill">Owner</span>':'');tags.push(g.isAdmin?'<span class="pill">Administrator</span>':'');tags.push(!g.isAdmin&&g.canManageGuild?'<span class="pill">Manage Server</span>':'');tags.push(!g.isAdmin&&!g.canManageGuild&&g.canManageChannels?'<span class="pill">Manage Channels</span>':'');return tags.filter(Boolean).join('')}
       function renderAction(g){if(g.botInServer&&g.canAccessDashboard)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a><a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1">Setup</a>';if(g.botInServer)return '<span class="muted">No dashboard permissions</span>';if(g.inviteUrl)return '<a class="btn primary" href="'+esc(g.inviteUrl)+'">Add Bot</a>';return '<span class="muted">Bot is not in this server</span>'}
-      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=Array.isArray(g.permissionSummary)&&g.permissionSummary.length?g.permissionSummary.map(esc).join(' ‚Ä¢ '):'No elevated permissions';const cls='item server-card'+(g.canAccessDashboard?' can-manage':'');return '<div class="'+cls+'">'+
+      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=Array.isArray(g.permissionSummary)&&g.permissionSummary.length?g.permissionSummary.map(esc).join(' ï '):'No elevated permissions';const cls='item server-card'+(g.canAccessDashboard?' can-manage':'');return '<div class="'+cls+'">'+
         '<div style="display:grid;gap:8px;min-width:0">'+
           '<div class="row" style="gap:10px">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class="pill">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
           '<div class="row">'+renderPerms(g)+'</div>'+
@@ -801,17 +841,17 @@ function createStaffHtml(options = {}) {
       function renderPermissionMatrix(matrix){const keys=['canViewConfiguration','canRunDiagnostics','canViewTranscripts','canCreateInvite','canRemoveBot'];return '<div class="card" style="grid-column:1/-1"><strong>Staff role permissions</strong><div class="muted" style="margin-top:6px">Each role family maps to specific operational actions.</div><div style="overflow:auto;margin-top:12px"><table style="width:100%;border-collapse:collapse;min-width:720px"><thead><tr><th style="text-align:left;padding:10px">Role family</th>'+keys.map(k=>'<th style="text-align:left;padding:10px">'+esc(k.replace(/^can/,''))+'</th>').join('')+'</tr></thead><tbody>'+((matrix||[]).map(row=>'<tr><td style="padding:10px;border-top:1px solid rgba(255,255,255,.08)"><strong>'+esc(row.name)+'</strong><div class="muted">'+esc((row.roleIds||[]).join(', '))+'</div></td>'+keys.map(k=>'<td style="padding:10px;border-top:1px solid rgba(255,255,255,.08)">'+(row.permissions&&row.permissions[k]?'Yes':'-')+'</td>').join('')+'</tr>').join(''))+'</tbody></table></div></div>'}
       function renderLiveOps(data){const viewers=(data.activeViewers||[]).slice(0,8);const reqs=(data.apiRequests||[]).slice(0,8);return '<div class="grid" style="grid-column:1/-1">'+
         '<div class="card"><strong>Current staff/dashboard viewers</strong><div class="list">'+(viewers.length?viewers.map(v=>'<div class="item"><div><strong>'+esc(v.userId)+'</strong><div class="muted">Last seen '+esc(String(v.lastSeenAt||'').replace('T',' ').slice(0,19))+'</div></div></div>').join(''):'<div class="muted">No active viewers tracked yet.</div>')+'</div></div>'+
-        '<div class="card"><strong>Recent API requests</strong><div class="list">'+(reqs.length?reqs.map(r=>'<div class="item"><div><strong>'+esc(r.method+' '+r.path)+'</strong><div class="muted">'+esc(r.status)+' ‚Ä¢ '+esc(r.durationMs)+'ms ‚Ä¢ '+esc(r.userId||'anonymous')+'</div></div></div>').join(''):'<div class="muted">No API requests tracked yet.</div>')+'</div></div>'+
+        '<div class="card"><strong>Recent API requests</strong><div class="list">'+(reqs.length?reqs.map(r=>'<div class="item"><div><strong>'+esc(r.method+' '+r.path)+'</strong><div class="muted">'+esc(r.status)+' ï '+esc(r.durationMs)+'ms ï '+esc(r.userId||'anonymous')+'</div></div></div>').join(''):'<div class="muted">No API requests tracked yet.</div>')+'</div></div>'+
       '</div>'}
       function renderSummaryCards(cap){const groups=Array.isArray(cap&&cap.roleFamilies)?cap.roleFamilies:[];const cards=[
         {title:'Support Operations',desc:'Config, diagnostics, permission sync, setup restarts, channel repair.',enabled:!!cap.canRunDiagnostics},
         {title:'Quality Assurance',desc:'Transcript review, audit visibility, staff activity checks, compliance oversight.',enabled:!!cap.canViewTranscripts},
         {title:'Community Management',desc:'Owner-facing health visibility, onboarding/help flows, invite handoffs.',enabled:!!cap.canContactOwners}
-      ];summary.innerHTML=cards.map(card=>'<div class="card"><strong>'+esc(card.title)+'</strong><div class="muted" style="margin-top:6px">'+esc(card.desc)+'</div><div class="row" style="margin-top:10px">'+(card.enabled?pill('Enabled for you'):pill('Read only / unavailable'))+'</div></div>').join('')+'<div class="card"><strong>Your active role families</strong><div class="muted" style="margin-top:6px">'+esc(groups.length?groups.join(' ‚Ä¢ '):'No senior role families detected')+'</div><div class="row" style="margin-top:10px">'+(groups.length?groups.map(pill).join(''):pill('No access'))+'</div></div>'}
+      ];summary.innerHTML=cards.map(card=>'<div class="card"><strong>'+esc(card.title)+'</strong><div class="muted" style="margin-top:6px">'+esc(card.desc)+'</div><div class="row" style="margin-top:10px">'+(card.enabled?pill('Enabled for you'):pill('Read only / unavailable'))+'</div></div>').join('')+'<div class="card"><strong>Your active role families</strong><div class="muted" style="margin-top:6px">'+esc(groups.length?groups.join(' ï '):'No senior role families detected')+'</div><div class="row" style="margin-top:10px">'+(groups.length?groups.map(pill).join(''):pill('No access'))+'</div></div>'}
       function renderPerms(g){const tags=[];if(g.setupCompleted)tags.push(pill('Setup complete'));if(g.canAccessDashboard)tags.push(pill('Dashboard access'));if(g.sharedWithUser)tags.push(pill('User is in server'));if(g.userPermissionSummary)tags.push(pill(g.userPermissionSummary));if(g.health&&g.health.missingPermissions&&g.health.missingPermissions.length)tags.push(pill('Missing bot perms'));return tags.join('')}
-      function renderInfoList(title, values){const safe=Array.isArray(values)?values.filter(Boolean):[];return '<div class="card" style="padding:10px 12px"><div><strong>'+esc(title)+'</strong></div><div class="muted" style="margin-top:6px">'+(safe.length?safe.map(esc).join(' ‚Ä¢ '):'None detected')+'</div></div>'}
+      function renderInfoList(title, values){const safe=Array.isArray(values)?values.filter(Boolean):[];return '<div class="card" style="padding:10px 12px"><div><strong>'+esc(title)+'</strong></div><div class="muted" style="margin-top:6px">'+(safe.length?safe.map(esc).join(' ï '):'None detected')+'</div></div>'}
       function actionButtons(g){const caps=g.staffCapabilities||{};const buttons=[];if(g.canAccessDashboard&&caps.canViewConfiguration)buttons.push('<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('open'))}+'</span><span>Open Dashboard</span></a>');if(g.canManageSetup&&!g.setupCompleted&&caps.canViewConfiguration)buttons.push('<a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('setup'))}+'</span><span>Open Setup</span></a>');if(caps.canCreateInvite)buttons.push('<button class="btn" type="button" data-invite="'+esc(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('invite'))}+'</span><span>Create Invite</span></button>');if(caps.canRestartSystems)buttons.push('<button class="btn" type="button" data-restart-setup="'+esc(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('restart'))}+'</span><span>Restart Setup</span></button>');if(caps.canSyncPermissions)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="sync-permissions"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('repair'))}+'</span><span>Sync Permissions</span></button>');if(caps.canRepairChannels)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="repair-channels"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('repair'))}+'</span><span>Repair Channels</span></button>');if(caps.canRunDiagnostics)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="diagnostics"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('diagnostics'))}+'</span><span>Run Diagnostics</span></button>');if(caps.canRemoveBot)buttons.push('<button class="btn" type="button" data-leave="'+esc(g.id)+'" data-guild-name="'+esc(g.name)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('remove'))}+'</span><span>Remove Bot</span></button>');return buttons.join('')}
-      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=(Array.isArray(g.highlights)&&g.highlights.length?g.highlights:['Bot is active in this server']).map(esc).join(' ‚Ä¢ ');const inviteUrl=inviteMap[g.id]||g.inviteUrl||'';const health=g.health||{};const runtime=g.runtime||{};const basic=g.basicInfo||{};const audits=Array.isArray(g.recentAuditLog)?g.recentAuditLog.slice(0,4):[];return '<div class="item server-card can-manage">'+
+      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=(Array.isArray(g.highlights)&&g.highlights.length?g.highlights:['Bot is active in this server']).map(esc).join(' ï ');const inviteUrl=inviteMap[g.id]||g.inviteUrl||'';const health=g.health||{};const runtime=g.runtime||{};const basic=g.basicInfo||{};const audits=Array.isArray(g.recentAuditLog)?g.recentAuditLog.slice(0,4):[];return '<div class="item server-card can-manage">'+
         '<div style="display:grid;gap:8px;min-width:0">'+
           '<div class="row" style="gap:10px">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class="pill">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
           '<div class="row">'+renderPerms(g)+'</div>'+
@@ -822,7 +862,7 @@ function createStaffHtml(options = {}) {
             renderInfoList('Runtime Diagnostics',['API latency: '+String(runtime.apiLatencyMs||0)+'ms','Database latency: '+(runtime.databaseLatencyMs==null?'Unavailable':String(runtime.databaseLatencyMs)+'ms'),'Redis latency: '+(runtime.redisLatencyMs==null?'Unavailable':String(runtime.redisLatencyMs)+'ms'),'Command failures: '+String(runtime.commandFailures||0),'Worker: '+(runtime.workerStatus||'Unknown'),'Cache: '+String((runtime.cacheHealth&&runtime.cacheHealth.channels)||0)+' channels / '+String((runtime.cacheHealth&&runtime.cacheHealth.roles)||0)+' roles'])+
             renderInfoList('Permission Scanner',[].concat((health.missingPermissions||[]).map(x=>'Missing '+x),health.hierarchyConflict?'Role hierarchy conflict detected':'',...(health.brokenChannels||[]),...(health.brokenPanels||[]).map(x=>'Broken panel channel '+x),...(health.brokenOverwrites||[])))+
           '</div>'+
-          (audits.length?renderInfoList('Recent Audit Log',audits.map(entry=>(entry.createdAt||'')+' ‚Ä¢ '+(entry.action||'action')+' ‚Ä¢ '+(entry.status||'unknown')+(entry.detail?' ‚Ä¢ '+entry.detail:''))):'')+
+          (audits.length?renderInfoList('Recent Audit Log',audits.map(entry=>(entry.createdAt||'')+' ï '+(entry.action||'action')+' ï '+(entry.status||'unknown')+(entry.detail?' ï '+entry.detail:''))):'')+
           (inviteUrl?'<div class="card" style="padding:10px 12px"><div class="muted">Latest invite</div><a href="'+esc(inviteUrl)+'" target="_blank" rel="noreferrer">'+esc(inviteUrl)+'</a></div>':'')+
         '</div>'+
         '<div class="row">'+actionButtons(g)+'</div>'+
@@ -857,13 +897,13 @@ function createOwnerHtml(req = null) {
       function renderRows(title,items,mapper){return '<div class="card"><strong>'+esc(title)+'</strong><div class="list">'+(items.length?items.map(mapper).join(''):'<div class="muted">Nothing yet.</div>')+'</div></div>'}
       function grantButtons(g){return '<div class="row"><button class="btn" data-plan="plus" data-guild="'+esc(g.id)+'">Grant Plus</button><button class="btn" data-plan="pro" data-guild="'+esc(g.id)+'">Grant Pro</button><button class="btn" data-custom="'+esc(g.id)+'">Grant Custom</button><button class="btn-soft" data-trial="plus_trial" data-guild="'+esc(g.id)+'">Plus Trial</button><button class="btn-soft" data-trial="pro_trial" data-guild="'+esc(g.id)+'">Pro Trial</button><button class="btn-danger" data-clear="'+esc(g.id)+'">Clear</button></div>'}
       function customFields(g){const bot=(g.aiAccess&&g.aiAccess.customBot)||{};return '<details class="card" style="padding:10px 12px"><summary><strong>Custom branded bot</strong> <span class="muted">'+(bot.tokenConfigured?'Token saved':'No token')+'</span></summary><div class="grid" style="margin-top:10px"><div><label>Bot Name</label><input data-cb-name="'+esc(g.id)+'" value="'+esc(bot.botName||g.name+' Support')+'" /></div><div><label>Avatar URL</label><input data-cb-avatar="'+esc(g.id)+'" value="'+esc(bot.avatarUrl||'')+'" /></div><div><label>App ID</label><input data-cb-app="'+esc(g.id)+'" value="'+esc(bot.appId||'')+'" /></div><div><label>Public Key</label><input data-cb-key="'+esc(g.id)+'" value="'+esc(bot.publicKey||'')+'" /></div><div><label>Bot Token</label><input data-cb-token="'+esc(g.id)+'" placeholder="'+(bot.tokenConfigured?'Leave blank to keep saved token':'Paste token')+'" /></div><div><label>Status Text</label><input data-cb-status="'+esc(g.id)+'" value="'+esc(bot.statusText||'Handling support')+'" /></div></div></details>'}
-      function guildCard(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px" />':'';const ai=g.aiAccess||{};return '<div class="item server-card can-manage"><div style="display:grid;gap:8px;width:100%"><div class="row">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+pill(ai.statusLabel||'Free plan')+'</div><div class="muted">'+esc(g.memberCount||0)+' members ‚Ä¢ '+esc(ai.planLabel||'Free')+'</div>'+customFields(g)+grantButtons(g)+'</div></div>'}
+      function guildCard(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px" />':'';const ai=g.aiAccess||{};return '<div class="item server-card can-manage"><div style="display:grid;gap:8px;width:100%"><div class="row">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+pill(ai.statusLabel||'Free plan')+'</div><div class="muted">'+esc(g.memberCount||0)+' members ï '+esc(ai.planLabel||'Free')+'</div>'+customFields(g)+grantButtons(g)+'</div></div>'}
       function readCustomBot(guildId){return{botName:(document.querySelector('[data-cb-name="'+guildId+'"]')||{}).value||'',avatarUrl:(document.querySelector('[data-cb-avatar="'+guildId+'"]')||{}).value||'',appId:(document.querySelector('[data-cb-app="'+guildId+'"]')||{}).value||'',publicKey:(document.querySelector('[data-cb-key="'+guildId+'"]')||{}).value||'',token:(document.querySelector('[data-cb-token="'+guildId+'"]')||{}).value||'',statusText:(document.querySelector('[data-cb-status="'+guildId+'"]')||{}).value||''}}
       async function grant(guildId,action,plan,customBot){await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action,plan,days:14,customBot})})}
       async function load(){try{const data=await api('/api/owner/activity');const viewers=data.activeViewers||[], reqs=data.apiRequests||[], audit=data.staffAudit||[];summary.innerHTML=
         renderRows('Current staff in dashboard',viewers.slice(0,10),v=>'<div class="item"><div><strong>'+esc(v.userId)+'</strong><div class="muted">Last seen '+esc(String(v.lastSeenAt||'').replace('T',' ').slice(0,19))+'</div></div></div>')+
-        renderRows('Live API requests',reqs.slice(0,12),r=>'<div class="item"><div><strong>'+esc(r.method+' '+r.path)+'</strong><div class="muted">'+esc(r.status)+' ‚Ä¢ '+esc(r.durationMs)+'ms ‚Ä¢ '+esc(r.userId||'anonymous')+'</div></div></div>')+
-        renderRows('Staff audit',audit.slice(0,12),a=>'<div class="item"><div><strong>'+esc(a.action||'action')+'</strong><div class="muted">'+esc(a.status||'unknown')+' ‚Ä¢ '+esc(a.guildId||'global')+' ‚Ä¢ '+esc(String(a.createdAt||'').replace('T',' ').slice(0,19))+'</div></div></div>');
+        renderRows('Live API requests',reqs.slice(0,12),r=>'<div class="item"><div><strong>'+esc(r.method+' '+r.path)+'</strong><div class="muted">'+esc(r.status)+' ï '+esc(r.durationMs)+'ms ï '+esc(r.userId||'anonymous')+'</div></div></div>')+
+        renderRows('Staff audit',audit.slice(0,12),a=>'<div class="item"><div><strong>'+esc(a.action||'action')+'</strong><div class="muted">'+esc(a.status||'unknown')+' ï '+esc(a.guildId||'global')+' ï '+esc(String(a.createdAt||'').replace('T',' ').slice(0,19))+'</div></div></div>');
         guildList.innerHTML=(data.guilds||[]).map(guildCard).join('')||'<div class="muted">No guilds found.</div>';
         document.querySelectorAll('[data-plan]').forEach(b=>b.onclick=async()=>{try{await grant(b.dataset.guild,'set-plan',b.dataset.plan);note('Plan granted.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
         document.querySelectorAll('[data-custom]').forEach(b=>b.onclick=async()=>{try{const guildId=b.dataset.custom;await grant(guildId,'set-plan','custom',readCustomBot(guildId));note('Custom plan and branded bot details saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
@@ -960,7 +1000,7 @@ function createSetupHtml(req = null) {
 
             <section class="setup-stage" data-step="1">
               <h3>Pick the server</h3>
-              <div class="muted">Choose the guild this setup should manage. Once you finish setup, this flow locks for regular staff so it can‚Äôt be restarted by accident.</div>
+              <div class="muted">Choose the guild this setup should manage. Once you finish setup, this flow locks for regular staff so it canít be restarted by accident.</div>
               <label>Guild</label>
               <select id="guildSelect"></select>
               <div class="setup-inline" style="margin-top:12px">
@@ -1545,7 +1585,7 @@ function getGuildAiUiState(guildId, storage = null) {
         statusLabel: access.premiumActive
             ? `${planLabel} active`
             : access.trialActive
-                ? `${planLabel} trial active ‚Ä¢ ${trialRemainingDays} day${trialRemainingDays === 1 ? '' : 's'} left`
+                ? `${planLabel} trial active ï ${trialRemainingDays} day${trialRemainingDays === 1 ? '' : 's'} left`
                 : access.expiredTrial
                     ? 'Trial expired'
                     : 'Free plan',
@@ -4454,26 +4494,73 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
   body[data-theme="light"] .pill.warn{color:#713f12}
   body[data-theme="light"] .pill.danger{color:#7f1d1d}
 
-  /* Clean module skin inspired by compact settings dashboards. */
-  body[data-theme="dark"],body[data-theme="ocean"],body[data-theme="sunset"],body[data-theme="hacker"]{
-    background:#0f1117;
+  /* Clean module skin, theme-aware: old atmosphere + solid module boxes. */
+  body{
+    --solid-card:#111827;
+    --solid-card-2:#151b2b;
+    --solid-card-3:#1b2335;
+    --solid-input:#090d18;
+    --solid-border:rgba(148,163,184,.18);
+  }
+  body[data-theme="ocean"]{
+    --solid-card:#071a28;
+    --solid-card-2:#092234;
+    --solid-card-3:#0c2b3e;
+    --solid-input:#05131f;
+    --solid-border:rgba(34,211,238,.18);
+  }
+  body[data-theme="sunset"]{
+    --solid-card:#20121d;
+    --solid-card-2:#2a1722;
+    --solid-card-3:#351d2a;
+    --solid-input:#170d16;
+    --solid-border:rgba(251,146,60,.18);
+  }
+  body[data-theme="hacker"]{
+    --solid-card:#03100b;
+    --solid-card-2:#06170f;
+    --solid-card-3:#092014;
+    --solid-input:#010906;
+    --solid-border:rgba(0,255,136,.20);
   }
   body[data-theme="diamond"]{
-    background:radial-gradient(900px 520px at 18% 8%,rgba(103,232,249,.18),transparent 60%),linear-gradient(160deg,#071018,#0f1117 58%,#111827);
+    --solid-card:#071923;
+    --solid-card-2:#0a202d;
+    --solid-card-3:#0d2a38;
+    --solid-input:#04111a;
+    --solid-border:rgba(165,243,252,.22);
+  }
+  body[data-theme="light"]{
+    --bg:#eef4fb;
+    --bg-alt:#f9fbff;
+    --tx:#0f172a;
+    --mt:rgba(15,23,42,.68);
+    --bd:rgba(15,23,42,.13);
+    --solid-card:#ffffff;
+    --solid-card-2:#f6f8fc;
+    --solid-card-3:#eef3fa;
+    --solid-input:#ffffff;
+    --solid-border:rgba(30,41,59,.14);
+    --shadow:0 18px 50px rgba(15,23,42,.12);
+    --shadow-soft:0 12px 34px rgba(15,23,42,.09);
+    background:
+      radial-gradient(1000px 620px at 95% -6%,rgba(56,189,248,.22),transparent 58%),
+      radial-gradient(880px 560px at 8% 105%,rgba(37,99,235,.13),transparent 62%),
+      linear-gradient(160deg,#eef4fb,#fbfdff 48%,#edf4ff);
   }
   .main{width:min(1180px,100%);padding:30px}
-  .topbar{margin-bottom:24px;padding:0 0 18px;border:0;border-bottom:1px solid #262b36;border-radius:0;background:transparent;box-shadow:none}
+  .topbar{margin-bottom:24px;padding:0 0 18px;border:0;border-bottom:1px solid var(--solid-border);border-radius:0;background:transparent;box-shadow:none}
   .title{font-size:32px;line-height:1.12;margin-bottom:6px}
-  .titles .muted,#pageHint,.muted,.help,.list-meta{color:#9ca3af}
-  .card,.item,.page-hero,.stat-tile,.pricing-card,.pricing-preview,.pricing-faq .faq-item,.pricing-cta{
-    background:#171a22;
-    border:1px solid #262b36;
+  .titles .muted,#pageHint,.muted,.help,.list-meta{color:var(--mt)}
+  .card,.item,.page-hero,.stat-tile,.module-option,.pricing-card,.pricing-preview,.pricing-feature,.pricing-faq .faq-item,.pricing-cta,details.acc{
+    background:var(--solid-card);
+    border:1px solid var(--solid-border);
     border-radius:14px;
-    box-shadow:none;
+    box-shadow:var(--shadow-soft);
     backdrop-filter:none;
     transform:none;
   }
-  .card:hover,.item:hover,.stat-tile:hover,.pricing-card:hover{transform:none;background:#171a22;border-color:#303848;box-shadow:none}
+  .card:hover,.item:hover,.stat-tile:hover,.module-option:hover,.pricing-card:hover{transform:none;background:var(--solid-card);border-color:color-mix(in srgb,var(--ac) 34%,var(--solid-border));box-shadow:var(--shadow-soft)}
   .page-hero{padding:24px;margin-bottom:20px}
   .page-hero:before,.welcome:before{display:none}
   .page-hero h3,.card h3{font-size:22px;line-height:1.2;margin-bottom:8px}
@@ -4485,42 +4572,49 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
   .stat-tile{padding:18px}
   .stat-tile strong{font-size:24px;margin-top:10px}
   .stat-tile .muted{font-size:14px}
-  label{font-size:14px;color:#9ca3af;margin:12px 0 8px}
+  label{font-size:14px;color:var(--mt);margin:12px 0 8px}
   input,select,textarea,.cs-trigger,.ms-trigger{
-    background:#11141b;
-    border:1px solid #303848;
+    background:var(--solid-input);
+    border:1px solid var(--solid-border);
     border-radius:8px;
-    color:#fff;
+    color:var(--tx);
     padding:12px;
     box-shadow:none;
   }
   textarea{min-height:100px;resize:vertical}
-  input:focus,select:focus,textarea:focus{border-color:#5865f2;box-shadow:0 0 0 3px rgba(88,101,242,.18)}
-  .custom-select .cs-menu,.role-ms .ms-menu,.topnav-menu{background:#171a22;border-color:#303848;border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.36);backdrop-filter:none}
-  .cs-opt,.ms-item,.topnav-item{background:#1e222d;border:1px solid #2d3442;border-radius:8px}
-  .cs-opt:hover,.ms-item:hover,.topnav-item:hover,.cs-opt.active{background:#232838;border-color:#5865f2;transform:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--ac);box-shadow:0 0 0 3px color-mix(in srgb,var(--ac) 18%, transparent)}
+  .custom-select .cs-menu,.role-ms .ms-menu,.topnav-menu{background:var(--solid-card);border-color:var(--solid-border);border-radius:12px;box-shadow:var(--shadow);backdrop-filter:none}
+  .cs-opt,.ms-item,.topnav-item{background:var(--solid-card-2);border:1px solid var(--solid-border);border-radius:8px}
+  .cs-opt:hover,.ms-item:hover,.topnav-item:hover,.cs-opt.active{background:var(--solid-card-3);border-color:var(--ac);transform:none}
   .btn{
-    background:#5865f2;
-    border:1px solid #6974ff;
+    background:linear-gradient(135deg,var(--ac),var(--ac-soft));
+    border:1px solid color-mix(in srgb,var(--ac) 60%, white 16%);
     border-radius:10px;
     padding:12px 16px;
-    box-shadow:none;
+    box-shadow:0 12px 28px color-mix(in srgb,var(--ac) 24%, transparent);
     font-weight:800;
   }
-  .btn:hover{filter:brightness(1.04);transform:none;box-shadow:none}
+  .btn:hover{filter:brightness(1.04);transform:none;box-shadow:0 14px 32px color-mix(in srgb,var(--ac) 28%, transparent)}
   .btn-soft{
-    background:#1e222d;
-    border:1px solid #2d3442;
+    background:var(--solid-card-2);
+    border:1px solid var(--solid-border);
     border-radius:10px;
-    color:#f8fafc;
+    color:var(--tx);
     box-shadow:none;
   }
-  .btn-soft:hover{background:#232838;border-color:#5865f2;transform:none}
+  .btn-soft:hover{background:var(--solid-card-3);border-color:var(--ac);transform:none}
   .btn-danger{border-radius:10px;box-shadow:none}
-  .pill{background:#1e222d;border:1px solid #2d3442;color:#f8fafc}
-  .list-btn{background:#1e222d;border:1px solid #2d3442;border-radius:12px}
-  .list-btn.active,.list-btn:hover{border-color:#5865f2;background:#232838;box-shadow:none;transform:none}
-  .preview-shell,.preview-embed{background:#11141b;border-color:#303848;border-radius:12px}
+  .pill{background:var(--solid-card-2);border:1px solid var(--solid-border);color:var(--tx)}
+  .list-btn{background:var(--solid-card-2);border:1px solid var(--solid-border);border-radius:12px}
+  .list-btn.active,.list-btn:hover{border-color:var(--ac);background:var(--solid-card-3);box-shadow:none;transform:none}
+  .preview-shell,.preview-embed{background:var(--solid-input);border-color:var(--solid-border);border-radius:12px}
+  body[data-theme="light"] .topbar{border-bottom-color:rgba(30,41,59,.12)}
+  body[data-theme="light"] .brand-mini{background:#fff;border-color:rgba(30,41,59,.12)}
+  body[data-theme="light"] .btn-soft.server-icon-btn,body[data-theme="light"] .topnav-btn{background:#fff;border-color:rgba(30,41,59,.14);box-shadow:0 10px 26px rgba(15,23,42,.08)}
+  body[data-theme="light"] .topnav-item .tag{color:rgba(15,23,42,.56)}
+  body[data-theme="light"] .mention{background:rgba(37,99,235,.10);border-color:rgba(37,99,235,.20);color:#1d4ed8}
+  body[data-theme="light"] .checkbox-wrapper .label{color:rgba(15,23,42,.82);text-shadow:none}
+  body[data-theme="light"] details.acc,body[data-theme="light"] details.acc summary{background:var(--solid-card-2);border-color:var(--solid-border);color:var(--tx)}
   @media(max-width:1100px){.split{grid-template-columns:1fr}}
   @media(max-width:900px){.main{padding:18px}.topbar{align-items:flex-start}.row{grid-template-columns:1fr}.split,#app > .split{grid-template-columns:1fr}}
  </style></head>
@@ -4541,7 +4635,7 @@ const app=document.getElementById('app'),notice=document.getElementById('notice'
  const saveUi=()=>{try{sessionStorage.setItem('dash_ui',JSON.stringify(ui||{}))}catch{}};
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const createToastContainer=()=>{let container=document.getElementById('toast-container');if(!container){container=document.createElement('div');container.id='toast-container';container.className='toast-container';document.body.appendChild(container)}return container};
-const note=(t,m='')=>{const container=createToastContainer();if(!t||!t.trim()){notice.textContent='';notice.className='notice';return}notice.textContent=t;notice.className='notice '+m;const toast=document.createElement('div');toast.className='toast toast-'+m;const icon=m==='ok'?'‚úì':m==='danger'?'‚úï':'‚Ñπ';toast.innerHTML='<span class="toast-icon">'+icon+'</span><div class="toast-content"><strong class="toast-title">'+{'ok':'Success','danger':'Error','warn':'Warning'}[m]||'Info'+'</strong><div class="toast-message">'+esc(t)+'</div></div><button class="toast-close" type="button">√ó</button>';const close=()=>{toast.style.animation='toastSlideOut 300ms ease forwards';setTimeout(()=>{toast.remove();if(container.children.length===0)container.style.display='none'},300)};toast.querySelector('.toast-close').onclick=close;container.appendChild(toast);container.style.display='flex';setTimeout(close,5000)};
+const note=(t,m='')=>{const container=createToastContainer();if(!t||!t.trim()){notice.textContent='';notice.className='notice';return}notice.textContent=t;notice.className='notice '+m;const toast=document.createElement('div');toast.className='toast toast-'+m;const icon=m==='ok'?'?':m==='danger'?'?':'?';toast.innerHTML='<span class="toast-icon">'+icon+'</span><div class="toast-content"><strong class="toast-title">'+{'ok':'Success','danger':'Error','warn':'Warning'}[m]||'Info'+'</strong><div class="toast-message">'+esc(t)+'</div></div><button class="toast-close" type="button">◊</button>';const close=()=>{toast.style.animation='toastSlideOut 300ms ease forwards';setTimeout(()=>{toast.remove();if(container.children.length===0)container.style.display='none'},300)};toast.querySelector('.toast-close').onclick=close;container.appendChild(toast);container.style.display='flex';setTimeout(close,5000)};
 async function api(path,opt={}){const h={'Content-Type':'application/json',...(opt.headers||{})};const tok=localStorage.getItem(tokenKey);if(tok)h['x-dashboard-token']=tok;const csrf=(state&&state.csrfToken)||'';if(csrf&&String(opt.method||'GET').toUpperCase()!=='GET')h['x-csrf-token']=csrf;const r=await fetch(path,{credentials:'include',...opt,headers:h});if(r.status===401){const next=encodeURIComponent(location.pathname+location.search);window.location='/login?next='+next;throw new Error('Unauthorized')}const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
 function navTitleForPath(p){return ({ '/overview':'Home','/settings':'Settings','/availability':'Availability','/tutorials':'Tutorials','/commands/ticket-types':'Ticket Types','/panels':'Panels','/commands/tag':'Tags','/tickets':'Tickets','/transcripts':'Transcripts','/commands/feedback':'Feedback','/statistics':'Statistics','/embed-editor':'Branding','/pricing':'Pricing','/upgrade':'Upgrade','/documentation':'Documentation'}[p]||'Dashboard')}
 function pageDescForPath(p){return ({ '/overview':'A cleaner snapshot of ticket activity, queue health, and the most common next actions.','/settings':'Core server configuration, routing, and system behavior in one place.','/availability':'Adjust queue expectations per ticket type without digging through commands.','/tutorials':'Guides, walkthroughs, and internal onboarding material for your staff.','/commands/ticket-types':'Shape each ticket flow, assign support coverage, and keep categories tidy.','/panels':'Design, save, and publish channel-specific ticket panels.','/commands/tag':'Store reusable answers and keep repeat support responses consistent.','/tickets':'Review active conversations, add notes, and handle escalations quickly.','/transcripts':'Browse saved transcripts and archive history without leaving the dashboard.','/commands/feedback':'Control where feedback lands and how the flow is presented.','/statistics':'Track recent performance, close reasons, and staff activity trends.','/embed-editor':'Customize server branding and reusable bot message templates.','/pricing':'Compare plans and see what is available for this server.','/upgrade':'Upgrade to Plus or contact sales for Pro plans.','/documentation':'Reference placeholders, templates, and dashboard usage notes.'}[p]||'Manage this part of the dashboard with a simpler, more focused layout.')}
@@ -4649,7 +4743,7 @@ function categorySelect(id,selectedId,placeholder){const cats=Array.isArray(stat
   '</div>';
  }
 function availabilityLabel(status){if(status==='reduced_assistance')return 'Reduced Assistance';if(status==='increased_volume')return 'Increased Volume';return 'Available'}
-function availabilityBadge(info){const s=info.status||'available';const cls=s==='reduced_assistance'?'danger':(s==='increased_volume'?'warn':'ok');const src=info.source==='manual'?'Manual':'Auto';return '<span class="pill '+cls+'">'+availabilityLabel(s)+'</span> <span class="muted">'+src+' √Ç¬∑ '+(info.count||0)+' active</span>'}
+function availabilityBadge(info){const s=info.status||'available';const cls=s==='reduced_assistance'?'danger':(s==='increased_volume'?'warn':'ok');const src=info.source==='manual'?'Manual':'Auto';return '<span class="pill '+cls+'">'+availabilityLabel(s)+'</span> <span class="muted">'+src+' ¬∑ '+(info.count||0)+' active</span>'}
 function renderAvailability(){const types=(state.ticketTypes||[]);const byKey=new Map((state.availability||[]).map(v=>[v.key,v]));const opts='<option value=\"auto\">Automatic</option><option value=\"available\">Available</option><option value=\"increased_volume\">Increased Volume</option><option value=\"reduced_assistance\">Reduced Assistance</option>';const rows=types.map(t=>{const key=String(t.name||'').trim().toLowerCase();const info=byKey.get(key)||{status:'available',count:0,source:'automatic'};const manual=info.manualStatus||'auto';return '<div class=\"item\"><div class=\"item-top\"><strong>'+esc(t.name)+'</strong><span>'+availabilityBadge(info)+'</span></div><div class="row" style="margin-top:8px"><div><label>Override</label><select class="availSelect" data-name="'+esc(t.name)+'\">'+opts.replace('value=\"'+esc(manual)+'\"','value=\"'+esc(manual)+'\" selected')+'</select></div><div><label>Automatic</label><div class="muted">'+availabilityLabel(info.automaticStatus||'available')+'</div></div></div></div>'}).join('');return '<div class="grid"><div class="card"><h3>Ticket Availability</h3><p class="muted">Overrides apply per ticket type. Automatic mode uses active ticket thresholds.</p></div><div class="card"><h3>Per Ticket Type</h3><div class="list\">'+(rows||'<span class="muted">No ticket types configured yet.</span>')+'</div></div></div>'}
  function renderTypes(){
   const types=Array.isArray(state.ticketTypes)?state.ticketTypes:[];
@@ -4664,7 +4758,7 @@ function renderAvailability(){const types=(state.ticketTypes||[]);const byKey=ne
      const cat=(state.categoryCatalog||[]).find(c=>c.id===t.categoryId)?.name||'Default';
      return '<button type="button" class="list-btn ttPick '+(active?'active':'')+'" data-name="'+esc(t.name)+'">'+
        '<div class="list-title">'+(e?e+' ':'')+esc(t.name)+'</div>'+
-       '<div class="list-meta">'+esc(cat)+' √Ç¬∑ '+(t.requireReason===false?'No reason':'Reason required')+' √Ç¬∑ '+(t.allowAttachments===false?'No files':'Files ok')+'</div>'+
+       '<div class="list-meta">'+esc(cat)+' ¬∑ '+(t.requireReason===false?'No reason':'Reason required')+' ¬∑ '+(t.allowAttachments===false?'No files':'Files ok')+'</div>'+
      '</button>';
    }).join('')||'<div class="muted">No ticket types yet.</div>';
 
@@ -4769,7 +4863,7 @@ function renderAvailability(){const types=(state.ticketTypes||[]);const byKey=ne
     const active=t&&t.name===selectedName;
     return '<button type="button" class="list-btn tagPick '+(active?'active':'')+'" data-name="'+esc(t.name)+'">'+
       '<div class="list-title">'+esc(t.name)+'</div>'+
-      '<div class="list-meta">'+esc(t.kind||'suggestion')+' √Ç¬∑ '+esc(t.title||'')+'</div>'+
+      '<div class="list-meta">'+esc(t.kind||'suggestion')+' ¬∑ '+esc(t.title||'')+'</div>'+
     '</button>';
    }).join('')||'<div class="muted">No tags yet.</div>';
 
@@ -4870,7 +4964,7 @@ function renderTranscripts(){
  const items=Array.isArray(state.transcripts)?state.transcripts:[];
  const retention=Number(state.transcriptRetentionDays||0);
  const hint=retention>0?('Transcripts auto-delete after '+retention+' day(s).'):('Transcript retention is disabled.');
- const bytes=(n)=>{const v=Number(n||0);if(!v)return '‚Äî';const units=['B','KB','MB','GB'];let i=0,x=v;while(x>=1024&&i<units.length-1){x/=1024;i+=1}const out=i===0?String(x):x.toFixed(x<10?1:0);return out+' '+units[i]};
+ const bytes=(n)=>{const v=Number(n||0);if(!v)return 'ó';const units=['B','KB','MB','GB'];let i=0,x=v;while(x>=1024&&i<units.length-1){x/=1024;i+=1}const out=i===0?String(x):x.toFixed(x<10?1:0);return out+' '+units[i]};
  const u=(id)=>id?('<span class=\"mention user\">@'+esc(String(id).slice(0,10))+'</span>'):'<span class=\"muted\">(unknown)</span>';
  const expires=(archivedAt)=>{if(!(retention>0)||!archivedAt)return '';const ts=Date.parse(archivedAt);if(!Number.isFinite(ts))return '';return new Date(ts+(retention*86400000)).toISOString().replace('T',' ').slice(0,19)};
  const row=t=>{
@@ -4910,7 +5004,7 @@ function renderStats(){const stats=state.statistics||{};const t=stats.totals||{a
  '<div class="card"><h3>Support Member Lookup</h3><label>User (ID or mention)</label><input id="staffLookupQuery" placeholder="<@123> or 123..." /><div class="row" style="margin-top:10px"><button id="staffLookupBtn" class="btn">Lookup</button><button id="staffLookupClear" class="btn-soft">Clear</button></div><div id="staffLookupResult" class="list" style="margin-top:10px"></div></div>'+
  '</div>'}
 function renderBranding(){const templates=state.botConfig.embedTemplates||defaultEmbedTemplates;const keys=Object.keys(templates);const firstKey=keys[0]||'ticketClaimed';const first=templates[firstKey]||{title:'',description:'',color:'#5865F2'};const brand=(state.guildConfigSummary&&state.guildConfigSummary.branding)||{};const customBot=(state.aiAccess&&state.aiAccess.customBot)||{};return '<div class="grid"><div class="card"><h3>Server Branding</h3><p class="muted">Set the server-facing identity used by panel previews and branded ticket surfaces.</p><label>Bot Display Name</label><input id="serverBrandName" value="'+esc(brand.botName||customBot.botName||'Tickets Bot')+'" placeholder="Tickets Bot" /><label>Avatar URL</label><input id="serverBrandAvatar" value="'+esc(brand.avatarUrl||customBot.avatarUrl||'')+'" placeholder="https://..." /><div class="row"><div><label>Accent Color</label><input id="serverBrandAccent" value="'+esc(brand.accentColor||'#67E8F9')+'" placeholder="#67E8F9" /></div><div><label>Footer Text</label><input id="serverBrandFooter" value="'+esc(brand.footerText||customBot.statusText||'')+'" placeholder="Powered by support" /></div></div><div style="margin-top:12px"><button id="saveServerBranding" class="btn">Save Branding</button></div></div><div class="card"><h3>Message Templates</h3><p class="muted">Pick one template at a time, edit the copy, preview it, then save the template set.</p><div class="item" style="margin-top:10px"><div class="muted">Separators: add <code>[[divider]]</code>, <code>[[divider:large]]</code>, <code>[[space]]</code>, or <code>[[space:large]]</code> on their own line inside <strong>Description</strong>.</div></div><div class="row"><div><label>Template</label><select id="brandingKey">'+keys.map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join('')+'</select></div><div><label>Accent Color</label><input id="brandingColor" value="'+esc(first.color||'#5865F2')+'" placeholder="#5865F2" /></div></div><label>Title</label><input id="brandingTitle" value="'+esc(first.title||'')+'" /><label>Description</label><textarea id="brandingDescription" style="min-height:160px">'+esc(first.description||'')+'</textarea><div class="row" style="margin-top:10px"><button id="applyBrandingTemplate" class="btn-soft">Apply to Template</button><button id="saveBranding" class="btn">Save Templates</button></div><div class="row" style="margin-top:10px"><button id="resetBrandingDefaults" class="btn-soft">Reset to Defaults</button><button id="formatBrandingJson" class="btn-soft">Format JSON</button></div></div><div class="card"><h3>Live Preview</h3><div class="preview-shell"><div class="preview-msg"><div class="preview-avatar" id="brandingPreviewAvatar"></div><div class="preview-content"><div class="preview-name" id="brandingPreviewName">'+esc(brand.botName||customBot.botName||'Tickets Bot')+' <span class="preview-tag">BOT</span></div><div id="brandingPreviewEmbed" class="preview-embed"><div id="brandingPreviewBar" class="preview-bar"></div><div class="preview-main"><div id="brandingPreviewTitle" class="preview-title"></div><div id="brandingPreviewDesc" class="preview-desc"></div></div></div></div></div></div><label style="margin-top:14px">Advanced JSON</label><textarea id="brandingTemplates" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(templates,null,2))+'</textarea></div></div>'}
-function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Starter support for small communities',features:['Unlimited tickets','Custom panels','Logs & transcripts','Dashboard access'],cta:'Current plan',active:true},{name:'Plus',price:'$12/mo',description:'Modern support automation for growing teams',features:['AI Moderation','Unlimited tickets','Custom panels','Logging','Priority support'],cta:'Most popular',active:false,featured:true},{name:'Pro',price:'Custom',description:'Tailored support for large servers and service teams',features:['Dedicated onboarding','Custom integrations','Advanced analytics','Priority SLA','Custom panels'],cta:'Contact sales',active:false}];const rows=[['AI Moderation','‚Äî','Yes','Yes'],['Unlimited Tickets','Yes','Yes','Yes'],['Custom Panels','Yes','Yes','Yes'],['Logging','Yes','Yes','Yes'],['Priority Support','‚Äî','Yes','Yes']];const faqs=[{q:'Can I start on the Free plan and upgrade later?','a':'Yes. The Free plan is available immediately, and you can upgrade anytime without losing configuration.'},{q:'What does ‚ÄúCustom‚Äù include?','a':'Pro includes dedicated setup support, custom integrations, higher limits, and SLA-based response times.'},{q:'Does Plus include AI Moderation?','a':'Yes. Plus includes AI-assisted moderation workflows for tickets and posts.'},{q:'How does billing work?','a':'Plus is billed monthly. Pro billing is handled through a custom agreement with your team.'}];return '<div class="page-shell pricing-page">'+
+function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Starter support for small communities',features:['Unlimited tickets','Custom panels','Logs & transcripts','Dashboard access'],cta:'Current plan',active:true},{name:'Plus',price:'$12/mo',description:'Modern support automation for growing teams',features:['AI Moderation','Unlimited tickets','Custom panels','Logging','Priority support'],cta:'Most popular',active:false,featured:true},{name:'Pro',price:'Custom',description:'Tailored support for large servers and service teams',features:['Dedicated onboarding','Custom integrations','Advanced analytics','Priority SLA','Custom panels'],cta:'Contact sales',active:false}];const rows=[['AI Moderation','ó','Yes','Yes'],['Unlimited Tickets','Yes','Yes','Yes'],['Custom Panels','Yes','Yes','Yes'],['Logging','Yes','Yes','Yes'],['Priority Support','ó','Yes','Yes']];const faqs=[{q:'Can I start on the Free plan and upgrade later?','a':'Yes. The Free plan is available immediately, and you can upgrade anytime without losing configuration.'},{q:'What does ìCustomî include?','a':'Pro includes dedicated setup support, custom integrations, higher limits, and SLA-based response times.'},{q:'Does Plus include AI Moderation?','a':'Yes. Plus includes AI-assisted moderation workflows for tickets and posts.'},{q:'How does billing work?','a':'Plus is billed monthly. Pro billing is handled through a custom agreement with your team.'}];return '<div class="page-shell pricing-page">'+
     '<section class="pricing-hero card">'+
       '<div class="row" style="align-items:flex-start;gap:24px">'+
         '<div style="max-width:640px">'+
@@ -4932,7 +5026,7 @@ function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Start
       '<div class="pricing-screenshot">'+
         '<div class="pricing-screenshot-title">Dashboard preview</div>'+
         '<div class="pricing-screenshot-thumb">'+
-          '<div class="pricing-screenshot-bar"><span class="pricing-screenshot-dot"></span><span style="font-size:12px;color:rgba(255,255,255,.72)">eazyDesk ‚Ä¢ Overview</span></div>'+
+          '<div class="pricing-screenshot-bar"><span class="pricing-screenshot-dot"></span><span style="font-size:12px;color:rgba(255,255,255,.72)">eazyDesk ï Overview</span></div>'+
           '<div class="pricing-screenshot-line" style="width:45%;margin-top:64px"></div>'+
           '<div class="pricing-screenshot-line" style="width:30%"></div>'+
           '<div class="pricing-screenshot-row">'+
@@ -4965,7 +5059,7 @@ function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Start
       '<div class="pricing-screenshot">'+
         '<div class="pricing-screenshot-title">Ticket panel preview</div>'+
         '<div class="pricing-screenshot-thumb">'+
-          '<div class="pricing-screenshot-bar"><span class="pricing-screenshot-dot"></span><span style="font-size:12px;color:rgba(255,255,255,.72)">Ticket panel ‚Ä¢ Live</span></div>'+ 
+          '<div class="pricing-screenshot-bar"><span class="pricing-screenshot-dot"></span><span style="font-size:12px;color:rgba(255,255,255,.72)">Ticket panel ï Live</span></div>'+ 
           '<div class="pricing-screenshot-line" style="width:58%;margin-top:64px"></div>'+
           '<div class="pricing-screenshot-line" style="width:65%"></div>'+ 
           '<div class="pricing-screenshot-line" style="width:38%"></div>'+ 
@@ -4985,7 +5079,7 @@ function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Start
       '<div class="pricing-screenshot">'+
         '<div class="pricing-screenshot-title">Analytics preview</div>'+
         '<div class="pricing-screenshot-thumb">'+
-          '<div class="pricing-screenshot-bar"><span class="pricing-screenshot-dot"></span><span style="font-size:12px;color:rgba(255,255,255,.72)">Analytics ‚Ä¢ Trends</span></div>'+ 
+          '<div class="pricing-screenshot-bar"><span class="pricing-screenshot-dot"></span><span style="font-size:12px;color:rgba(255,255,255,.72)">Analytics ï Trends</span></div>'+ 
           '<div class="pricing-screenshot-line" style="width:55%;margin-top:56px"></div>'+ 
           '<div class="pricing-screenshot-row">'+
             '<div class="pricing-screenshot-card"><div style="height:110px;border-radius:16px;background:rgba(255,255,255,.06)"></div></div>'+ 
@@ -5010,7 +5104,7 @@ function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Start
 function renderUpgrade(){
     return '<div class="grid">'+
         '<div class="card"><h3>Upgrade</h3><p class="muted">Upgrade from Free to Plus for advanced features, or contact sales for Pro options.</p><div style="margin-top:12px" class="row"><button class="btn primary">Upgrade to Plus</button><button class="btn-soft">Contact Sales</button></div></div>'+
-        '<div class="card"><h3>Pro</h3><p class="muted">Custom plans for large communities ‚Äî includes SLA, dedicated onboarding, and integrations.</p><div style="margin-top:12px"><ul><li>Dedicated onboarding</li><li>Custom integrations</li><li>Advanced analytics</li><li>Priority SLA</li></ul></div></div>'+
+        '<div class="card"><h3>Pro</h3><p class="muted">Custom plans for large communities ó includes SLA, dedicated onboarding, and integrations.</p><div style="margin-top:12px"><ul><li>Dedicated onboarding</li><li>Custom integrations</li><li>Advanced analytics</li><li>Priority SLA</li></ul></div></div>'+
     '</div>'
 }
 function renderTutorials(){
@@ -5334,7 +5428,7 @@ const resetTag=document.getElementById('resetTag');if(resetTag)resetTag.onclick=
  const formatTutorials=document.getElementById('formatTutorials');if(formatTutorials)formatTutorials.onclick=()=>{try{const box=document.getElementById('tutorialsJson');if(box)box.value=JSON.stringify(JSON.parse(box.value),null,2)}catch(e){note('Tutorial JSON is invalid.','danger')}};
  const saveTutorials=document.getElementById('saveTutorials');if(saveTutorials)saveTutorials.onclick=async()=>{try{const box=document.getElementById('tutorialsJson');const tutorials=JSON.parse((box&&box.value)||'[]');await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:Array.isArray(state&&state.botConfig&&state.botConfig.homeImages)?state.botConfig.homeImages:[],tutorials,siteAnnouncement:(state&&state.botConfig&&state.botConfig.siteAnnouncement)||{}})});note('Tutorials saved.','ok');await boot()}catch(e){note(e.message||'Invalid tutorial JSON.','danger')}};
  const saveAnnouncement=document.getElementById('saveAnnouncement');if(saveAnnouncement)saveAnnouncement.onclick=async()=>{try{const next={enabled:(document.getElementById('announcementEnabled')?.value||'false')==='true',text:document.getElementById('announcementText')?.value||'',ctaLabel:document.getElementById('announcementCta')?.value||'',linkUrl:document.getElementById('announcementUrl')?.value||''};await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:Array.isArray(state&&state.botConfig&&state.botConfig.homeImages)?state.botConfig.homeImages:[],tutorials:Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[],siteAnnouncement:next})});note('Announcement saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
- const tutorialCards=Array.from(document.querySelectorAll('[data-tutorial-open]'));if(tutorialCards.length){const tutorials=Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[];const overlay=document.getElementById('tutorialOverlay');const close=document.getElementById('tutorialClose');const title=document.getElementById('tutorialModalTitle');const badge=document.getElementById('tutorialModalBadge');const body=document.getElementById('tutorialModalBody');const prev=document.getElementById('tutorialPrev');const next=document.getElementById('tutorialNext');const progressBar=document.getElementById('tutorialProgressBar');const transitionText=document.getElementById('tutorialTransitionText');const confettiCanvas=document.getElementById('tutorialConfetti');let ti=0,si=0;let confettiFrame=0;let confettiPieces=[];const stopConfetti=()=>{confettiFrame=9999;try{const ctx=confettiCanvas&&confettiCanvas.getContext?confettiCanvas.getContext('2d'):null;if(ctx)ctx.clearRect(0,0,confettiCanvas.width||0,confettiCanvas.height||0)}catch{}};const fireConfetti=()=>{if(!confettiCanvas||!confettiCanvas.getContext)return;const ctx=confettiCanvas.getContext('2d');if(!ctx)return;const dpr=Math.max(1,window.devicePixelRatio||1);confettiCanvas.width=Math.floor(window.innerWidth*dpr);confettiCanvas.height=Math.floor(window.innerHeight*dpr);confettiCanvas.style.width=window.innerWidth+'px';confettiCanvas.style.height=window.innerHeight+'px';ctx.setTransform(dpr,0,0,dpr,0,0);confettiPieces=Array.from({length:220},(_,i)=>({x:Math.random()*window.innerWidth,y:-20-Math.random()*window.innerHeight*.35,vx:(Math.random()-.5)*7,vy:3+Math.random()*6,size:6+Math.random()*10,rot:Math.random()*Math.PI,color:['#57f287','#38bdf8','#fbbf24','#fb7185','#a78bfa','#f97316'][i%6]}));confettiFrame=0;(function tick(){ctx.clearRect(0,0,window.innerWidth,window.innerHeight);for(const p of confettiPieces){p.x+=p.vx;p.y+=p.vy;p.rot+=0.08;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.color;ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*.7);ctx.restore();}confettiFrame+=1;if(confettiFrame<220&&overlay&&overlay.style.display==='flex'){requestAnimationFrame(tick)}else{ctx.clearRect(0,0,window.innerWidth,window.innerHeight)}})()};const flashText=(text)=>{if(!transitionText)return;transitionText.textContent=text;transitionText.style.opacity='1';transitionText.style.transform='translateX(-50%) translateY(0)';setTimeout(()=>{if(transitionText){transitionText.style.opacity='0';transitionText.style.transform='translateX(-50%) translateY(-6px)'}},900)};const media=(step,tutorial)=>{if(step.videoUrl){return '<div style="margin-bottom:14px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.24)"><video src="'+esc(step.videoUrl)+'" controls playsinline style="width:100%;max-height:52vh;display:block;background:#020617"></video></div>'}if(step.imageUrl){return '<div style="margin-bottom:14px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.24)"><img src="'+esc(step.imageUrl)+'" alt="'+esc(step.title||tutorial.title||'Tutorial media')+'" style="width:100%;max-height:52vh;object-fit:cover;display:block" loading="lazy" /></div>'}return ''};const draw=()=>{const tutorial=tutorials[ti]||null;const step=tutorial&&tutorial.steps?tutorial.steps[si]:null;if(!tutorial||!step)return;const total=tutorial.steps.length||1;const percent=Math.max(0,Math.min(100,((si+1)/total)*100));title.textContent=tutorial.title||'Tutorial';badge.textContent=(tutorial.badge?String(tutorial.badge)+' ‚Ä¢ ':'')+'Step '+(si+1)+' of '+total;body.style.opacity='0';body.style.transform='translateY(10px)';setTimeout(()=>{body.innerHTML='<div style="display:grid;gap:14px"><div class="pill" style="width:max-content">'+esc(si+1===total?'Final step':'Guided step')+'</div>'+media(step,tutorial)+'<div><h3 style="margin:0 0 10px;font-size:28px">'+esc(step.title||'Step')+'</h3><div class="muted" style="font-size:15px;line-height:1.8;white-space:pre-wrap">'+esc(step.body||'')+'</div></div></div>';body.style.opacity='1';body.style.transform='translateY(0)'},120);if(progressBar)progressBar.style.width=percent+'%';prev.disabled=si<=0;next.textContent=si>=total-1?'Finish':'Next';if(si===total-2)flashText('Almost done!')};const open=(index)=>{ti=index;si=0;stopConfetti();draw();if(overlay)overlay.style.display='flex'};const hide=()=>{stopConfetti();if(overlay)overlay.style.display='none'};tutorialCards.forEach(btn=>btn.onclick=()=>open(Number(btn.getAttribute('data-tutorial-open')||0)));if(close)close.onclick=hide;if(overlay)overlay.onclick=(e)=>{if(e.target===overlay)hide()};if(prev)prev.onclick=()=>{if(si>0){si-=1;draw()}};if(next)next.onclick=()=>{const tutorial=tutorials[ti]||null;if(!tutorial)return hide();if(si<tutorial.steps.length-1){si+=1;draw()}else{flashText('Completed!');fireConfetti();setTimeout(()=>hide(),1300)}};window.addEventListener('resize',()=>{if(overlay&&overlay.style.display==='flex'&&confettiFrame>0&&confettiFrame<220)fireConfetti()},{passive:true});}
+ const tutorialCards=Array.from(document.querySelectorAll('[data-tutorial-open]'));if(tutorialCards.length){const tutorials=Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[];const overlay=document.getElementById('tutorialOverlay');const close=document.getElementById('tutorialClose');const title=document.getElementById('tutorialModalTitle');const badge=document.getElementById('tutorialModalBadge');const body=document.getElementById('tutorialModalBody');const prev=document.getElementById('tutorialPrev');const next=document.getElementById('tutorialNext');const progressBar=document.getElementById('tutorialProgressBar');const transitionText=document.getElementById('tutorialTransitionText');const confettiCanvas=document.getElementById('tutorialConfetti');let ti=0,si=0;let confettiFrame=0;let confettiPieces=[];const stopConfetti=()=>{confettiFrame=9999;try{const ctx=confettiCanvas&&confettiCanvas.getContext?confettiCanvas.getContext('2d'):null;if(ctx)ctx.clearRect(0,0,confettiCanvas.width||0,confettiCanvas.height||0)}catch{}};const fireConfetti=()=>{if(!confettiCanvas||!confettiCanvas.getContext)return;const ctx=confettiCanvas.getContext('2d');if(!ctx)return;const dpr=Math.max(1,window.devicePixelRatio||1);confettiCanvas.width=Math.floor(window.innerWidth*dpr);confettiCanvas.height=Math.floor(window.innerHeight*dpr);confettiCanvas.style.width=window.innerWidth+'px';confettiCanvas.style.height=window.innerHeight+'px';ctx.setTransform(dpr,0,0,dpr,0,0);confettiPieces=Array.from({length:220},(_,i)=>({x:Math.random()*window.innerWidth,y:-20-Math.random()*window.innerHeight*.35,vx:(Math.random()-.5)*7,vy:3+Math.random()*6,size:6+Math.random()*10,rot:Math.random()*Math.PI,color:['#57f287','#38bdf8','#fbbf24','#fb7185','#a78bfa','#f97316'][i%6]}));confettiFrame=0;(function tick(){ctx.clearRect(0,0,window.innerWidth,window.innerHeight);for(const p of confettiPieces){p.x+=p.vx;p.y+=p.vy;p.rot+=0.08;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.color;ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*.7);ctx.restore();}confettiFrame+=1;if(confettiFrame<220&&overlay&&overlay.style.display==='flex'){requestAnimationFrame(tick)}else{ctx.clearRect(0,0,window.innerWidth,window.innerHeight)}})()};const flashText=(text)=>{if(!transitionText)return;transitionText.textContent=text;transitionText.style.opacity='1';transitionText.style.transform='translateX(-50%) translateY(0)';setTimeout(()=>{if(transitionText){transitionText.style.opacity='0';transitionText.style.transform='translateX(-50%) translateY(-6px)'}},900)};const media=(step,tutorial)=>{if(step.videoUrl){return '<div style="margin-bottom:14px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.24)"><video src="'+esc(step.videoUrl)+'" controls playsinline style="width:100%;max-height:52vh;display:block;background:#020617"></video></div>'}if(step.imageUrl){return '<div style="margin-bottom:14px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.24)"><img src="'+esc(step.imageUrl)+'" alt="'+esc(step.title||tutorial.title||'Tutorial media')+'" style="width:100%;max-height:52vh;object-fit:cover;display:block" loading="lazy" /></div>'}return ''};const draw=()=>{const tutorial=tutorials[ti]||null;const step=tutorial&&tutorial.steps?tutorial.steps[si]:null;if(!tutorial||!step)return;const total=tutorial.steps.length||1;const percent=Math.max(0,Math.min(100,((si+1)/total)*100));title.textContent=tutorial.title||'Tutorial';badge.textContent=(tutorial.badge?String(tutorial.badge)+' ï ':'')+'Step '+(si+1)+' of '+total;body.style.opacity='0';body.style.transform='translateY(10px)';setTimeout(()=>{body.innerHTML='<div style="display:grid;gap:14px"><div class="pill" style="width:max-content">'+esc(si+1===total?'Final step':'Guided step')+'</div>'+media(step,tutorial)+'<div><h3 style="margin:0 0 10px;font-size:28px">'+esc(step.title||'Step')+'</h3><div class="muted" style="font-size:15px;line-height:1.8;white-space:pre-wrap">'+esc(step.body||'')+'</div></div></div>';body.style.opacity='1';body.style.transform='translateY(0)'},120);if(progressBar)progressBar.style.width=percent+'%';prev.disabled=si<=0;next.textContent=si>=total-1?'Finish':'Next';if(si===total-2)flashText('Almost done!')};const open=(index)=>{ti=index;si=0;stopConfetti();draw();if(overlay)overlay.style.display='flex'};const hide=()=>{stopConfetti();if(overlay)overlay.style.display='none'};tutorialCards.forEach(btn=>btn.onclick=()=>open(Number(btn.getAttribute('data-tutorial-open')||0)));if(close)close.onclick=hide;if(overlay)overlay.onclick=(e)=>{if(e.target===overlay)hide()};if(prev)prev.onclick=()=>{if(si>0){si-=1;draw()}};if(next)next.onclick=()=>{const tutorial=tutorials[ti]||null;if(!tutorial)return hide();if(si<tutorial.steps.length-1){si+=1;draw()}else{flashText('Completed!');fireConfetti();setTimeout(()=>hide(),1300)}};window.addEventListener('resize',()=>{if(overlay&&overlay.style.display==='flex'&&confettiFrame>0&&confettiFrame<220)fireConfetti()},{passive:true});}
 }
 function renderOverview(){
  const totals=(state&&state.statistics&&state.statistics.totals)||{activeTickets:0,totalClaimed:0,totalClosed:0};
@@ -5403,7 +5497,7 @@ function renderPageHero(path){
  else if(access.isStaff)chips.push('<span class="pill">Staff access</span>');
  return '<div class="card page-hero"><div class="page-hero-head"><div><div class="page-kicker">Module</div><h3>'+esc(title)+'</h3><p>'+esc(desc)+'</p></div><div class="page-pill-row">'+chips.join('')+'</div></div></div>';
 }
-function render(){const access=(state&&state.access)||{};const plan=(state&&state.aiAccess)||{};const allowed=new Set(['/documentation','/tutorials','/pricing','/upgrade']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/panels','/commands/tag','/tickets','/transcripts','/commands/feedback','/pricing','/upgrade'].forEach(p=>allowed.add(p));if(plan.isPlusOrHigher)allowed.add('/statistics');if(plan.isCustom)allowed.add('/embed-editor')}else{if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types');allowed.add('/panels');if(plan.isCustom)allowed.add('/embed-editor')}if(plan.isPlusOrHigher&&access.canManageTicketTypes)allowed.add('/statistics');if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This module is not available for your current role or server plan.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderPageHero(currentPath)+renderSettings();else if(currentPath==='/availability')html=renderPageHero(currentPath)+renderAvailability();else if(currentPath==='/tutorials')html=renderPageHero(currentPath)+renderTutorials();else if(currentPath==='/commands/ticket-types')html=renderPageHero(currentPath)+renderTypes();else if(currentPath==='/panels')html=renderPageHero(currentPath)+renderPanels();else if(currentPath==='/commands/tag')html=renderPageHero(currentPath)+renderTags();else if(currentPath==='/tickets')html=renderPageHero(currentPath)+renderTickets();else if(currentPath==='/transcripts')html=renderPageHero(currentPath)+renderTranscripts();else if(currentPath==='/commands/feedback')html=renderPageHero(currentPath)+renderFeedback();else if(currentPath==='/commands/appeal')html=renderPageHero(currentPath)+renderAppeal();else if(currentPath==='/statistics')html=renderPageHero(currentPath)+renderStats();else if(currentPath==='/embed-editor')html=renderPageHero(currentPath)+renderBranding();else if(currentPath==='/pricing')html=renderPageHero(currentPath)+renderPricing();else if(currentPath==='/upgrade')html=renderPageHero(currentPath)+renderUpgrade();else html=renderPageHero(currentPath)+renderDocs();document.title=${JSON.stringify(BRAND_NAME + ' ‚Ä¢ ')}+({"/overview":"Home","/settings":"Settings","/availability":"Availability","/tutorials":"Tutorials","/commands/ticket-types":"Ticket Types","/panels":"Panels","/commands/tag":"Tags","/tickets":"Tickets","/transcripts":"Transcripts","/commands/feedback":"Feedback","/statistics":"Statistics","/embed-editor":"Branding","/pricing":"Pricing","/upgrade":"Upgrade","/documentation":"Documentation"}[currentPath]||'Dashboard');renderAnnouncementBar();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire()})})}
+function render(){const access=(state&&state.access)||{};const plan=(state&&state.aiAccess)||{};const allowed=new Set(['/documentation','/tutorials','/pricing','/upgrade']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/panels','/commands/tag','/tickets','/transcripts','/commands/feedback','/pricing','/upgrade'].forEach(p=>allowed.add(p));if(plan.isPlusOrHigher)allowed.add('/statistics');if(plan.isCustom)allowed.add('/embed-editor')}else{if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types');allowed.add('/panels');if(plan.isCustom)allowed.add('/embed-editor')}if(plan.isPlusOrHigher&&access.canManageTicketTypes)allowed.add('/statistics');if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This module is not available for your current role or server plan.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderPageHero(currentPath)+renderSettings();else if(currentPath==='/availability')html=renderPageHero(currentPath)+renderAvailability();else if(currentPath==='/tutorials')html=renderPageHero(currentPath)+renderTutorials();else if(currentPath==='/commands/ticket-types')html=renderPageHero(currentPath)+renderTypes();else if(currentPath==='/panels')html=renderPageHero(currentPath)+renderPanels();else if(currentPath==='/commands/tag')html=renderPageHero(currentPath)+renderTags();else if(currentPath==='/tickets')html=renderPageHero(currentPath)+renderTickets();else if(currentPath==='/transcripts')html=renderPageHero(currentPath)+renderTranscripts();else if(currentPath==='/commands/feedback')html=renderPageHero(currentPath)+renderFeedback();else if(currentPath==='/commands/appeal')html=renderPageHero(currentPath)+renderAppeal();else if(currentPath==='/statistics')html=renderPageHero(currentPath)+renderStats();else if(currentPath==='/embed-editor')html=renderPageHero(currentPath)+renderBranding();else if(currentPath==='/pricing')html=renderPageHero(currentPath)+renderPricing();else if(currentPath==='/upgrade')html=renderPageHero(currentPath)+renderUpgrade();else html=renderPageHero(currentPath)+renderDocs();document.title=${JSON.stringify(BRAND_NAME + ' ï ')}+({"/overview":"Home","/settings":"Settings","/availability":"Availability","/tutorials":"Tutorials","/commands/ticket-types":"Ticket Types","/panels":"Panels","/commands/tag":"Tags","/tickets":"Tickets","/transcripts":"Transcripts","/commands/feedback":"Feedback","/statistics":"Statistics","/embed-editor":"Branding","/pricing":"Pricing","/upgrade":"Upgrade","/documentation":"Documentation"}[currentPath]||'Dashboard');renderAnnouncementBar();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire()})})}
 function showUpgradeCelebration(plan){const label=String(plan||'Plus');let overlay=document.getElementById('upgradeOverlay');if(!overlay){overlay=document.createElement('div');overlay.id='upgradeOverlay';overlay.className='upgrade-overlay';overlay.innerHTML='<canvas class="upgrade-confetti" id="upgradeConfetti"></canvas><div class="upgrade-card"><div class="page-kicker">Upgrade complete</div><h2 id="upgradeTitle"></h2><div class="muted">You\\'ve unlocked:</div><ul id="upgradeList"></ul><button class="btn" id="upgradeClose" style="margin-top:18px">Continue</button></div>';document.body.appendChild(overlay)}const title=document.getElementById('upgradeTitle');const list=document.getElementById('upgradeList');if(title)title.textContent='You\\'ve upgraded to '+label+'!';const items=label==='Custom'?['White-label bot branding','Diamond dashboard theme','Custom bot instance controls','Everything in Plus and Pro']:label==='Pro'?['Statistics','Advanced operations','Priority support controls']:['Statistics','Improved analytics','Premium dashboard modules'];if(list)list.innerHTML=items.map(x=>'<li>'+esc(x)+'</li>').join('');overlay.classList.add('show');const canvas=document.getElementById('upgradeConfetti');if(canvas&&canvas.getContext){const ctx=canvas.getContext('2d');const dpr=Math.max(1,window.devicePixelRatio||1);canvas.width=Math.floor(window.innerWidth*dpr);canvas.height=Math.floor(window.innerHeight*dpr);canvas.style.width=window.innerWidth+'px';canvas.style.height=window.innerHeight+'px';ctx.setTransform(dpr,0,0,dpr,0,0);const pieces=Array.from({length:180},(_,i)=>({x:Math.random()*window.innerWidth,y:window.innerHeight+Math.random()*80,vx:(Math.random()-.5)*5,vy:-(4+Math.random()*7),g:.08+Math.random()*.04,s:5+Math.random()*9,r:Math.random()*6,c:['#67e8f9','#d9f99d','#fef08a','#c4b5fd','#f8fafc'][i%5]}));let frame=0;(function tick(){ctx.clearRect(0,0,window.innerWidth,window.innerHeight);pieces.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=p.g;p.r+=.12;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.r);ctx.fillStyle=p.c;ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s*.65);ctx.restore()});frame++;if(frame<210&&overlay.classList.contains('show'))requestAnimationFrame(tick);else ctx.clearRect(0,0,window.innerWidth,window.innerHeight)})()}const close=document.getElementById('upgradeClose');if(close)close.onclick=()=>overlay.classList.remove('show')}
 function handlePlanExperience(){const plan=(state&&state.aiAccess)||{};if(plan.isCustom){try{localStorage.setItem('dash_theme','diamond');document.body.dataset.theme='diamond'}catch{}}if(!plan.hasAccess||!plan.grantedAt)return;const key='dash_upgrade_seen_'+String(state.guildId||'global');const marker=String(plan.plan||'')+'@'+String(plan.grantedAt||'');try{if(localStorage.getItem(key)!==marker){localStorage.setItem(key,marker);showUpgradeCelebration(plan.planLabel||'upgrade')}}catch{}}
 async function boot(){state=await api('/api/state'+(location.search||''));handlePlanExperience();render()}
@@ -5504,7 +5598,7 @@ function startDashboard(client) {
                     sendHtml(res, 403, '<h1>403</h1><p>Owner user only.</p>');
                     return;
                 }
-                sendHtml(res, 200, createOwnerHtml(req));
+                sendHtml(res, 200, createControllerHtml(req));
                 return;
             }
 
@@ -5519,7 +5613,7 @@ function startDashboard(client) {
                     sendHtml(res, 403, '<h1>403</h1><p>Owner user only.</p>');
                     return;
                 }
-                sendHtml(res, 200, createControllerHtml(req));
+                sendHtml(res, 200, createOwnerHtml(req));
                 return;
             }
 
@@ -5654,7 +5748,7 @@ function startDashboard(client) {
                     title: 'Upgrade',
                     body: '<section class="card upgrade-reward">' +
                         '<div class="upgrade-word w1">PLUS</div><div class="upgrade-word w2">PRO</div><div class="upgrade-word w3">GROW</div><div class="upgrade-word w4">SUPPORT</div>' +
-                        '<div class="party-emoji e1">üéâ</div><div class="party-emoji e2">‚ú®</div><div class="party-emoji e3">üöÄ</div><div class="party-emoji e4">üéä</div>' +
+                        '<div class="party-emoji e1">??</div><div class="party-emoji e2">?</div><div class="party-emoji e3">??</div><div class="party-emoji e4">??</div>' +
                         '<div style="position:relative;z-index:1;max-width:760px"><div class="pricing-kicker">Next step</div><h1 style="font-size:clamp(38px,6vw,72px);line-height:1;margin:0 0 14px">You are taking the next big step.</h1><p class="muted" style="font-size:16px">Plus and Pro unlock stronger automation, AI moderation, priority help, and a smoother support operation for your server.</p><div class="row" style="justify-content:center;margin-top:24px"><a class="btn primary" href="https://discord.gg/JSUX9GQP6J" target="_blank" rel="noreferrer">Contact us in support</a><a class="btn-soft" href="/pricing">Compare plans</a></div></div>' +
                     '</section>',
                     ownerView: false,

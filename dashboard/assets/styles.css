@@ -204,6 +204,46 @@ body.home[data-theme="hacker"] {
 
 .cta { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
 
+.quick-access {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 18px;
+}
+@media (min-width: 760px) {
+    .quick-access { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.quick-card {
+    position: relative;
+    display: grid;
+    gap: 6px;
+    min-height: 96px;
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(96,165,250,0.18);
+    background: rgba(12, 18, 34, 0.78);
+    color: var(--text);
+    text-decoration: none;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.22);
+    transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+.quick-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(96,165,250,0.36);
+    background: rgba(18, 27, 48, 0.88);
+}
+.quick-card span {
+    color: var(--blue2);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.quick-card strong {
+    font-size: 15px;
+    line-height: 1.35;
+}
+
 .btn {
     appearance: none;
     border: 1px solid rgba(255,255,255,0.14);
