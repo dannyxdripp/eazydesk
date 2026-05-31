@@ -490,6 +490,7 @@ module.exports = {
                 statusInfo
             });
 
+            const botMemberId = interaction.guild.members.me?.id || interaction.client.user?.id;
             const permissionOverwrites = [
                 { id: interaction.guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.AttachFiles] },
                 {
@@ -502,6 +503,21 @@ module.exports = {
                     ]
                 }
             ];
+
+            if (botMemberId) {
+                permissionOverwrites.push({
+                    id: botMemberId,
+                    allow: [
+                        PermissionsBitField.Flags.ViewChannel,
+                        PermissionsBitField.Flags.SendMessages,
+                        PermissionsBitField.Flags.EmbedLinks,
+                        PermissionsBitField.Flags.AttachFiles,
+                        PermissionsBitField.Flags.ReadMessageHistory,
+                        PermissionsBitField.Flags.ManageChannels,
+                        PermissionsBitField.Flags.ManageRoles
+                    ]
+                });
+            }
 
             for (const roleId of teamRoleIds) {
                 permissionOverwrites.push({

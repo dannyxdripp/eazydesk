@@ -132,7 +132,7 @@ const DEFAULT_DOC_SECTIONS = [
     },
     {
         title: 'Minimal Permissions',
-        body: 'Recommended invite permissions: View Channels, Send Messages, Embed Links, Attach Files, Read Message History, Manage Channels, Manage Roles, Use Slash Commands, Create Public Threads, Send Messages in Threads, and Manage Messages only if staff tooling needs cleanup actions.'
+        body: 'Recommended invite permissions: Create Instant Invite, View Channels, Send Messages, Embed Links, Attach Files, Read Message History, Manage Channels, Manage Roles, Use Slash Commands, Create Public Threads, and Send Messages in Threads. Add Manage Messages only if staff tooling needs cleanup actions.'
     }
 ];
 
@@ -306,7 +306,7 @@ function getBotInviteUrl(guildId = '') {
     const url = new URL('https://discord.com/oauth2/authorize');
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('scope', 'bot applications.commands');
-    url.searchParams.set('permissions', String(process.env.BOT_INVITE_PERMISSIONS || '311653682192'));
+    url.searchParams.set('permissions', String(process.env.BOT_INVITE_PERMISSIONS || '311653682193'));
     const id = String(guildId || '').trim();
     if (/^\d{17,20}$/.test(id)) {
         url.searchParams.set('guild_id', id);
@@ -5278,8 +5278,20 @@ function renderDocs(){
  const embedExample=esc(JSON.stringify({content:'Optional message content',embeds:[{title:'Embed title',description:'Embed description',color:5793266,thumbnail:{url:'https://example.com/thumb.png'},image:{url:'https://example.com/image.png'},footer:{text:'Footer text'}}]},null,2));
  const attachmentExample=esc(JSON.stringify({content:'Image from attachment',embeds:[{title:'Proof',image:{url:'attachment://proof.png'}}]},null,2));
  const sepExample=esc('## Title\\n\\nFirst paragraph.\\n\\n[[divider]]\\n\\nSecond paragraph.\\n\\n[[space:large]]\\n\\nThird paragraph.');
+ const canSeeOps=Boolean(state&&state.access&&(state.access.isOwner||state.access.canFullDashboard||state.access.canManageSettings));
  const ownerDocs=(state&&state.isOwner)?('<div class="card" style="grid-column:1/-1"><h3>Owner Documentation Editor</h3><div class="muted">Edit the public documentation sections shown below. JSON format: [{ "title": "...", "body": "..." }]</div><textarea id="docsJson" style="min-height:220px;font-family:Consolas,monospace">'+esc(JSON.stringify(docsSections,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="saveDocs" class="btn">Save Documentation</button><button id="formatDocs" class="btn-soft">Format JSON</button></div></div>'):'';
  const customDocs=docsSections.length?('<div class="card" style="grid-column:1/-1"><h3>Guide Sections</h3><div class="grid" style="margin-top:10px">'+docsSections.map(section=>'<div class="item" style="display:block"><strong>'+esc(section.title)+'</strong><div class="muted" style="margin-top:8px;white-space:pre-wrap">'+esc(section.body)+'</div></div>').join('')+'</div></div>'):'';
+ const operationsDocs=canSeeOps?(
+   '<div class="card"><h3>Dashboard Operations</h3><div class="list">'+
+    '<div class="item"><div><strong>Themes and menus</strong><div class="muted">Use the top theme picker for Dark, Light, Ocean, Sunset, and Diamond. Navigation is grouped into General, Tickets, Tools, and Plans.</div></div></div>'+
+    '<div class="item"><div><strong>Staff permissions</strong><div class="muted">Configure role families with STAFF_EXECUTIVE_ROLE_IDS, STAFF_SUPPORT_ROLE_IDS, STAFF_QA_ROLE_IDS, STAFF_COMMUNITY_ROLE_IDS, or SENIOR_STAFF_ROLE_IDS. Comma or space separated role IDs are supported.</div></div></div>'+
+    '<div class="item"><div><strong>Online transcripts</strong><div class="muted">Saved transcripts open through /t/&lt;token&gt; when a public token exists. Downloads add ?download=1.</div></div></div>'+
+    '<div class="item"><div><strong>Discord OAuth redirect</strong><div class="muted">Add this exact URI to the Discord Developer Portal for transcript login: <code>'+esc(oauthRedirect)+'</code>. If Discord says invalid redirect_uri, update PUBLIC_BASE_URL to your public HTTPS origin and make this URI match exactly.</div></div></div>'+
+    '<div class="item"><div><strong>Feedback setup</strong><div class="muted">Set a feedback channel on the Feedback page. Users run /feedback inside a claimed ticket and staff receive the rating report.</div></div></div>'+
+    '<div class="item"><div><strong>Branding</strong><div class="muted">Enterprise/custom servers can edit server identity, embed templates, and preview the bot message before saving.</div></div></div>'+
+    '<div class="item"><div><strong>Recommended bot permissions</strong><div class="muted">Create Instant Invite, View Channels, Send Messages, Embed Links, Attach Files, Read Message History, Use Slash Commands, Manage Channels, Manage Roles, Create Public Threads, Send Messages in Threads. Add Manage Messages only if you want cleanup/moderation actions.</div></div></div>'+
+   '</div></div>'
+ ):'';
   return '<div class="grid">'+
    ownerDocs+
    customDocs+
@@ -5293,7 +5305,7 @@ function renderDocs(){
    '<pre style="white-space:pre-wrap;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);padding:10px;border-radius:10px;margin-top:10px">'+attachmentExample+'</pre>'+
   '</div>'+
 
-  '<div class="card"><h3>Components V2: Dividers & Spacing</h3>'+
+   '<div class="card"><h3>Components V2: Dividers & Spacing</h3>'+
    '<div class="muted">Components V2 messages use containers/text displays. In the <span class="muted">Embed Editor</span>, you can add separators (dividers) and spacing (margins) inside template descriptions using tokens on their own line.</div>'+
    '<div class="item" style="margin-top:10px"><div class="muted">'+
     '<div><code>[[divider]]</code> &mdash; divider, small spacing</div>'+
@@ -5304,15 +5316,7 @@ function renderDocs(){
    '<pre style="white-space:pre-wrap;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);padding:10px;border-radius:10px;margin-top:10px">'+sepExample+'</pre>'+
    '<div class="item" style="margin-top:10px"><div class="muted">Tip: keep accent colors minimal; the bot applies accent automatically for success/error notices.</div></div>'+
    '</div>'+
-   '<div class="card"><h3>Dashboard Operations</h3><div class="list">'+
-    '<div class="item"><div><strong>Themes and menus</strong><div class="muted">Use the top theme picker for Dark, Light, Ocean, Sunset, and Diamond. Navigation is grouped into General, Tickets, Tools, and Plans.</div></div></div>'+
-    '<div class="item"><div><strong>Staff permissions</strong><div class="muted">Configure role families with STAFF_EXECUTIVE_ROLE_IDS, STAFF_SUPPORT_ROLE_IDS, STAFF_QA_ROLE_IDS, STAFF_COMMUNITY_ROLE_IDS, or SENIOR_STAFF_ROLE_IDS. Comma or space separated role IDs are supported.</div></div></div>'+
-    '<div class="item"><div><strong>Online transcripts</strong><div class="muted">Saved transcripts open through /t/&lt;token&gt; when a public token exists. Downloads add ?download=1.</div></div></div>'+
-    '<div class="item"><div><strong>Discord OAuth redirect</strong><div class="muted">Add this exact URI to the Discord Developer Portal for transcript login: <code>'+esc(oauthRedirect)+'</code>. If Discord says invalid redirect_uri, update PUBLIC_BASE_URL to your public HTTPS origin and make this URI match exactly.</div></div></div>'+
-    '<div class="item"><div><strong>Feedback setup</strong><div class="muted">Set a feedback channel on the Feedback page. Users run /feedback inside a claimed ticket and staff receive the rating report.</div></div></div>'+
-    '<div class="item"><div><strong>Branding</strong><div class="muted">Enterprise/custom servers can edit server identity, embed templates, and preview the bot message before saving.</div></div></div>'+
-    '<div class="item"><div><strong>Recommended bot permissions</strong><div class="muted">View Channels, Send Messages, Embed Links, Attach Files, Read Message History, Use Slash Commands, Manage Channels, Manage Roles, Create Public Threads, Send Messages in Threads. Add Manage Messages only if you want cleanup/moderation actions.</div></div></div>'+
-   '</div></div>'+
+   operationsDocs+
   '</div>'}
 function selectedRoles(id){return Array.from(document.querySelectorAll('input[data-ms-check="'+id+'"]:checked')).map(el=>el.value)}
 function setRoleSelection(id,values){const selectedSet=new Set((values||[]).map(String));document.querySelectorAll('input[data-ms-check="'+id+'"]').forEach(el=>{el.checked=selectedSet.has(el.value)});updateRoleSelectionUi(id)}

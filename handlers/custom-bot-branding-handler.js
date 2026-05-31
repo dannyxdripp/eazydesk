@@ -25,7 +25,7 @@ function getOfficialBotInviteUrl(guildId = '') {
     const url = new URL('https://discord.com/oauth2/authorize');
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('scope', 'bot applications.commands');
-    url.searchParams.set('permissions', String(process.env.BOT_INVITE_PERMISSIONS || '311653682192'));
+    url.searchParams.set('permissions', String(process.env.BOT_INVITE_PERMISSIONS || '311653682193'));
     const id = String(guildId || '').trim();
     if (/^\d{17,20}$/.test(id)) {
         url.searchParams.set('guild_id', id);
