@@ -13,6 +13,8 @@ const { getEffectiveAvailability } = ticketHandler;
 const { buildV2Notice } = require('../utils/components-v2-messages');
 const closeRequestCommand = require('../commands/closerequest');
 const { getTranscriptRetentionDays, resolveTranscriptPath, deleteTranscriptArchive } = require('../utils/transcript-archive');
+const megaBackup = require('../utils/mega-backup');
+const { getRuntimeJsonDir } = require('../utils/storage-paths');
 
 let dashboardServer = null;
 const ASSETS_DIR = path.join(__dirname, 'assets');
@@ -136,6 +138,47 @@ const DEFAULT_DOC_SECTIONS = [
     }
 ];
 
+const PLAN_PRICE_GBP = {
+    plus: 8.99,
+    pro: 14.99
+};
+
+function planPriceHtml(planKey) {
+    const amount = PLAN_PRICE_GBP[String(planKey || '').toLowerCase()];
+    if (!Number.isFinite(amount)) return 'Custom';
+    const fixed = amount.toFixed(2);
+    return `<span class="localized-price" data-price-gbp="${fixed}">&pound;${fixed}</span><span class="plan-once">one-time payment</span>`;
+}
+
+function pricingLocalizationScript() {
+    return `
+    (function(){
+      const currencyByRegion={GB:'GBP',US:'USD',CA:'CAD',AU:'AUD',NZ:'NZD',IE:'EUR',FR:'EUR',DE:'EUR',ES:'EUR',IT:'EUR',NL:'EUR',BE:'EUR',PT:'EUR',AT:'EUR',FI:'EUR',GR:'EUR',LU:'EUR',CY:'EUR',EE:'EUR',LV:'EUR',LT:'EUR',MT:'EUR',SK:'EUR',SI:'EUR',IN:'INR',JP:'JPY',KR:'KRW',BR:'BRL',MX:'MXN',ZA:'ZAR',SE:'SEK',NO:'NOK',DK:'DKK',CH:'CHF',PL:'PLN',SG:'SGD'};
+      const rates={GBP:1,USD:1.27,EUR:1.17,CAD:1.74,AUD:1.93,NZD:2.09,INR:106,JPY:194,KRW:1710,BRL:7.1,MXN:23.4,ZAR:22.8,SEK:13.3,NOK:13.6,DKK:8.7,CHF:1.12,PLN:5.0,SGD:1.72};
+      function localeParts(){
+        const locale=(Intl.DateTimeFormat().resolvedOptions().locale||navigator.language||'en-GB');
+        const bits=String(locale).replace('_','-').split('-');
+        return {locale:locale,region:String(bits[1]||'GB').toUpperCase()};
+      }
+      window.localizePlanPrices=function(){
+        const parts=localeParts();
+        const currency=currencyByRegion[parts.region]||'GBP';
+        const rate=rates[currency]||1;
+        let formatter=null;
+        try{formatter=new Intl.NumberFormat(parts.locale,{style:'currency',currency:currency,maximumFractionDigits:currency==='JPY'||currency==='KRW'?0:2});}catch{formatter=null}
+        document.querySelectorAll('.localized-price[data-price-gbp]').forEach(el=>{
+          const gbp=Number(el.getAttribute('data-price-gbp'));
+          if(!Number.isFinite(gbp))return;
+          const value=gbp*rate;
+          el.textContent=formatter?formatter.format(value):('GBP '+gbp.toFixed(2));
+          el.title='Base price GBP '+gbp.toFixed(2);
+        });
+      };
+      if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',window.localizePlanPrices);
+      else window.localizePlanPrices();
+    })();`;
+}
+
 function createDocumentTitle(pageName = 'Home') {
     const clean = String(pageName || 'Home').trim() || 'Home';
     return `${BRAND_NAME} - ${clean}`;
@@ -194,12 +237,26 @@ function normalizeTutorials(input) {
 function normalizeSiteAnnouncement(input) {
     const raw = input && typeof input === 'object' ? input : {};
     const link = String(raw.linkUrl || '').trim();
+    const type = ['general', 'promotional', 'warning'].includes(String(raw.type || '').trim().toLowerCase())
+        ? String(raw.type).trim().toLowerCase()
+        : 'general';
     return {
         enabled: Boolean(raw.enabled && String(raw.text || '').trim()),
+        type,
         text: String(raw.text || '').trim().slice(0, 240),
         ctaLabel: String(raw.ctaLabel || '').trim().slice(0, 40),
         linkUrl: /^https?:\/\//i.test(link) ? link : ''
     };
+}
+
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
 }
 
 function randomToken(bytes = 24) {
@@ -484,8 +541,9 @@ function createHomeHtml(options = {}) {
         ? 'Dashboard access requires a token.'
         : 'Dashboard is running without a token (local-only by default).';
     const siteAnnouncement = normalizeSiteAnnouncement(botConfig.siteAnnouncement);
+    const announcementLabel = siteAnnouncement.type === 'promotional' ? 'Promotion' : siteAnnouncement.type === 'warning' ? 'Warning' : 'Announcement';
     const announcementHtml = siteAnnouncement.enabled
-        ? `<section class="hero-card" style="margin-bottom:14px;padding:18px 22px"><div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div><div class="kicker">Announcement</div><p style="margin-top:10px">${siteAnnouncement.text}</p></div>${siteAnnouncement.ctaLabel && siteAnnouncement.linkUrl ? `<a class="btn primary" href="${siteAnnouncement.linkUrl}" target="_blank" rel="noreferrer">${siteAnnouncement.ctaLabel}</a>` : ''}</div></section>`
+        ? `<section class="hero-card announcement-${siteAnnouncement.type}" style="margin-bottom:14px;padding:18px 22px"><div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div><div class="kicker">${escapeHtml(announcementLabel)}</div><p style="margin-top:10px">${escapeHtml(siteAnnouncement.text)}</p></div>${siteAnnouncement.ctaLabel && siteAnnouncement.linkUrl ? `<a class="btn primary" href="${escapeHtml(siteAnnouncement.linkUrl)}" target="_blank" rel="noreferrer">${escapeHtml(siteAnnouncement.ctaLabel)}</a>` : ''}</div></section>`
         : '';
 
     const gallery = safeImages.length
@@ -614,8 +672,9 @@ function createHomeHtml(options = {}) {
 
 function baseDashboardPage({ title, body, script = '', ownerView = false, staffView = false, showStaffLink = false }) {
     const siteAnnouncement = normalizeSiteAnnouncement(ticketStore.getBotConfig()?.siteAnnouncement);
+    const announcementLabel = siteAnnouncement.type === 'promotional' ? 'Promotion' : siteAnnouncement.type === 'warning' ? 'Warning' : 'Announcement';
     const announcementHtml = siteAnnouncement.enabled
-        ? `<div class="wrap" style="padding-top:14px;padding-bottom:0"><div class="card" style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px"><div><strong>Announcement</strong><div class="muted">${siteAnnouncement.text}</div></div>${siteAnnouncement.ctaLabel && siteAnnouncement.linkUrl ? `<a class="btn primary" href="${siteAnnouncement.linkUrl}" target="_blank" rel="noreferrer">${siteAnnouncement.ctaLabel}</a>` : ''}</div></div>`
+        ? `<div class="wrap" style="padding-top:14px;padding-bottom:0"><div class="card announcement-${siteAnnouncement.type}" style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px"><div><strong>${escapeHtml(announcementLabel)}</strong><div class="muted">${escapeHtml(siteAnnouncement.text)}</div></div>${siteAnnouncement.ctaLabel && siteAnnouncement.linkUrl ? `<a class="btn primary" href="${escapeHtml(siteAnnouncement.linkUrl)}" target="_blank" rel="noreferrer">${escapeHtml(siteAnnouncement.ctaLabel)}</a>` : ''}</div></div>`
         : '';
     const css = `
     :root{color-scheme:dark;--bg:#0b1020;--bg2:#090d1a;--panel:rgba(17,20,36,.78);--tx:#f7f8ff;--mut:rgba(247,248,255,.66);--bd:rgba(255,255,255,.10);--acc:#38bdf8;--acc2:#60a5fa;--shadow:0 18px 50px rgba(0,0,0,.55);--cardGlow:0 0 0 1px rgba(96,165,250,.12) inset,0 20px 50px rgba(8,15,35,.45);--cardOutline:rgba(96,165,250,.24)}
@@ -680,6 +739,7 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     .plan-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
     .plan-name{font-size:22px;font-weight:850}
     .plan-price{font-size:38px;font-weight:900;line-height:1}
+    .plan-once{display:block;margin-top:6px;color:var(--mut);font-size:12px;font-weight:800;line-height:1.25;text-transform:uppercase;letter-spacing:.08em}
     .plan-note{color:var(--mut);font-size:13px;line-height:1.6}
     .plan-badge{display:inline-flex;align-items:center;white-space:nowrap;border-radius:999px;padding:6px 10px;border:1px solid color-mix(in srgb,var(--acc) 38%, transparent);background:color-mix(in srgb,var(--acc) 13%, transparent);font-size:11px;font-weight:850;color:var(--tx)}
     .pricing-feature-list{display:grid;gap:9px}
@@ -719,6 +779,9 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     .btn.subtle{background:color-mix(in srgb,var(--panel) 80%, rgba(255,255,255,.03));border-color:var(--bd)}
     .btn.warning{background:color-mix(in srgb,#fee75c 14%, transparent);border-color:rgba(254,231,92,.32)}
     .custom-bot-strip{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px;border-radius:14px;border:1px solid color-mix(in srgb,var(--acc) 26%, transparent);background:color-mix(in srgb,var(--acc) 8%, transparent)}
+    .announcement-general{border-color:color-mix(in srgb,var(--acc) 32%, var(--bd))!important}
+    .announcement-promotional{border-color:rgba(87,242,135,.35)!important;background:color-mix(in srgb,#57f287 8%, var(--panel))!important}
+    .announcement-warning{border-color:rgba(251,191,36,.45)!important;background:color-mix(in srgb,#fbbf24 10%, var(--panel))!important}
     .owner-console{display:grid;gap:14px;min-width:0;overflow:hidden}
     .owner-console .owner-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;min-width:0}
     .owner-console .owner-guilds{display:grid;grid-template-columns:1fr;gap:12px;min-width:0}
@@ -788,6 +851,7 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
       document.querySelectorAll('[data-theme-item]').forEach(item=>item.onclick=(e)=>{e.stopPropagation();const pick=String(item.getAttribute('data-theme-item')||'');if(pick==='dark'){darkClicks+=1;if(darkClicks>=7){try{localStorage.setItem(unlockKey,'true')}catch{}}}else{darkClicks=0}const next=normalise(pick);try{localStorage.setItem(key,next)}catch{}apply(next);if(nav)nav.classList.remove('open')});
     })();
   </script>
+  <script>${pricingLocalizationScript()}</script>
   <script>document.body.dataset.view=${JSON.stringify(staffView ? 'staff' : (ownerView ? 'owner' : 'default'))};</script>
   <script>${script || ''}</script>
 </body>
@@ -958,7 +1022,9 @@ function createOwnerHtml(req = null) {
       function pill(t){return '<span class="pill">'+esc(t)+'</span>'}
       function renderRows(title,items,mapper){return '<div class="card"><strong>'+esc(title)+'</strong><div class="list">'+(items.length?items.map(mapper).join(''):'<div class="muted">Nothing yet.</div>')+'</div></div>'}
       function renderMatrix(matrix){return '<div class="card"><strong>Staff dashboard role access</strong><div class="muted" style="margin-top:6px">Role IDs come from environment variables. Update STAFF_EXECUTIVE_ROLE_IDS, STAFF_SUPPORT_ROLE_IDS, STAFF_QA_ROLE_IDS, STAFF_COMMUNITY_ROLE_IDS, or SENIOR_STAFF_ROLE_IDS, then redeploy/restart.</div><div class="list" style="margin-top:10px">'+(matrix||[]).map(row=>'<details class="item" style="display:block"><summary><strong>'+esc(row.name)+'</strong> <span class="pill">'+esc((row.roleIds||[]).length)+' role(s)</span></summary><div class="muted" style="margin-top:8px;white-space:pre-wrap">'+esc((row.roleIds||[]).join('\\n')||'No roles configured')+'</div><div class="roles" style="margin-top:8px">'+Object.entries(row.permissions||{}).filter(x=>x[1]).map(x=>'<span class="pill">'+esc(x[0].replace(/^can/,''))+'</span>').join('')+'</div></details>').join('')+'</div></div>'}
-      function renderContentTools(cfg){const imgs=Array.isArray(cfg.homeImages)?cfg.homeImages:[];const tutorials=Array.isArray(cfg.tutorials)?cfg.tutorials:[];const docs=Array.isArray(cfg.docsSections)?cfg.docsSections:[];return '<div class="card"><strong>Homepage rotating images</strong><div class="muted" style="margin-top:6px">Shown on the public homepage gallery. Use direct HTTPS image links.</div><label>Image 1</label><input id="ownerHomeImg1" value="'+esc(imgs[0]||'')+'" placeholder="https://..." /><label>Image 2</label><input id="ownerHomeImg2" value="'+esc(imgs[1]||'')+'" placeholder="https://..." /><label>Image 3</label><input id="ownerHomeImg3" value="'+esc(imgs[2]||'')+'" placeholder="https://..." /><div class="row" style="margin-top:10px"><button id="ownerSaveHomeImages" class="btn">Save Images</button><button id="ownerClearHomeImages" class="btn-soft">Clear</button></div></div>'+
+      function renderContentTools(cfg,backupStatus){const imgs=Array.isArray(cfg.homeImages)?cfg.homeImages:[];const tutorials=Array.isArray(cfg.tutorials)?cfg.tutorials:[];const docs=Array.isArray(cfg.docsSections)?cfg.docsSections:[];const ann=cfg.siteAnnouncement||{};const backupText=backupStatus&&backupStatus.configured?'MEGA backup configured':'MEGA not configured; manual backup will save locally';return '<div class="card"><strong>Owner operations</strong><div class="muted" style="margin-top:6px">'+esc(backupText)+'</div><div class="row" style="margin-top:10px"><button id="ownerBackupNow" class="btn">Backup Data Now</button></div><label style="margin-top:14px">Maintenance message to all servers</label><textarea id="ownerMaintenanceText" style="min-height:110px" placeholder="Short maintenance notice..."></textarea><div class="row" style="margin-top:10px"><button id="ownerSendMaintenance" class="btn-danger">Send Maintenance Message</button></div></div>'+
+      '<div class="card"><strong>Announcement panel</strong><div class="muted" style="margin-top:6px">Shown on the website and dashboard while enabled.</div><div class="row"><div><label>Enabled</label><select id="ownerAnnouncementEnabled"><option value="true" '+(ann.enabled?'selected':'')+'>On</option><option value="false" '+(!ann.enabled?'selected':'')+'>Off</option></select></div><div><label>Type</label><select id="ownerAnnouncementType"><option value="general" '+((ann.type||'general')==='general'?'selected':'')+'>General</option><option value="promotional" '+(ann.type==='promotional'?'selected':'')+'>Promotional</option><option value="warning" '+(ann.type==='warning'?'selected':'')+'>Warning</option></select></div></div><label>Message</label><textarea id="ownerAnnouncementText" style="min-height:110px" maxlength="240">'+esc(ann.text||'')+'</textarea><div class="row"><div><label>Button label</label><input id="ownerAnnouncementCta" value="'+esc(ann.ctaLabel||'')+'" maxlength="40" placeholder="Learn more" /></div><div><label>Button URL</label><input id="ownerAnnouncementUrl" value="'+esc(ann.linkUrl||'')+'" placeholder="https://..." /></div></div><div class="row" style="margin-top:10px"><button id="ownerSaveAnnouncement" class="btn">Save Announcement</button><button id="ownerClearAnnouncement" class="btn-soft">Clear</button></div></div>'+
+      '<div class="card"><strong>Homepage rotating images</strong><div class="muted" style="margin-top:6px">Shown on the public homepage gallery. Use direct HTTPS image links.</div><label>Image 1</label><input id="ownerHomeImg1" value="'+esc(imgs[0]||'')+'" placeholder="https://..." /><label>Image 2</label><input id="ownerHomeImg2" value="'+esc(imgs[1]||'')+'" placeholder="https://..." /><label>Image 3</label><input id="ownerHomeImg3" value="'+esc(imgs[2]||'')+'" placeholder="https://..." /><div class="row" style="margin-top:10px"><button id="ownerSaveHomeImages" class="btn">Save Images</button><button id="ownerClearHomeImages" class="btn-soft">Clear</button></div></div>'+
       '<div class="card"><strong>Public tutorials</strong><div class="muted" style="margin-top:6px">Manage tutorial cards and walkthrough steps.</div><textarea id="ownerTutorialsJson" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(tutorials,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="ownerSaveTutorials" class="btn">Save Tutorials</button><button id="ownerFormatTutorials" class="btn-soft">Format</button></div></div>'+
       '<div class="card"><strong>Documentation sections</strong><div class="muted" style="margin-top:6px">Manage the public documentation guide sections.</div><textarea id="ownerDocsJson" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(docs,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="ownerSaveDocs" class="btn">Save Docs</button><button id="ownerFormatDocs" class="btn-soft">Format</button></div></div>'}
       function grantButtons(g){return '<div class="row"><button class="btn" data-plan="plus" data-guild="'+esc(g.id)+'">Grant Plus</button><button class="btn" data-plan="pro" data-guild="'+esc(g.id)+'">Grant Pro</button><button class="btn" data-custom="'+esc(g.id)+'">Grant Custom</button><button class="btn-soft" data-trial="plus_trial" data-guild="'+esc(g.id)+'">Plus Trial</button><button class="btn-soft" data-trial="pro_trial" data-guild="'+esc(g.id)+'">Pro Trial</button><button class="btn-danger" data-clear="'+esc(g.id)+'">Clear</button></div>'}
@@ -968,7 +1034,7 @@ function createOwnerHtml(req = null) {
       async function grant(guildId,action,plan,customBot){await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action,plan,days:14,customBot})})}
       async function saveContent(patch){const cfg=(lastData&&lastData.botConfig)||{};await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({appealsChannelId:'',homeImages:Array.isArray(cfg.homeImages)?cfg.homeImages:[],tutorials:Array.isArray(cfg.tutorials)?cfg.tutorials:[],docsSections:Array.isArray(cfg.docsSections)?cfg.docsSections:[],siteAnnouncement:cfg.siteAnnouncement||{},...patch})})}
       let lastData=null;
-      async function load(){try{const data=await api('/api/owner/activity');lastData=data;const viewers=data.activeViewers||[], reqs=data.apiRequests||[], audit=data.staffAudit||[];content.innerHTML=renderContentTools(data.botConfig||{})+renderMatrix(data.permissionMatrix||[]);summary.innerHTML=
+      async function load(){try{const data=await api('/api/owner/activity');lastData=data;const viewers=data.activeViewers||[], reqs=data.apiRequests||[], audit=data.staffAudit||[];content.innerHTML=renderContentTools(data.botConfig||{},data.backupStatus||{})+renderMatrix(data.permissionMatrix||[]);summary.innerHTML=
         renderRows('Current staff in dashboard',viewers.slice(0,10),v=>'<div class="item"><div><strong>'+esc(v.userId)+'</strong><div class="muted">Last seen '+esc(String(v.lastSeenAt||'').replace('T',' ').slice(0,19))+'</div></div></div>')+
         renderRows('Live API requests',reqs.slice(0,12),r=>'<div class="item"><div><strong>'+esc(r.method+' '+r.path)+'</strong><div class="muted">'+esc(r.status)+' - '+esc(r.durationMs)+'ms - '+esc(r.userId||'anonymous')+'</div></div></div>')+
         renderRows('Staff audit',audit.slice(0,12),a=>'<div class="item"><div><strong>'+esc(a.action||'action')+'</strong><div class="muted">'+esc(a.status||'unknown')+' - '+esc(a.guildId||'global')+' - '+esc(String(a.createdAt||'').replace('T',' ').slice(0,19))+'</div></div></div>');
@@ -980,6 +1046,10 @@ function createOwnerHtml(req = null) {
         const formatJson=(id,label)=>{try{const box=document.getElementById(id);box.value=JSON.stringify(JSON.parse(box.value),null,2)}catch{err.style.display='block';err.textContent=label+' JSON is invalid.'}};
         const ownerFormatTutorials=document.getElementById('ownerFormatTutorials');if(ownerFormatTutorials)ownerFormatTutorials.onclick=()=>formatJson('ownerTutorialsJson','Tutorials');
         const ownerFormatDocs=document.getElementById('ownerFormatDocs');if(ownerFormatDocs)ownerFormatDocs.onclick=()=>formatJson('ownerDocsJson','Documentation');
+        const ownerBackupNow=document.getElementById('ownerBackupNow');if(ownerBackupNow)ownerBackupNow.onclick=async()=>{try{ownerBackupNow.disabled=true;const data=await api('/api/owner/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:'owner-manual'})});const r=data.result||{};note('Backup complete: '+(r.files||0)+' file(s), '+(r.bytes||0)+' bytes'+(r.local?' saved locally.':' uploaded to MEGA.'));await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{ownerBackupNow.disabled=false}};
+        const ownerSendMaintenance=document.getElementById('ownerSendMaintenance');if(ownerSendMaintenance)ownerSendMaintenance.onclick=async()=>{try{const msg=String(ownerMaintenanceText.value||'').trim();if(!msg)return err.textContent='Maintenance message is required.',err.style.display='block';if(!confirm('Send this maintenance message to every server the bot is in?'))return;ownerSendMaintenance.disabled=true;const data=await api('/api/owner/maintenance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});note('Maintenance message sent to '+(data.sent||0)+' server(s). Failed: '+(data.failed||0)+'.')}catch(e){err.style.display='block';err.textContent=e.message}finally{ownerSendMaintenance.disabled=false}};
+        const ownerSaveAnnouncement=document.getElementById('ownerSaveAnnouncement');if(ownerSaveAnnouncement)ownerSaveAnnouncement.onclick=async()=>{try{const siteAnnouncement={enabled:(ownerAnnouncementEnabled.value||'false')==='true',type:ownerAnnouncementType.value||'general',text:ownerAnnouncementText.value||'',ctaLabel:ownerAnnouncementCta.value||'',linkUrl:ownerAnnouncementUrl.value||''};await saveContent({siteAnnouncement});note('Announcement saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
+        const ownerClearAnnouncement=document.getElementById('ownerClearAnnouncement');if(ownerClearAnnouncement)ownerClearAnnouncement.onclick=async()=>{try{await saveContent({siteAnnouncement:{enabled:false,type:'general',text:'',ctaLabel:'',linkUrl:''}});note('Announcement cleared.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
         const ownerSaveHomeImages=document.getElementById('ownerSaveHomeImages');if(ownerSaveHomeImages)ownerSaveHomeImages.onclick=async()=>{try{const homeImages=[ownerHomeImg1.value,ownerHomeImg2.value,ownerHomeImg3.value].map(x=>String(x||'').trim()).filter(Boolean);await saveContent({homeImages});note('Home images saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
         const ownerClearHomeImages=document.getElementById('ownerClearHomeImages');if(ownerClearHomeImages)ownerClearHomeImages.onclick=async()=>{try{await saveContent({homeImages:[]});note('Home images cleared.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
         const ownerSaveTutorials=document.getElementById('ownerSaveTutorials');if(ownerSaveTutorials)ownerSaveTutorials.onclick=async()=>{try{await saveContent({tutorials:JSON.parse(ownerTutorialsJson.value||'[]')});note('Tutorials saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
@@ -2518,6 +2588,59 @@ async function repairGuildChannels(guild, config = {}) {
     };
 }
 
+async function createLocalJsonBackup(reason = 'owner-manual') {
+    const sourceDir = getRuntimeJsonDir();
+    const files = megaBackup.listJsonFiles(sourceDir);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const safeReason = String(reason || 'owner-manual').replace(/[^a-z0-9_-]+/gi, '-').slice(0, 40) || 'owner-manual';
+    const targetDir = path.join(sourceDir, 'backups', `${safeReason}-${stamp}`);
+    fs.mkdirSync(targetDir, { recursive: true });
+    const copied = [];
+    let bytes = 0;
+    for (const filePath of files) {
+        const rel = path.relative(sourceDir, filePath);
+        if (!rel || rel.startsWith('backups' + path.sep)) continue;
+        const targetPath = path.join(targetDir, rel);
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        fs.copyFileSync(filePath, targetPath);
+        const stat = fs.statSync(targetPath);
+        bytes += stat.size;
+        copied.push({ filePath, targetPath, bytes: stat.size });
+    }
+    return {
+        ok: true,
+        local: true,
+        reason: safeReason,
+        completedAt: new Date().toISOString(),
+        directory: targetDir,
+        files: copied.length,
+        bytes,
+        copied
+    };
+}
+
+async function sendMaintenanceMessageToGuild(guild, message) {
+    if (!guild || !message) return { ok: false, guildId: guild?.id || null, error: 'Missing guild or message' };
+    await guild.channels?.fetch?.().catch(() => null);
+    const me = guild.members?.me || guild.members?.cache?.get?.(guild.client?.user?.id);
+    const candidates = [];
+    if (guild.systemChannel) candidates.push(guild.systemChannel);
+    if (guild.publicUpdatesChannel) candidates.push(guild.publicUpdatesChannel);
+    for (const channel of guild.channels?.cache?.values?.() || []) {
+        if (channel?.type === ChannelType.GuildText) candidates.push(channel);
+    }
+    const seen = new Set();
+    for (const channel of candidates) {
+        if (!channel || seen.has(channel.id) || typeof channel.send !== 'function') continue;
+        seen.add(channel.id);
+        const perms = me && typeof channel.permissionsFor === 'function' ? channel.permissionsFor(me) : null;
+        if (perms && (!perms.has(PermissionsBitField.Flags.ViewChannel) || !perms.has(PermissionsBitField.Flags.SendMessages))) continue;
+        const sent = await channel.send({ content: message }).then(() => true).catch(() => false);
+        if (sent) return { ok: true, guildId: guild.id, guildName: guild.name, channelId: channel.id, channelName: channel.name };
+    }
+    return { ok: false, guildId: guild.id, guildName: guild.name, error: 'No sendable public text channel found' };
+}
+
 async function handleApi(req, res, url, client, customBotManager = null) {
     const { pathname } = url;
     const method = req.method || 'GET';
@@ -2756,6 +2879,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             guilds,
             staffGuildId: STAFF_COMMUNITY_GUILD_ID,
             permissionMatrix: getStaffPermissionMatrix(),
+            backupStatus: megaBackup.getBackupStatus(),
             botConfig: {
                 homeImages: Array.isArray(activeStorage.botConfig?.homeImages) ? activeStorage.botConfig.homeImages : [],
                 tutorials: normalizeTutorials(activeStorage.botConfig?.tutorials),
@@ -2766,6 +2890,57 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             apiRequests: dashboardApiRequests.slice(-100).reverse(),
             staffAudit
         });
+        return true;
+    }
+
+    if (method === 'POST' && pathname === '/api/owner/backup') {
+        if (!isStrictOwnerViewer(req)) {
+            sendJson(res, 403, { error: 'Owner access required' });
+            return true;
+        }
+        const body = await readBody(req);
+        const reason = String(body.reason || 'owner-manual').trim() || 'owner-manual';
+        try {
+            const result = megaBackup.canUseMega()
+                ? await megaBackup.backupAllJsonNow(reason)
+                : await createLocalJsonBackup(reason);
+            recordStaffAuditEvent(req, {
+                action: 'owner.backup',
+                status: 'success',
+                detail: `${result.files || 0} file(s), ${result.bytes || 0} bytes${result.local ? ' local' : ' MEGA'}`
+            });
+            sendJson(res, 200, { ok: true, result, backupStatus: megaBackup.getBackupStatus() });
+        } catch (error) {
+            recordStaffAuditEvent(req, { action: 'owner.backup', status: 'error', detail: error?.message || String(error) });
+            sendJson(res, 500, { error: error?.message || 'Backup failed' });
+        }
+        return true;
+    }
+
+    if (method === 'POST' && pathname === '/api/owner/maintenance') {
+        if (!isStrictOwnerViewer(req)) {
+            sendJson(res, 403, { error: 'Owner access required' });
+            return true;
+        }
+        const body = await readBody(req);
+        const text = String(body.message || '').trim().slice(0, 1800);
+        if (!text) {
+            sendJson(res, 400, { error: 'Maintenance message is required.' });
+            return true;
+        }
+        const message = `**Maintenance Notice**\n${text}`;
+        const guilds = [...(client?.guilds?.cache?.values?.() || [])];
+        const results = [];
+        for (const guild of guilds) {
+            results.push(await sendMaintenanceMessageToGuild(guild, message));
+        }
+        const sent = results.filter(item => item.ok).length;
+        recordStaffAuditEvent(req, {
+            action: 'owner.maintenance',
+            status: sent ? 'success' : 'error',
+            detail: `Sent to ${sent}/${results.length} server(s)`
+        });
+        sendJson(res, 200, { ok: true, sent, failed: results.length - sent, results });
         return true;
     }
 
@@ -4021,7 +4196,7 @@ function pageDescriptionForPath(path) {
         '/panels': 'Design and publish channel-specific ticket panels.',
         '/embed-editor': 'Customize server branding and reusable bot message templates.',
         '/pricing': 'Compare plans and see what is available for this server.',
-        '/upgrade': 'Upgrade to Plus or contact sales for Pro plans.',
+        '/upgrade': 'Upgrade to Plus or Pro as one-time purchases, or contact sales for Enterprise.',
         '/documentation': 'Reference placeholders, templates, and dashboard usage notes.'
     };
     return map[path] || 'Manage this part of the dashboard with a simpler, more focused layout.';
@@ -4574,6 +4749,7 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
 .pricing-card.featured{border:1px solid rgba(56,189,248,.45);box-shadow:0 0 0 1px rgba(56,189,248,.16),0 28px 80px rgba(56,189,248,.08);transform:scale(1.02);}
 .pricing-card .plan-name{font-size:22px;font-weight:800;letter-spacing:.02em;}
 .pricing-card .plan-price{font-size:42px;font-weight:900;line-height:1;}
+.pricing-card .plan-once{display:block;margin-top:6px;color:var(--mt);font-size:12px;font-weight:800;line-height:1.25;text-transform:uppercase;letter-spacing:.08em;}
 .pricing-card .plan-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;background:rgba(56,189,248,.12);color:var(--acc);}
 .pricing-card .plan-note{color:var(--mt);font-size:13px;line-height:1.6;}
 .pricing-card .plan-action{margin-top:auto;}
@@ -4823,6 +4999,7 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
 <body>
  <div id="auth" class="auth"><div class="auth-card"><h3>Dashboard Login</h3><div class="muted" style="margin-bottom:10px">Sign in with Discord to continue.</div><a id="authDiscord" class="btn" href="/login" style="display:block;text-align:center;text-decoration:none">Sign in with Discord</a><div class="muted" style="margin:12px 0 6px">or use a token</div><label>Token</label><input id="authToken" type="password" /><div class="row" style="margin-top:10px"><button id="authLogin" class="btn">Login</button></div><div id="authMsg" class="notice danger"></div></div></div>
  <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">${pageDescriptionForPath(currentPath)}</div></div></div><div class="topbar-right"><a class="btn-soft server-icon-btn" href="/dashboard" title="Servers" aria-label="Servers"><span class="btn-icon">${dashboardIcon('servers')}</span></a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu"><div class="topnav-group"><div class="topnav-group-title">General</div>${topNavItem('/overview','Home','General','Snapshot and quick actions')}${topNavItem('/settings','Settings','General','Core config and routing')}${topNavItem('/availability','Availability','General','Queue status and overrides')}${topNavItem('/tutorials','Tutorials','General','Guides and walkthroughs')}</div><div class="topnav-group"><div class="topnav-group-title">Tickets</div>${topNavItem('/tickets','Tickets','Tickets','Active queue management')}${topNavItem('/transcripts','Transcripts','Tickets','Saved conversation history')}${topNavItem('/commands/ticket-types','Ticket Types','Tickets','Flow design and coverage')}${topNavItem('/panels','Panels','Tickets','Panel design and publishing')}${topNavItem('/commands/tag','Tags','Tickets','Reusable staff replies')}</div><div class="topnav-group"><div class="topnav-group-title">Tools</div>${topNavItem('/commands/feedback','Feedback','Content','Feedback destination and flow')}${topNavItem('/statistics','Statistics','Content','Trends and activity')}${topNavItem('/embed-editor','Branding','Custom','White-label identity')}${topNavItem('/documentation','Documentation','Content','Reference notes and placeholders')}</div><div class="topnav-group"><div class="topnav-group-title">Plans</div>${topNavItem('/pricing','Pricing','Billing','Plans and access')}${topNavItem('/upgrade','Upgrade','Billing','Upgrade options and sales')}</div></div></div><div id="themeNav" class="topnav"><button id="themeBtn" class="btn-soft topnav-btn" type="button"><span id="themeLabel">Theme</span><span class="chev">v</span></button><div class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-theme-item="dark">Dark <span class="tag">Default</span></button><button type="button" class="topnav-item" data-theme-item="light">Light <span class="tag">Clean</span></button><button type="button" class="topnav-item" data-theme-item="ocean">Ocean <span class="tag">Cool</span></button><button type="button" class="topnav-item" data-theme-item="sunset">Sunset <span class="tag">Bold</span></button><button type="button" class="topnav-item" data-theme-item="diamond">Diamond <span class="tag">Custom</span></button><button type="button" class="topnav-item theme-secret" data-theme-item="hacker">Hacker <span class="tag">Secret</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px"><span class="btn-icon">${dashboardIcon('restart')}</span><span>Refresh</span></button></div></div><div id="announcementBar"></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
+<script>${pricingLocalizationScript()}</script>
 <script>
  let currentPath=${JSON.stringify(currentPath)},tokenKey='dashboard_token_ui',defaultEmbedTemplates=${JSON.stringify(DEFAULT_EMBED_TEMPLATES)};
 const app=document.getElementById('app'),notice=document.getElementById('notice'),auth=document.getElementById('auth'),authDiscord=document.getElementById('authDiscord'),authToken=document.getElementById('authToken'),authMsg=document.getElementById('authMsg');
@@ -5231,19 +5408,19 @@ function renderBranding(){const templates=state.botConfig.embedTemplates||defaul
  '<div class="card"><h3>Message Template</h3><div class="item" style="margin-bottom:12px"><div class="muted">Use <code>[[divider]]</code>, <code>[[divider:large]]</code>, <code>[[space]]</code>, or <code>[[space:large]]</code> on their own line for Components V2 spacing.</div></div><div class="row"><div><label>Template</label><select id="brandingKey">'+keys.map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join('')+'</select></div><div><label>Accent Color</label><input id="brandingColor" value="'+esc(first.color||'#5865F2')+'" placeholder="#5865F2" maxlength="16" /></div></div><label>Title</label><input id="brandingTitle" value="'+esc(first.title||'')+'" maxlength="180" /><label>Description</label><textarea id="brandingDescription" style="min-height:180px">'+esc(first.description||'')+'</textarea><div class="row" style="margin-top:10px"><button id="applyBrandingTemplate" class="btn-soft">Apply Template</button><button id="saveBranding" class="btn">Save Templates</button></div><div class="row" style="margin-top:10px"><button id="resetBrandingDefaults" class="btn-soft">Reset Defaults</button><button id="formatBrandingJson" class="btn-soft">Format JSON</button></div></div>'+
  '<div class="card"><h3>Live Preview</h3><div class="preview-shell"><div class="preview-msg"><div class="preview-avatar" id="brandingPreviewAvatar"></div><div class="preview-content"><div class="preview-name" id="brandingPreviewName">'+esc(brand.botName||customBot.botName||'Tickets Bot')+' <span class="preview-tag">BOT</span></div><div id="brandingPreviewEmbed" class="preview-embed"><div id="brandingPreviewBar" class="preview-bar"></div><div class="preview-main"><div id="brandingPreviewTitle" class="preview-title"></div><div id="brandingPreviewDesc" class="preview-desc"></div></div></div></div></div></div><details class="acc" style="margin-top:14px"><summary><span>Advanced JSON</span><span class="pill">Optional</span></summary><div class="acc-body"><textarea id="brandingTemplates" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(templates,null,2))+'</textarea></div></details></div>'+
 '</div>'}
-function renderPricing(){const plans=[{name:'Free',price:'$0',description:'Core support tools for getting started',features:['Unlimited tickets','Ticket panels','Logs and transcripts','Dashboard access'],active:true},{name:'Plus',price:'£8.99',description:'Better visibility for growing teams',features:['Statistics','Staff activity tracking','Priority support','Everything in Free'],featured:true},{name:'Pro',price:'£14.99',description:'Automation for busier support teams',features:['AI moderation','Advanced analytics','Higher automation limits','Everything in Plus']},{name:'Enterprise',price:'Custom',description:'Custom branded bot and guided setup',features:['Custom bot runtime','Developer Portal guidance','Webhook monitoring','Everything in Pro']}];const rows=[['Tickets','Yes','Yes','Yes','Yes'],['Panels','Yes','Yes','Yes','Yes'],['Logs and Transcripts','Yes','Yes','Yes','Yes'],['Statistics','No','Yes','Yes','Yes'],['AI Moderation','No','No','Yes','Yes'],['Custom Branded Bot','No','No','No','Yes'],['Priority Support','No','Yes','Yes','Yes']];const faqs=[{q:'Can I start on Free and upgrade later?','a':'Yes. Free is available immediately and upgrades keep your configuration.'},{q:'What does Plus add?','a':'Plus focuses on statistics, staff activity, and stronger operational visibility.'},{q:'What does Pro add?','a':'Pro adds AI moderation and advanced automation for busier support teams.'},{q:'What is Enterprise?','a':'Enterprise is the custom plan with branded bot runtime setup, monitoring, and guided Developer Portal configuration.'}];return '<div class="page-shell pricing-page">'+
+function renderPricing(){const priceHtml=plan=>Number.isFinite(plan.gbp)?'<span class="localized-price" data-price-gbp="'+plan.gbp.toFixed(2)+'">&pound;'+plan.gbp.toFixed(2)+'</span><span class="plan-once">one-time payment</span>':esc(plan.price);const plans=[{name:'Free',price:'Free',description:'Core support tools for getting started',features:['Unlimited tickets','Ticket panels','Logs and transcripts','Dashboard access'],active:true},{name:'Plus',price:'&pound;8.99',gbp:8.99,description:'Better visibility for growing teams',features:['Statistics','Staff activity tracking','Priority support','Everything in Free'],featured:true},{name:'Pro',price:'&pound;14.99',gbp:14.99,description:'Automation for busier support teams',features:['AI moderation','Advanced analytics','Higher automation limits','Everything in Plus']},{name:'Enterprise',price:'Custom',description:'Custom branded bot and guided setup',features:['Custom bot runtime','Developer Portal guidance','Webhook monitoring','Everything in Pro']}];const rows=[['Tickets','Yes','Yes','Yes','Yes'],['Panels','Yes','Yes','Yes','Yes'],['Logs and Transcripts','Yes','Yes','Yes','Yes'],['Statistics','No','Yes','Yes','Yes'],['AI Moderation','No','No','Yes','Yes'],['Custom Branded Bot','No','No','No','Yes'],['Priority Support','No','Yes','Yes','Yes']];const faqs=[{q:'Can I start on Free and upgrade later?','a':'Yes. Free is available immediately and upgrades keep your configuration.'},{q:'Are Plus and Pro monthly?','a':'No. Plus and Pro are one-time payments, shown in your local currency when possible.'},{q:'What does Pro add?','a':'Pro adds AI moderation and advanced automation for busier support teams.'},{q:'What is Enterprise?','a':'Enterprise is the custom plan with branded bot runtime setup, monitoring, and guided Developer Portal configuration.'}];return '<div class="page-shell pricing-page">'+
     '<section class="pricing-hero card"><div class="row" style="align-items:flex-start;gap:24px"><div style="max-width:640px"><div class="page-kicker">Pricing</div><h3 style="margin:0 0 14px">Plans for ticket support and staff operations.</h3><p class="muted" style="max-width:620px">Pick the right plan for your community: Free, Plus, Pro, or Enterprise for fully custom branded bot operations.</p><div class="row" style="gap:10px;flex-wrap:wrap;margin-top:22px"><a class="btn primary" href="#plans">View plans</a><a class="btn-soft" href="#faq">Read FAQ</a></div></div><div class="pricing-hero-stats"><div class="pricing-stat"><strong>4 plans</strong><span>Free, Plus, Pro, and Enterprise</span></div><div class="pricing-stat"><strong>Custom bots</strong><span>Enterprise includes branded runtime monitoring</span></div></div></div></section>'+ 
     '<section id="plans" class="grid pricing-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));gap:18px">'+
-      plans.map(plan=>'<div class="pricing-card'+(plan.featured?' featured':'')+'"><div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px"><div><div class="plan-name">'+esc(plan.name)+'</div><div class="plan-note">'+esc(plan.description)+'</div></div>'+(plan.featured?'<span class="plan-badge">Most Popular</span>':'')+'</div><div class="plan-price">'+esc(plan.price)+'</div><div class="pricing-feature-list">'+plan.features.map(feature=>'<div class="pricing-feature"><span class="dot"></span><div>'+esc(feature)+'</div></div>').join('')+'</div><div class="plan-action">'+(plan.active?'<button class="btn" type="button">Current plan</button>':(plan.name==='Enterprise'?'<button class="btn-soft" type="button">Contact sales</button>':'<button class="btn" type="button">Upgrade</button>'))+'</div></div>').join('')+
+      plans.map(plan=>'<div class="pricing-card'+(plan.featured?' featured':'')+'"><div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px"><div><div class="plan-name">'+esc(plan.name)+'</div><div class="plan-note">'+esc(plan.description)+'</div></div>'+(plan.featured?'<span class="plan-badge">Most Popular</span>':'')+'</div><div class="plan-price">'+priceHtml(plan)+'</div><div class="pricing-feature-list">'+plan.features.map(feature=>'<div class="pricing-feature"><span class="dot"></span><div>'+esc(feature)+'</div></div>').join('')+'</div><div class="plan-action">'+(plan.active?'<button class="btn" type="button">Current plan</button>':(plan.name==='Enterprise'?'<button class="btn-soft" type="button">Contact sales</button>':'<button class="btn" type="button">Upgrade</button>'))+'</div></div>').join('')+
     '</section>'+ 
     '<section class="pricing-table card"><h3 style="margin:0 0 16px">Compare plans</h3><div style="overflow-x:auto"><table><thead><tr><th style="min-width:220px">Feature</th><th>Free</th><th>Plus</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody>'+rows.map(row=>'<tr><td>'+esc(row[0])+'</td><td class="'+(row[1]==='Yes'?'active':'')+'">'+esc(row[1])+'</td><td class="'+(row[2]==='Yes'?'active':'')+'">'+esc(row[2])+'</td><td class="'+(row[3]==='Yes'?'active':'')+'">'+esc(row[3])+'</td><td class="'+(row[4]==='Yes'?'active':'')+'">'+esc(row[4])+'</td></tr>').join('')+'</tbody></table></div></section>'+ 
     '<section id="faq" class="pricing-faq">'+faqs.map(item=>'<div class="faq-item"><strong>'+esc(item.q)+'</strong><p class="muted" style="margin:10px 0 0">'+esc(item.a)+'</p></div>').join('')+'</section>'+ 
     '<section class="pricing-cta card"><div style="max-width:760px;margin:0 auto"><div class="page-kicker">Ready to choose?</div><h3 style="margin:0 0 12px">Start with a plan that fits your team.</h3><p class="muted">Keep ticket flow clean, staff handoffs simple, and branded bot operations centralized.</p><div class="row" style="justify-content:center;gap:12px;margin-top:20px;flex-wrap:wrap"><button class="btn primary" type="button">Upgrade to Plus</button><button class="btn-soft" type="button">Discuss Enterprise</button></div></div></section>'+ 
   '</div>'}
 function renderUpgrade(){return '<div class="grid">'+
-    '<div class="card"><h3>Free</h3><p class="muted">Core ticket workflows, panels, logs, and transcripts.</p></div>'+ 
-    '<div class="card"><h3>Plus</h3><p class="muted">Statistics, staff activity, and priority support for growing teams.</p><div style="margin-top:12px" class="row"><button class="btn primary">Upgrade to Plus</button></div></div>'+ 
-    '<div class="card"><h3>Pro</h3><p class="muted">AI moderation and advanced automation for busier support teams.</p><div style="margin-top:12px"><ul><li>AI moderation</li><li>Advanced analytics</li><li>Higher automation limits</li><li>Everything in Plus</li></ul></div></div>'+ 
+    '<div class="card"><h3>Free</h3><div class="plan-price">&pound;0</div><p class="muted">Core ticket workflows, panels, logs, and transcripts.</p></div>'+ 
+    '<div class="card"><h3>Plus</h3><div class="plan-price"><span class="localized-price" data-price-gbp="8.99">&pound;8.99</span><span class="plan-once">one-time payment</span></div><p class="muted">Statistics, staff activity, and priority support for growing teams.</p><div style="margin-top:12px" class="row"><button class="btn primary">Upgrade to Plus</button></div></div>'+ 
+    '<div class="card"><h3>Pro</h3><div class="plan-price"><span class="localized-price" data-price-gbp="14.99">&pound;14.99</span><span class="plan-once">one-time payment</span></div><p class="muted">AI moderation and advanced automation for busier support teams.</p><div style="margin-top:12px"><ul><li>AI moderation</li><li>Advanced analytics</li><li>Higher automation limits</li><li>Everything in Plus</li></ul></div></div>'+ 
     '<div class="card"><h3>Enterprise</h3><p class="muted">Custom branded bot runtime with guided Developer Portal setup and webhook monitoring.</p><div style="margin-top:12px"><ul><li>Custom bot instance</li><li>Command sync monitoring</li><li>Startup reporting</li><li>Everything in Pro</li></ul></div><div style="margin-top:12px" class="row"><button class="btn-soft">Contact Sales</button></div></div>'+ 
   '</div>'}function renderTutorials(){
  const tutorials=Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[];
@@ -5660,7 +5837,7 @@ function renderPageHero(path){
  else if(access.isStaff)chips.push('<span class="pill">Staff access</span>');
  return '<div class="card page-hero"><div class="page-hero-head"><div><div class="page-kicker">Module</div><h3>'+esc(title)+'</h3><p>'+esc(desc)+'</p></div><div class="page-pill-row">'+chips.join('')+'</div></div></div>';
 }
-function render(){const access=(state&&state.access)||{};const plan=(state&&state.aiAccess)||{};const allowed=new Set(['/documentation','/tutorials','/pricing','/upgrade','/privacy','/terms']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/panels','/commands/tag','/tickets','/transcripts','/commands/feedback','/pricing','/upgrade'].forEach(p=>allowed.add(p));if(plan.isPlusOrHigher)allowed.add('/statistics');if(plan.isCustom)allowed.add('/embed-editor')}else{if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types');allowed.add('/panels');if(plan.isCustom)allowed.add('/embed-editor')}if(plan.isPlusOrHigher&&access.canManageTicketTypes)allowed.add('/statistics');if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This module is not available for your current role or server plan.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderPageHero(currentPath)+renderSettings();else if(currentPath==='/availability')html=renderPageHero(currentPath)+renderAvailability();else if(currentPath==='/tutorials')html=renderPageHero(currentPath)+renderTutorials();else if(currentPath==='/commands/ticket-types')html=renderPageHero(currentPath)+renderTypes();else if(currentPath==='/panels')html=renderPageHero(currentPath)+renderPanels();else if(currentPath==='/commands/tag')html=renderPageHero(currentPath)+renderTags();else if(currentPath==='/tickets')html=renderPageHero(currentPath)+renderTickets();else if(currentPath==='/transcripts')html=renderPageHero(currentPath)+renderTranscripts();else if(currentPath==='/commands/feedback')html=renderPageHero(currentPath)+renderFeedback();else if(currentPath==='/commands/appeal')html=renderPageHero(currentPath)+renderAppeal();else if(currentPath==='/statistics')html=renderPageHero(currentPath)+renderStats();else if(currentPath==='/embed-editor')html=renderPageHero(currentPath)+renderBranding();else if(currentPath==='/pricing')html=renderPageHero(currentPath)+renderPricing();else if(currentPath==='/upgrade')html=renderPageHero(currentPath)+renderUpgrade();else html=renderPageHero(currentPath)+renderDocs();document.title=${JSON.stringify(BRAND_NAME + ' - ')}+({"/overview":"Home","/settings":"Settings","/availability":"Availability","/tutorials":"Tutorials","/commands/ticket-types":"Ticket Types","/panels":"Panels","/commands/tag":"Tags","/tickets":"Tickets","/transcripts":"Transcripts","/commands/feedback":"Feedback","/statistics":"Statistics","/embed-editor":"Branding","/pricing":"Pricing","/upgrade":"Upgrade","/documentation":"Documentation","/privacy":"Privacy","/terms":"Terms"}[currentPath]||'Dashboard');renderAnnouncementBar();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire()})})}
+function render(){const access=(state&&state.access)||{};const plan=(state&&state.aiAccess)||{};const allowed=new Set(['/documentation','/tutorials','/pricing','/upgrade','/privacy','/terms']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/panels','/commands/tag','/tickets','/transcripts','/commands/feedback','/pricing','/upgrade'].forEach(p=>allowed.add(p));if(plan.isPlusOrHigher)allowed.add('/statistics');if(plan.isCustom)allowed.add('/embed-editor')}else{if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types');allowed.add('/panels');if(plan.isCustom)allowed.add('/embed-editor')}if(plan.isPlusOrHigher&&access.canManageTicketTypes)allowed.add('/statistics');if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This module is not available for your current role or server plan.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderPageHero(currentPath)+renderSettings();else if(currentPath==='/availability')html=renderPageHero(currentPath)+renderAvailability();else if(currentPath==='/tutorials')html=renderPageHero(currentPath)+renderTutorials();else if(currentPath==='/commands/ticket-types')html=renderPageHero(currentPath)+renderTypes();else if(currentPath==='/panels')html=renderPageHero(currentPath)+renderPanels();else if(currentPath==='/commands/tag')html=renderPageHero(currentPath)+renderTags();else if(currentPath==='/tickets')html=renderPageHero(currentPath)+renderTickets();else if(currentPath==='/transcripts')html=renderPageHero(currentPath)+renderTranscripts();else if(currentPath==='/commands/feedback')html=renderPageHero(currentPath)+renderFeedback();else if(currentPath==='/commands/appeal')html=renderPageHero(currentPath)+renderAppeal();else if(currentPath==='/statistics')html=renderPageHero(currentPath)+renderStats();else if(currentPath==='/embed-editor')html=renderPageHero(currentPath)+renderBranding();else if(currentPath==='/pricing')html=renderPageHero(currentPath)+renderPricing();else if(currentPath==='/upgrade')html=renderPageHero(currentPath)+renderUpgrade();else html=renderPageHero(currentPath)+renderDocs();document.title=${JSON.stringify(BRAND_NAME + ' - ')}+({"/overview":"Home","/settings":"Settings","/availability":"Availability","/tutorials":"Tutorials","/commands/ticket-types":"Ticket Types","/panels":"Panels","/commands/tag":"Tags","/tickets":"Tickets","/transcripts":"Transcripts","/commands/feedback":"Feedback","/statistics":"Statistics","/embed-editor":"Branding","/pricing":"Pricing","/upgrade":"Upgrade","/documentation":"Documentation","/privacy":"Privacy","/terms":"Terms"}[currentPath]||'Dashboard');renderAnnouncementBar();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire();if(window.localizePlanPrices)window.localizePlanPrices()})})}
 function showUpgradeCelebration(plan){const label=String(plan||'Plus');let overlay=document.getElementById('upgradeOverlay');if(!overlay){overlay=document.createElement('div');overlay.id='upgradeOverlay';overlay.className='upgrade-overlay';overlay.innerHTML='<canvas class="upgrade-confetti" id="upgradeConfetti"></canvas><div class="upgrade-card"><div class="page-kicker">Upgrade complete</div><h2 id="upgradeTitle"></h2><div class="muted">You\\'ve unlocked:</div><ul id="upgradeList"></ul><button class="btn" id="upgradeClose" style="margin-top:18px">Continue</button></div>';document.body.appendChild(overlay)}const title=document.getElementById('upgradeTitle');const list=document.getElementById('upgradeList');if(title)title.textContent='You\\'ve upgraded to '+label+'!';const items=label==='Custom'?['White-label bot branding','Diamond dashboard theme','Custom bot instance controls','Everything in Plus and Pro']:label==='Pro'?['Statistics','Advanced operations','Priority support controls']:['Statistics','Improved analytics','Premium dashboard modules'];if(list)list.innerHTML=items.map(x=>'<li>'+esc(x)+'</li>').join('');overlay.classList.add('show');const canvas=document.getElementById('upgradeConfetti');if(canvas&&canvas.getContext){const ctx=canvas.getContext('2d');const dpr=Math.max(1,window.devicePixelRatio||1);canvas.width=Math.floor(window.innerWidth*dpr);canvas.height=Math.floor(window.innerHeight*dpr);canvas.style.width=window.innerWidth+'px';canvas.style.height=window.innerHeight+'px';ctx.setTransform(dpr,0,0,dpr,0,0);const pieces=Array.from({length:180},(_,i)=>({x:Math.random()*window.innerWidth,y:window.innerHeight+Math.random()*80,vx:(Math.random()-.5)*5,vy:-(4+Math.random()*7),g:.08+Math.random()*.04,s:5+Math.random()*9,r:Math.random()*6,c:['#67e8f9','#d9f99d','#fef08a','#c4b5fd','#f8fafc'][i%5]}));let frame=0;(function tick(){ctx.clearRect(0,0,window.innerWidth,window.innerHeight);pieces.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=p.g;p.r+=.12;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.r);ctx.fillStyle=p.c;ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s*.65);ctx.restore()});frame++;if(frame<210&&overlay.classList.contains('show'))requestAnimationFrame(tick);else ctx.clearRect(0,0,window.innerWidth,window.innerHeight)})()}const close=document.getElementById('upgradeClose');if(close)close.onclick=()=>overlay.classList.remove('show')}
 function handlePlanExperience(){const plan=(state&&state.aiAccess)||{};if(!plan.hasAccess||!plan.grantedAt)return;const key='dash_upgrade_seen_'+String(state.guildId||'global');const marker=String(plan.plan||'')+'@'+String(plan.grantedAt||'');try{if(localStorage.getItem(key)!==marker){localStorage.setItem(key,marker);showUpgradeCelebration(plan.planLabel||'upgrade')}}catch{}}
 async function boot(){state=await api('/api/state'+(location.search||''));handlePlanExperience();render()}
@@ -5757,7 +5934,7 @@ function startDashboard(client, customBotManager = null) {
                     res.end();
                     return;
                 }
-                if (!isBotOwnerUser(req)) {
+                if (!isStrictOwnerViewer(req)) {
                     sendHtml(res, 403, '<h1>403</h1><p>Owner user only.</p>');
                     return;
                 }
@@ -5772,7 +5949,7 @@ function startDashboard(client, customBotManager = null) {
                     res.end();
                     return;
                 }
-                if (!isBotOwnerUser(req)) {
+                if (!isStrictOwnerViewer(req)) {
                     sendHtml(res, 403, '<h1>403</h1><p>Owner user only.</p>');
                     return;
                 }
@@ -5867,9 +6044,9 @@ function startDashboard(client, customBotManager = null) {
                                 </div>
                             </section>
                             <section id="plans" class="pricing-grid">
-                                <div class="pricing-card"><div class="plan-top"><div><div class="plan-name">Free</div><div class="plan-note">Core ticket workflows.</div></div></div><div class="plan-price">$0</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>Unlimited Tickets</div><div class="pricing-feature"><span class="dot"></span>Custom Panels</div><div class="pricing-feature"><span class="dot"></span>Logs and Transcripts</div></div><a class="btn" href="/dashboard">Get started</a></div>
-                                <div class="pricing-card featured"><div class="plan-top"><div><div class="plan-name">Plus</div><div class="plan-note">Better visibility for growing teams.</div></div><span class="plan-badge">Most Popular</span></div><div class="plan-price">$12/mo</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>Statistics</div><div class="pricing-feature"><span class="dot"></span>Staff Activity</div><div class="pricing-feature"><span class="dot"></span>Priority Support</div><div class="pricing-feature"><span class="dot"></span>Everything in Free</div></div><a class="btn primary" href="/upgrade">Upgrade</a></div>
-                                <div class="pricing-card"><div class="plan-top"><div><div class="plan-name">Pro</div><div class="plan-note">Automation for busier support teams.</div></div></div><div class="plan-price">$24/mo</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>AI Moderation</div><div class="pricing-feature"><span class="dot"></span>Advanced Analytics</div><div class="pricing-feature"><span class="dot"></span>Higher Automation Limits</div><div class="pricing-feature"><span class="dot"></span>Everything in Plus</div></div><a class="btn" href="/upgrade">Upgrade</a></div>
+                                <div class="pricing-card"><div class="plan-top"><div><div class="plan-name">Free</div><div class="plan-note">Core ticket workflows.</div></div></div><div class="plan-price">&pound;0</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>Unlimited Tickets</div><div class="pricing-feature"><span class="dot"></span>Custom Panels</div><div class="pricing-feature"><span class="dot"></span>Logs and Transcripts</div></div><a class="btn" href="/dashboard">Get started</a></div>
+                                <div class="pricing-card featured"><div class="plan-top"><div><div class="plan-name">Plus</div><div class="plan-note">Better visibility for growing teams.</div></div><span class="plan-badge">Most Popular</span></div><div class="plan-price">${planPriceHtml('plus')}</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>Statistics</div><div class="pricing-feature"><span class="dot"></span>Staff Activity</div><div class="pricing-feature"><span class="dot"></span>Priority Support</div><div class="pricing-feature"><span class="dot"></span>Everything in Free</div></div><a class="btn primary" href="/upgrade">Upgrade</a></div>
+                                <div class="pricing-card"><div class="plan-top"><div><div class="plan-name">Pro</div><div class="plan-note">Automation for busier support teams.</div></div></div><div class="plan-price">${planPriceHtml('pro')}</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>AI Moderation</div><div class="pricing-feature"><span class="dot"></span>Advanced Analytics</div><div class="pricing-feature"><span class="dot"></span>Higher Automation Limits</div><div class="pricing-feature"><span class="dot"></span>Everything in Plus</div></div><a class="btn" href="/upgrade">Upgrade</a></div>
                                 <div class="pricing-card"><div class="plan-top"><div><div class="plan-name">Enterprise</div><div class="plan-note">Custom branded bot and guided setup.</div></div></div><div class="plan-price">Custom</div><div class="pricing-feature-list"><div class="pricing-feature"><span class="dot"></span>Custom Bot Runtime</div><div class="pricing-feature"><span class="dot"></span>Developer Portal Guidance</div><div class="pricing-feature"><span class="dot"></span>Webhook Monitoring</div><div class="pricing-feature"><span class="dot"></span>Everything in Pro</div></div><a class="btn" href="/upgrade">Contact sales</a></div>
                             </section>
                             <section class="pricing-table card">
@@ -5884,6 +6061,7 @@ function startDashboard(client, customBotManager = null) {
                             </section>
                             <section id="faq" class="pricing-faq">
                                 <div class="faq-item"><strong>Can I upgrade later?</strong><p class="muted">Yes. Start free and upgrade without losing your dashboard setup.</p></div>
+                                <div class="faq-item"><strong>Are Plus and Pro monthly?</strong><p class="muted">No. Plus and Pro are one-time payments. Prices are displayed in your local currency where possible.</p></div>
                                 <div class="faq-item"><strong>What does Plus add?</strong><p class="muted">Statistics, staff activity, and priority support.</p></div>
                                 <div class="faq-item"><strong>What does Pro add?</strong><p class="muted">AI moderation and advanced automation for busier teams.</p></div>
                                 <div class="faq-item"><strong>What is Enterprise?</strong><p class="muted">Enterprise adds the custom branded bot runtime and guided setup.</p></div>
@@ -5899,7 +6077,7 @@ function startDashboard(client, customBotManager = null) {
                     title: 'Upgrade',
                     body: '<section class="card upgrade-reward">' +
                         '<div class="upgrade-word w1">FREE</div><div class="upgrade-word w2">PLUS</div><div class="upgrade-word w3">PRO</div><div class="upgrade-word w4">ENTERPRISE</div>' +
-                        '<div style="position:relative;z-index:1;max-width:900px"><div class="pricing-kicker">Upgrade options</div><h1 style="font-size:clamp(38px,6vw,72px);line-height:1;margin:0 0 14px">Choose your next support tier.</h1><p class="muted" style="font-size:16px">Free keeps tickets running. Plus adds visibility. Pro adds automation. Enterprise adds the custom branded bot runtime and guided setup.</p><div class="pricing-grid" style="margin-top:24px;text-align:left"><div class="pricing-card"><div class="plan-name">Free</div><div class="plan-price">$0</div><div class="plan-note">Tickets, panels, logs, and transcripts.</div></div><div class="pricing-card featured"><div class="plan-name">Plus</div><div class="plan-price">$12/mo</div><div class="plan-note">Statistics, staff activity, and priority support.</div></div><div class="pricing-card"><div class="plan-name">Pro</div><div class="plan-price">$24/mo</div><div class="plan-note">AI moderation and advanced automation.</div></div><div class="pricing-card"><div class="plan-name">Enterprise</div><div class="plan-price">Custom</div><div class="plan-note">Custom branded bot runtime and monitoring.</div></div></div><div class="row" style="justify-content:center;margin-top:24px"><a class="btn primary" href="https://discord.gg/JSUX9GQP6J" target="_blank" rel="noreferrer">Contact us in support</a><a class="btn-soft" href="/pricing">Compare plans</a></div></div>' +
+                        '<div style="position:relative;z-index:1;max-width:900px"><div class="pricing-kicker">Upgrade options</div><h1 style="font-size:clamp(38px,6vw,72px);line-height:1;margin:0 0 14px">Choose your next support tier.</h1><p class="muted" style="font-size:16px">Free keeps tickets running. Plus adds visibility. Pro adds automation. Enterprise adds the custom branded bot runtime and guided setup.</p><div class="pricing-grid" style="margin-top:24px;text-align:left"><div class="pricing-card"><div class="plan-name">Free</div><div class="plan-price">&pound;0</div><div class="plan-note">Tickets, panels, logs, and transcripts.</div></div><div class="pricing-card featured"><div class="plan-name">Plus</div><div class="plan-price">' + planPriceHtml('plus') + '</div><div class="plan-note">Statistics, staff activity, and priority support.</div></div><div class="pricing-card"><div class="plan-name">Pro</div><div class="plan-price">' + planPriceHtml('pro') + '</div><div class="plan-note">AI moderation and advanced automation.</div></div><div class="pricing-card"><div class="plan-name">Enterprise</div><div class="plan-price">Custom</div><div class="plan-note">Custom branded bot runtime and monitoring.</div></div></div><div class="row" style="justify-content:center;margin-top:24px"><a class="btn primary" href="https://discord.gg/JSUX9GQP6J" target="_blank" rel="noreferrer">Contact us in support</a><a class="btn-soft" href="/pricing">Compare plans</a></div></div>' +
                     '</section>',
                     ownerView: false,
                     showStaffLink: false
