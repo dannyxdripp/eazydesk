@@ -5274,7 +5274,7 @@ function renderUpgrade(){return '<div class="grid">'+
 function renderDocs(){
  const rows=[['{ticketType}','Ticket type name'],['{requester}','User mention'],['{username}','Requester username'],['{userId}','Requester ID'],['{reason}','Open reason'],['{timestamp}','Discord timestamp'],['{timestampIso}','ISO timestamp'],['{date}','Date YYYY-MM-DD'],['{time}','Time HH:mm:ss UTC'],['{channel}','Ticket channel mention'],['{channelId}','Ticket channel ID']];
  const docsSections=Array.isArray(state&&state.botConfig&&state.botConfig.docsSections)?state.botConfig.docsSections:[];
- const oauthRedirect=String((state&&state.publicBaseUrl)||'').replace(/\/+$/,'')+'/auth/discord/callback';
+ const oauthRedirect=String((state&&state.publicBaseUrl)||'').replace(/\\/+$/,'')+'/auth/discord/callback';
  const embedExample=esc(JSON.stringify({content:'Optional message content',embeds:[{title:'Embed title',description:'Embed description',color:5793266,thumbnail:{url:'https://example.com/thumb.png'},image:{url:'https://example.com/image.png'},footer:{text:'Footer text'}}]},null,2));
  const attachmentExample=esc(JSON.stringify({content:'Image from attachment',embeds:[{title:'Proof',image:{url:'attachment://proof.png'}}]},null,2));
  const sepExample=esc('## Title\\n\\nFirst paragraph.\\n\\n[[divider]]\\n\\nSecond paragraph.\\n\\n[[space:large]]\\n\\nThird paragraph.');
