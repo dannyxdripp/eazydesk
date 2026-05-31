@@ -19,6 +19,21 @@ function getIntervalMs() {
     return Math.max(15000, Number(process.env.CUSTOM_BOT_SYNC_INTERVAL_MS || 30000));
 }
 
+function getOfficialBotInviteUrl(guildId = '') {
+    const clientId = String(process.env.APP_ID || process.env.APPLICATION_ID || process.env.DISCORD_CLIENT_ID || '').trim();
+    if (!/^\d{17,20}$/.test(clientId)) return 'https://discord.com/developers/applications';
+    const url = new URL('https://discord.com/oauth2/authorize');
+    url.searchParams.set('client_id', clientId);
+    url.searchParams.set('scope', 'bot applications.commands');
+    url.searchParams.set('permissions', String(process.env.BOT_INVITE_PERMISSIONS || '311653682192'));
+    const id = String(guildId || '').trim();
+    if (/^\d{17,20}$/.test(id)) {
+        url.searchParams.set('guild_id', id);
+        url.searchParams.set('disable_guild_select', 'true');
+    }
+    return url.toString();
+}
+
 function isEligible(access) {
     const customBot = access?.customBot && typeof access.customBot === 'object' ? access.customBot : {};
     return ['custom', 'custom_trial'].includes(String(access?.plan || '')) &&
@@ -50,14 +65,18 @@ function patchCustomBot(guildId, patch) {
 async function deployCommands(token, appId, guildId) {
     if (!appId || !commandPayloads.length) return { global: false, guild: false, count: 0 };
     const rest = new REST({ version: '10' }).setToken(token);
+    const deployGlobal = process.env.CUSTOM_BOT_DEPLOY_GLOBAL_COMMANDS === 'true';
     if (guildId) {
         await rest.put(Routes.applicationGuildCommands(appId, guildId), { body: commandPayloads });
     }
-    if (process.env.CUSTOM_BOT_DEPLOY_GLOBAL_COMMANDS !== 'false') {
+    if (deployGlobal) {
         await rest.put(Routes.applicationCommands(appId), { body: commandPayloads });
+    } else if (process.env.CUSTOM_BOT_CLEAR_GLOBAL_COMMANDS !== 'false') {
+        await rest.put(Routes.applicationCommands(appId), { body: [] });
     }
     return {
-        global: process.env.CUSTOM_BOT_DEPLOY_GLOBAL_COMMANDS !== 'false',
+        global: deployGlobal,
+        clearedGlobal: !deployGlobal && process.env.CUSTOM_BOT_CLEAR_GLOBAL_COMMANDS !== 'false',
         guild: Boolean(guildId),
         count: commandPayloads.length
     };
@@ -90,14 +109,72 @@ async function announceStartup(guildId, customBot, runtimeClient) {
     } catch {}
 }
 
-function attachRuntimeHandlers(runtimeClient) {
+async function notifyAndLeaveUnauthorizedGuild(runtimeClient, guild, targetGuildId) {
+    const officialInvite = getOfficialBotInviteUrl(guild?.id);
+    const content = [
+        `**${runtimeClient.user?.username || 'This custom support bot'} is not enabled for this server.**`,
+        `This custom bot is locked to server ID \`${targetGuildId}\`.`,
+        '',
+        `Install the official bot here: ${officialInvite}`
+    ].join('\n');
+
+    try {
+        const owner = await guild.fetchOwner().catch(() => null);
+        await owner?.send?.({ content }).catch(() => null);
+    } catch {}
+
+    try {
+        const systemChannel = guild.systemChannel || guild.publicUpdatesChannel || null;
+        await systemChannel?.send?.({ content }).catch(() => null);
+    } catch {}
+
+    storageMonitor.reportCustomBotEvent('unauthorized_guild', {
+        guildId: targetGuildId,
+        unauthorizedGuildId: guild?.id,
+        unauthorizedGuildName: guild?.name,
+        officialInvite
+    }).catch(() => null);
+
+    try {
+        await guild.leave();
+    } catch {}
+}
+
+async function enforceGuildLock(runtimeClient, targetGuildId) {
+    const allowed = String(targetGuildId || '');
+    const guilds = [...runtimeClient.guilds.cache.values()];
+    for (const guild of guilds) {
+        if (String(guild.id) !== allowed) {
+            await notifyAndLeaveUnauthorizedGuild(runtimeClient, guild, allowed);
+        }
+    }
+}
+
+function attachRuntimeHandlers(runtimeClient, targetGuildId) {
     runtimeClient.commands = commandMap || new Map();
     if (typeof handleInteraction === 'function') {
-        runtimeClient.on('interactionCreate', interaction => handleInteraction(interaction, runtimeClient));
+        runtimeClient.on('interactionCreate', async interaction => {
+            if (interaction.guildId && String(interaction.guildId) !== String(targetGuildId)) {
+                const officialInvite = getOfficialBotInviteUrl(interaction.guildId);
+                const payload = {
+                    content: `This custom bot is not enabled for this server. Please install the official bot: ${officialInvite}`,
+                    ephemeral: true
+                };
+                if (interaction.isRepliable?.()) {
+                    await interaction.reply(payload).catch(() => null);
+                }
+                return;
+            }
+            return handleInteraction(interaction, runtimeClient);
+        });
     }
     if (typeof handleMessage === 'function') {
-        runtimeClient.on('messageCreate', handleMessage);
+        runtimeClient.on('messageCreate', message => {
+            if (message.guildId && String(message.guildId) !== String(targetGuildId)) return;
+            return handleMessage(message);
+        });
     }
+    runtimeClient.on('guildCreate', guild => notifyAndLeaveUnauthorizedGuild(runtimeClient, guild, targetGuildId));
 }
 
 async function stopGuild(guildId, reason = 'disabled') {
@@ -128,7 +205,7 @@ async function startGuild(guildId, access) {
     const existing = clients.get(String(guildId));
     if (existing && existing.fingerprint === fingerprint) {
         if (existing.ready) {
-            const resolvedAppId = appId || existing.client.application?.id || existing.client.user?.id || '';
+            const resolvedAppId = existing.appId || existing.client.application?.id || existing.client.user?.id || '';
             try {
                 const result = await deployCommands(token, resolvedAppId, String(guildId));
                 patchCustomBot(guildId, {
@@ -144,7 +221,7 @@ async function startGuild(guildId, access) {
                     lastError: `Command sync failed: ${error?.message || error}`,
                     lastErrorAt: new Date().toISOString()
                 });
-                storageMonitor.reportCustomBotEvent('error', { guildId, botName, appId: resolvedAppId, reason: 'manual command sync failed' }, error).catch(() => null);
+                storageMonitor.reportCustomBotEvent('error', { guildId, botName: existing.botName, appId: resolvedAppId, reason: 'manual command sync failed' }, error).catch(() => null);
                 return { ok: false, reused: true, error };
             }
         }
@@ -162,7 +239,7 @@ async function startGuild(guildId, access) {
             GatewayIntentBits.GuildMembers
         ]
     });
-    attachRuntimeHandlers(runtimeClient);
+    attachRuntimeHandlers(runtimeClient, String(guildId));
 
     const botName = String(customBot.botName || 'Custom Support Bot').trim().slice(0, 80);
     const appId = String(customBot.appId || '').trim();
@@ -182,6 +259,7 @@ async function startGuild(guildId, access) {
             if (!targetGuild) {
                 throw new Error('Custom bot logged in, but it is not invited to the target server.');
             }
+            await enforceGuildLock(runtimeClient, String(guildId));
             applyPresence(runtimeClient, customBot);
             let deployError = null;
             let deployResult = null;

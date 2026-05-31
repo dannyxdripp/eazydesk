@@ -29,6 +29,10 @@ const dashboardOauthStates = new Map();
 const dashboardSessions = new Map();
 const dashboardApiRequests = [];
 const DASHBOARD_SESSION_COOKIE = 'dashboard_session';
+const DASHBOARD_SESSION_TTL_MS = Math.max(
+    24 * 60 * 60 * 1000,
+    Number(process.env.DASHBOARD_SESSION_DAYS || 30) * 24 * 60 * 60 * 1000
+);
 const BRAND_NAME = 'eazyDesk';
 const STAFF_COMMUNITY_GUILD_ID = '1009499668734017617';
 const SENIOR_STAFF_ROLE_IDS = [
@@ -106,6 +110,29 @@ const DEFAULT_TUTORIALS = [
             { title: 'Adjust availability', body: 'Set ticket types to increased volume or reduced assistance when staff load shifts.', imageUrl: '' },
             { title: 'Communicate the change', body: 'Use announcements or panel copy to explain what users should expect.', imageUrl: '' }
         ]
+    }
+];
+
+const DEFAULT_DOC_SECTIONS = [
+    {
+        title: 'Getting Started',
+        body: 'Use Setup to choose the ticket category, transcript channel, manager role, support teams, and first panel. After setup is complete, staff should use the dashboard modules instead of rerunning setup.'
+    },
+    {
+        title: 'Ticket Flow',
+        body: 'Members open tickets from a panel. Staff claim tickets with /claim, add notes or tags when needed, then close tickets with a clear reason so transcripts and statistics stay useful.'
+    },
+    {
+        title: 'Transcript Links',
+        body: 'Closed tickets generate transcript archives. Public transcript links use /t/<token>. Add the exact OAuth redirect URI shown by your deployment to the Discord Developer Portal when transcript OAuth is enabled.'
+    },
+    {
+        title: 'Custom Branded Bots',
+        body: 'Custom branded bots are locked to their assigned server and deploy guild commands only by default. Bot names, avatars, and profiles are managed in the Discord Developer Portal.'
+    },
+    {
+        title: 'Minimal Permissions',
+        body: 'Recommended invite permissions: View Channels, Send Messages, Embed Links, Attach Files, Read Message History, Manage Channels, Manage Roles, Use Slash Commands, Create Public Threads, Send Messages in Threads, and Manage Messages only if staff tooling needs cleanup actions.'
     }
 ];
 
@@ -279,7 +306,7 @@ function getBotInviteUrl(guildId = '') {
     const url = new URL('https://discord.com/oauth2/authorize');
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('scope', 'bot applications.commands');
-    url.searchParams.set('permissions', '268561488');
+    url.searchParams.set('permissions', String(process.env.BOT_INVITE_PERMISSIONS || '311653682192'));
     const id = String(guildId || '').trim();
     if (/^\d{17,20}$/.test(id)) {
         url.searchParams.set('guild_id', id);
@@ -335,7 +362,7 @@ function cleanupTranscriptAuthMaps() {
 
     for (const [sessionId, entry] of dashboardSessions.entries()) {
         const createdAt = Number(entry?.createdAt || 0);
-        if (!createdAt || (now - createdAt) > TRANSCRIPT_SESSION_TTL_MS) dashboardSessions.delete(sessionId);
+        if (!createdAt || (now - createdAt) > DASHBOARD_SESSION_TTL_MS) dashboardSessions.delete(sessionId);
     }
 }
 
@@ -430,6 +457,8 @@ function safeDashboardNextPath(value) {
         '/embed-editor',
         '/pricing',
         '/documentation',
+        '/privacy',
+        '/terms',
         '/upgrade',
         '/setup',
         '/controller'
@@ -446,7 +475,7 @@ function createHomeHtml(options = {}) {
     const botConfig = ticketStore.getBotConfig();
     const inviteUrl = getBotInviteUrl();
     const supportUrl = String(process.env.SUPPORT_SERVER_URL || process.env.DISCORD_SUPPORT_URL || 'https://discord.gg/JSUX9GQP6J').trim();
-    const homeImages = options.showOwnerGallery && Array.isArray(botConfig.homeImages) ? botConfig.homeImages : [];
+    const homeImages = Array.isArray(botConfig.homeImages) ? botConfig.homeImages : [];
     const safeImages = homeImages
         .map(url => String(url || '').trim())
         .filter(url => /^https?:\/\//i.test(url))
@@ -462,8 +491,9 @@ function createHomeHtml(options = {}) {
     const gallery = safeImages.length
         ? `<section class="gallery">
       <h2>Highlights</h2>
+      <a class="shot featured-shot" href="${safeImages[0]}" target="_blank" rel="noreferrer"><img id="homeRotatingImage" src="${safeImages[0]}" alt="Preview" loading="eager" /></a>
       <div class="gallery-grid">
-        ${safeImages.map(url => `<a class="shot" href="${url}" target="_blank" rel="noreferrer"><img src="${url}" alt="Preview" loading="lazy" /></a>`).join('')}
+        ${safeImages.map((url, index) => `<button type="button" class="shot home-shot-pick${index === 0 ? ' active' : ''}" data-url="${url}"><img src="${url}" alt="Preview" loading="lazy" /></button>`).join('')}
       </div>
     </section>`
         : '';
@@ -498,6 +528,8 @@ function createHomeHtml(options = {}) {
       <a class="nav-link" href="${supportUrl}" target="_blank" rel="noreferrer">Support</a>
       <a class="nav-link" href="/pricing">Plans</a>
       <a class="nav-link" href="/documentation">Documentation</a>
+      <a class="nav-link" href="/privacy">Privacy</a>
+      <a class="nav-link" href="/terms">Terms</a>
       <a class="nav-link" href="/dashboard">Dashboard</a>
     </nav>
   </header>
@@ -544,10 +576,10 @@ function createHomeHtml(options = {}) {
   </main>
 
   <footer class="footer">
-    <div class="footer-inner">
-      <div class="muted">&copy; ${year} ${COPYRIGHT_NAME}</div>
-      <div class="muted">eazyDesk, a product under Sync Development</div>
-    </div>
+      <div class="footer-inner">
+        <div class="muted">&copy; ${year} ${COPYRIGHT_NAME}</div>
+        <div class="muted">eazyDesk, a product under Sync Development - <a href="/privacy">Privacy</a> - <a href="/terms">Terms</a></div>
+      </div>
   </footer>
   <script>
     (function(){
@@ -559,6 +591,21 @@ function createHomeHtml(options = {}) {
       }catch(e){
         document.body.dataset.theme='dark';
       }
+    })();
+    (function(){
+      var urls=${JSON.stringify(safeImages)};
+      var img=document.getElementById('homeRotatingImage');
+      var picks=Array.prototype.slice.call(document.querySelectorAll('.home-shot-pick'));
+      if(!img||!urls.length)return;
+      var idx=0;
+      function show(next){
+        idx=(next+urls.length)%urls.length;
+        img.src=urls[idx];
+        if(img.parentElement) img.parentElement.href=urls[idx];
+        picks.forEach(function(btn,i){btn.classList.toggle('active',i===idx)});
+      }
+      picks.forEach(function(btn,i){btn.onclick=function(){show(i)}});
+      if(urls.length>1)setInterval(function(){show(idx+1)},5000);
     })();
   </script>
 </body>
@@ -896,25 +943,32 @@ function createOwnerHtml(req = null) {
         <div class="muted">Owner includes every staff capability, plus plan grants, AI access, live viewers, API requests, and audit history.</div>
         <div id="ownerError" class="err" style="display:none;margin-top:12px"></div>
         <div id="ownerSuccess" class="card" style="display:none;margin-top:12px;padding:12px 14px"></div>
+        <div id="ownerContent" class="owner-summary" style="margin-top:12px"></div>
         <div id="ownerSummary" class="owner-summary" style="margin-top:12px"></div>
         <div id="ownerGuilds" class="owner-guilds"></div>
       </div>
     `;
 
     const script = `
-      const err=document.getElementById('ownerError'),ok=document.getElementById('ownerSuccess'),summary=document.getElementById('ownerSummary'),guildList=document.getElementById('ownerGuilds');
+      const err=document.getElementById('ownerError'),ok=document.getElementById('ownerSuccess'),content=document.getElementById('ownerContent'),summary=document.getElementById('ownerSummary'),guildList=document.getElementById('ownerGuilds');
       const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function note(t){ok.style.display='block';ok.innerHTML='<strong>Updated</strong><div class="muted">'+esc(t)+'</div>'}
       function pill(t){return '<span class="pill">'+esc(t)+'</span>'}
       function renderRows(title,items,mapper){return '<div class="card"><strong>'+esc(title)+'</strong><div class="list">'+(items.length?items.map(mapper).join(''):'<div class="muted">Nothing yet.</div>')+'</div></div>'}
+      function renderMatrix(matrix){return '<div class="card"><strong>Staff dashboard role access</strong><div class="muted" style="margin-top:6px">Role IDs come from environment variables. Update STAFF_EXECUTIVE_ROLE_IDS, STAFF_SUPPORT_ROLE_IDS, STAFF_QA_ROLE_IDS, STAFF_COMMUNITY_ROLE_IDS, or SENIOR_STAFF_ROLE_IDS, then redeploy/restart.</div><div class="list" style="margin-top:10px">'+(matrix||[]).map(row=>'<details class="item" style="display:block"><summary><strong>'+esc(row.name)+'</strong> <span class="pill">'+esc((row.roleIds||[]).length)+' role(s)</span></summary><div class="muted" style="margin-top:8px;white-space:pre-wrap">'+esc((row.roleIds||[]).join('\\n')||'No roles configured')+'</div><div class="roles" style="margin-top:8px">'+Object.entries(row.permissions||{}).filter(x=>x[1]).map(x=>'<span class="pill">'+esc(x[0].replace(/^can/,''))+'</span>').join('')+'</div></details>').join('')+'</div></div>'}
+      function renderContentTools(cfg){const imgs=Array.isArray(cfg.homeImages)?cfg.homeImages:[];const tutorials=Array.isArray(cfg.tutorials)?cfg.tutorials:[];const docs=Array.isArray(cfg.docsSections)?cfg.docsSections:[];return '<div class="card"><strong>Homepage rotating images</strong><div class="muted" style="margin-top:6px">Shown on the public homepage gallery. Use direct HTTPS image links.</div><label>Image 1</label><input id="ownerHomeImg1" value="'+esc(imgs[0]||'')+'" placeholder="https://..." /><label>Image 2</label><input id="ownerHomeImg2" value="'+esc(imgs[1]||'')+'" placeholder="https://..." /><label>Image 3</label><input id="ownerHomeImg3" value="'+esc(imgs[2]||'')+'" placeholder="https://..." /><div class="row" style="margin-top:10px"><button id="ownerSaveHomeImages" class="btn">Save Images</button><button id="ownerClearHomeImages" class="btn-soft">Clear</button></div></div>'+
+      '<div class="card"><strong>Public tutorials</strong><div class="muted" style="margin-top:6px">Manage tutorial cards and walkthrough steps.</div><textarea id="ownerTutorialsJson" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(tutorials,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="ownerSaveTutorials" class="btn">Save Tutorials</button><button id="ownerFormatTutorials" class="btn-soft">Format</button></div></div>'+
+      '<div class="card"><strong>Documentation sections</strong><div class="muted" style="margin-top:6px">Manage the public documentation guide sections.</div><textarea id="ownerDocsJson" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(docs,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="ownerSaveDocs" class="btn">Save Docs</button><button id="ownerFormatDocs" class="btn-soft">Format</button></div></div>'}
       function grantButtons(g){return '<div class="row"><button class="btn" data-plan="plus" data-guild="'+esc(g.id)+'">Grant Plus</button><button class="btn" data-plan="pro" data-guild="'+esc(g.id)+'">Grant Pro</button><button class="btn" data-custom="'+esc(g.id)+'">Grant Custom</button><button class="btn-soft" data-trial="plus_trial" data-guild="'+esc(g.id)+'">Plus Trial</button><button class="btn-soft" data-trial="pro_trial" data-guild="'+esc(g.id)+'">Pro Trial</button><button class="btn-danger" data-clear="'+esc(g.id)+'">Clear</button></div>'}
       function customFields(g){const bot=(g.aiAccess&&g.aiAccess.customBot)||{};return '<details class="card" style="padding:10px 12px"><summary><strong>Custom branded bot</strong> <span class="muted">'+(bot.tokenConfigured?'Token saved':'No token')+'</span></summary><div class="grid" style="margin-top:10px"><div><label>App ID</label><input data-cb-app="'+esc(g.id)+'" value="'+esc(bot.appId||'')+'" /></div><div><label>Public Key</label><input data-cb-key="'+esc(g.id)+'" value="'+esc(bot.publicKey||'')+'" /></div><div><label>Bot Token</label><input data-cb-token="'+esc(g.id)+'" placeholder="'+(bot.tokenConfigured?'Leave blank to keep saved token':'Paste token')+'" /></div></div><div class="muted" style="margin-top:10px">Name, avatar, and profile settings are configured in the Discord Developer Portal.</div></details>'}
       function guildCard(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px" />':'';const ai=g.aiAccess||{};return '<div class="item server-card can-manage"><div style="display:grid;gap:8px;width:100%"><div class="row">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+pill(ai.statusLabel||'Free plan')+'</div><div class="muted">'+esc(g.memberCount||0)+' members - '+esc(ai.planLabel||'Free')+'</div>'+customFields(g)+grantButtons(g)+'</div></div>'}
       function readCustomBot(guildId){return{appId:(document.querySelector('[data-cb-app="'+guildId+'"]')||{}).value||'',publicKey:(document.querySelector('[data-cb-key="'+guildId+'"]')||{}).value||'',token:(document.querySelector('[data-cb-token="'+guildId+'"]')||{}).value||''}}
       async function grant(guildId,action,plan,customBot){await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action,plan,days:14,customBot})})}
-      async function load(){try{const data=await api('/api/owner/activity');const viewers=data.activeViewers||[], reqs=data.apiRequests||[], audit=data.staffAudit||[];summary.innerHTML=
+      async function saveContent(patch){const cfg=(lastData&&lastData.botConfig)||{};await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({appealsChannelId:'',homeImages:Array.isArray(cfg.homeImages)?cfg.homeImages:[],tutorials:Array.isArray(cfg.tutorials)?cfg.tutorials:[],docsSections:Array.isArray(cfg.docsSections)?cfg.docsSections:[],siteAnnouncement:cfg.siteAnnouncement||{},...patch})})}
+      let lastData=null;
+      async function load(){try{const data=await api('/api/owner/activity');lastData=data;const viewers=data.activeViewers||[], reqs=data.apiRequests||[], audit=data.staffAudit||[];content.innerHTML=renderContentTools(data.botConfig||{})+renderMatrix(data.permissionMatrix||[]);summary.innerHTML=
         renderRows('Current staff in dashboard',viewers.slice(0,10),v=>'<div class="item"><div><strong>'+esc(v.userId)+'</strong><div class="muted">Last seen '+esc(String(v.lastSeenAt||'').replace('T',' ').slice(0,19))+'</div></div></div>')+
         renderRows('Live API requests',reqs.slice(0,12),r=>'<div class="item"><div><strong>'+esc(r.method+' '+r.path)+'</strong><div class="muted">'+esc(r.status)+' - '+esc(r.durationMs)+'ms - '+esc(r.userId||'anonymous')+'</div></div></div>')+
         renderRows('Staff audit',audit.slice(0,12),a=>'<div class="item"><div><strong>'+esc(a.action||'action')+'</strong><div class="muted">'+esc(a.status||'unknown')+' - '+esc(a.guildId||'global')+' - '+esc(String(a.createdAt||'').replace('T',' ').slice(0,19))+'</div></div></div>');
@@ -923,6 +977,13 @@ function createOwnerHtml(req = null) {
         document.querySelectorAll('[data-custom]').forEach(b=>b.onclick=async()=>{try{const guildId=b.dataset.custom;await grant(guildId,'set-plan','custom',readCustomBot(guildId));note('Custom plan and branded bot details saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
         document.querySelectorAll('[data-trial]').forEach(b=>b.onclick=async()=>{try{await grant(b.dataset.guild,'start-trial',b.dataset.trial);note('Trial started.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
         document.querySelectorAll('[data-clear]').forEach(b=>b.onclick=async()=>{try{await grant(b.dataset.clear,'clear','none');note('Access cleared.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
+        const formatJson=(id,label)=>{try{const box=document.getElementById(id);box.value=JSON.stringify(JSON.parse(box.value),null,2)}catch{err.style.display='block';err.textContent=label+' JSON is invalid.'}};
+        const ownerFormatTutorials=document.getElementById('ownerFormatTutorials');if(ownerFormatTutorials)ownerFormatTutorials.onclick=()=>formatJson('ownerTutorialsJson','Tutorials');
+        const ownerFormatDocs=document.getElementById('ownerFormatDocs');if(ownerFormatDocs)ownerFormatDocs.onclick=()=>formatJson('ownerDocsJson','Documentation');
+        const ownerSaveHomeImages=document.getElementById('ownerSaveHomeImages');if(ownerSaveHomeImages)ownerSaveHomeImages.onclick=async()=>{try{const homeImages=[ownerHomeImg1.value,ownerHomeImg2.value,ownerHomeImg3.value].map(x=>String(x||'').trim()).filter(Boolean);await saveContent({homeImages});note('Home images saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
+        const ownerClearHomeImages=document.getElementById('ownerClearHomeImages');if(ownerClearHomeImages)ownerClearHomeImages.onclick=async()=>{try{await saveContent({homeImages:[]});note('Home images cleared.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
+        const ownerSaveTutorials=document.getElementById('ownerSaveTutorials');if(ownerSaveTutorials)ownerSaveTutorials.onclick=async()=>{try{await saveContent({tutorials:JSON.parse(ownerTutorialsJson.value||'[]')});note('Tutorials saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
+        const ownerSaveDocs=document.getElementById('ownerSaveDocs');if(ownerSaveDocs)ownerSaveDocs.onclick=async()=>{try{await saveContent({docsSections:JSON.parse(ownerDocsJson.value||'[]')});note('Documentation saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
       }catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
     return baseDashboardPage({ title: 'Owner', body, script, ownerView: true, staffView: true, showStaffLink: true });
@@ -1279,6 +1340,59 @@ function getSeniorStaffRoleIds() {
     return Array.from(new Set([...SENIOR_STAFF_ROLE_IDS, ...envRoles]));
 }
 
+function createLegalHtml(type = 'privacy') {
+    const isTerms = type === 'terms';
+    const updated = 'May 31, 2026';
+    const title = isTerms ? 'Terms of Service' : 'Privacy Policy';
+    const sections = isTerms
+        ? [
+            ['Acceptance', 'By inviting or using eazyDesk, the dashboard, or related services, you agree to these Terms of Service. If you do not agree, do not use the service.'],
+            ['Service Use', 'You are responsible for configuring the bot appropriately for your Discord server, keeping access tokens private, and ensuring staff use the service lawfully and respectfully.'],
+            ['Discord Platform', 'The service depends on Discord APIs and permissions. Discord outages, API changes, missing permissions, or server configuration issues may affect availability or behavior.'],
+            ['Subscriptions and Custom Bots', 'Paid or custom-plan features may be changed, paused, or revoked if payment, abuse, security, or configuration issues occur. Custom branded bots remain limited to their assigned server.'],
+            ['Prohibited Use', 'Do not use the service for spam, harassment, unlawful activity, credential theft, privacy invasion, or attempts to bypass access controls.'],
+            ['Disclaimers', 'The service is provided as-is without warranties of uninterrupted availability, perfect accuracy, or fitness for a particular purpose.'],
+            ['Limitation of Liability', 'To the maximum extent permitted by law, Sync Development is not liable for indirect, incidental, consequential, or punitive damages arising from use of the service.'],
+            ['Changes', 'We may update these terms as the service changes. Continued use after changes means you accept the updated terms.'],
+            ['Contact', 'Questions about these terms can be raised through the official support server.']
+        ]
+        : [
+            ['Overview', 'This Privacy Policy explains the standard information eazyDesk processes to provide Discord ticketing, transcripts, dashboard access, support analytics, and custom bot features.'],
+            ['Information We Process', 'We may process Discord user IDs, guild IDs, channel IDs, role IDs, ticket metadata, command usage, dashboard session data, transcript files, support notes, feedback, and configuration settings provided by server administrators.'],
+            ['How We Use Information', 'Information is used to operate ticket workflows, enforce permissions, create transcripts, show dashboard analytics, manage staff access, troubleshoot errors, and provide configured custom bot features.'],
+            ['Cookies and Sessions', 'The dashboard uses cookies for login sessions, CSRF protection, and transcript viewer access. Dashboard sessions may be remembered for up to 30 days unless you log out or the session expires.'],
+            ['Transcripts', 'Ticket transcripts may contain message content and attachments visible in the ticket. Server administrators are responsible for configuring retention, access, and disclosure to their users.'],
+            ['Sharing', 'We do not sell personal data. Data may be shared only with Discord APIs, hosting/storage providers needed to run the service, or where required for security, abuse prevention, legal compliance, or support.'],
+            ['Retention', 'Configuration and operational records are kept while needed to run the service. Transcript retention depends on your configured retention settings. Backups may persist for a limited period.'],
+            ['Security', 'We use reasonable technical controls such as access checks, session cookies, and restricted dashboard routes. Server owners should protect dashboard tokens, bot tokens, and owner access.'],
+            ['Your Choices', 'Server owners can remove the bot, delete or rotate configuration, clear transcripts where supported, and contact support for help with data questions.'],
+            ['Contact', 'Questions about this policy can be raised through the official support server.']
+        ];
+    const body = `
+      <div class="card" style="max-width:980px;margin:0 auto">
+        <div class="pricing-kicker">Legal</div>
+        <h1 style="margin:0 0 8px">${title}</h1>
+        <div class="muted">Last updated: ${updated}</div>
+        <div class="list" style="margin-top:18px">
+          ${sections.map(([heading, text]) => `<div class="item" style="display:block"><strong>${heading}</strong><div class="muted" style="margin-top:8px;line-height:1.7">${text}</div></div>`).join('')}
+        </div>
+        <div class="row" style="margin-top:18px"><a class="btn" href="/">Home</a><a class="btn-soft" href="/dashboard">Dashboard</a></div>
+      </div>
+    `;
+    return baseDashboardPage({ title, body, ownerView: false, showStaffLink: false });
+}
+
+function normalizeDocSections(input) {
+    const list = Array.isArray(input) ? input : DEFAULT_DOC_SECTIONS;
+    return list
+        .map((section, index) => ({
+            title: String(section?.title || `Section ${index + 1}`).trim().slice(0, 90),
+            body: String(section?.body || '').trim().slice(0, 3000)
+        }))
+        .filter(section => section.title && section.body)
+        .slice(0, 24);
+}
+
 function getStaffRoleGroups() {
     const merge = (base, envName) => Array.from(new Set([
         ...base,
@@ -1490,7 +1604,7 @@ function setDashboardSession(res, userId, guildIds = [], oauthGuilds = []) {
     dashboardSessions.set(cookieValue, entry);
     const secure = isHttpsPublicBaseUrl();
     const cookie = `${DASHBOARD_SESSION_COOKIE}=${encodeURIComponent(cookieValue)}; ${cookieAttributes({
-        maxAge: Math.floor(TRANSCRIPT_SESSION_TTL_MS / 1000),
+        maxAge: Math.floor(DASHBOARD_SESSION_TTL_MS / 1000),
         secure,
         sameSite: secure ? 'None' : 'Lax'
     })}`;
@@ -1515,7 +1629,7 @@ function getDashboardSession(req) {
     }
     if (!entry) return null;
     const createdAt = Number(entry.createdAt || 0);
-    if (!createdAt || (Date.now() - createdAt) > TRANSCRIPT_SESSION_TTL_MS) {
+    if (!createdAt || (Date.now() - createdAt) > DASHBOARD_SESSION_TTL_MS) {
         dashboardSessions.delete(sessionId);
         return null;
     }
@@ -2212,6 +2326,7 @@ async function getDashboardState(client, req = null) {
         }));
     return {
         guildId: guild?.id || null,
+        publicBaseUrl: getPublicBaseUrl(),
         csrfToken: getDashboardSessionCsrfToken(req),
         access,
         aiAccess,
@@ -2249,6 +2364,7 @@ async function getDashboardState(client, req = null) {
             appealsChannelId: guildConfig?.appealsChannelId || null,
             homeImages: ownerView && Array.isArray(botConfig.homeImages) ? botConfig.homeImages : [],
             tutorials: normalizeTutorials(botConfig.tutorials),
+            docsSections: normalizeDocSections(botConfig.docsSections),
             siteAnnouncement: normalizeSiteAnnouncement(botConfig.siteAnnouncement),
             embedTemplates: botConfig.embedTemplates && typeof botConfig.embedTemplates === 'object'
                 ? botConfig.embedTemplates
@@ -2640,6 +2756,12 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             guilds,
             staffGuildId: STAFF_COMMUNITY_GUILD_ID,
             permissionMatrix: getStaffPermissionMatrix(),
+            botConfig: {
+                homeImages: Array.isArray(activeStorage.botConfig?.homeImages) ? activeStorage.botConfig.homeImages : [],
+                tutorials: normalizeTutorials(activeStorage.botConfig?.tutorials),
+                docsSections: normalizeDocSections(activeStorage.botConfig?.docsSections),
+                siteAnnouncement: normalizeSiteAnnouncement(activeStorage.botConfig?.siteAnnouncement)
+            },
             activeViewers: getDashboardViewerList(),
             apiRequests: dashboardApiRequests.slice(-100).reverse(),
             staffAudit
@@ -3125,6 +3247,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             appealsChannelId: botConfig.appealsChannelId || getDefaultAppealsChannelId(),
             homeImages: ownerView && Array.isArray(botConfig.homeImages) ? botConfig.homeImages : [],
             tutorials: ownerView ? normalizeTutorials(botConfig.tutorials) : [],
+            docsSections: ownerView ? normalizeDocSections(botConfig.docsSections) : [],
             siteAnnouncement: ownerView ? normalizeSiteAnnouncement(botConfig.siteAnnouncement) : normalizeSiteAnnouncement({}),
             embedTemplates: botConfig.embedTemplates && typeof botConfig.embedTemplates === 'object'
                 ? botConfig.embedTemplates
@@ -3150,6 +3273,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         if (homeImages.length) next.homeImages = homeImages;
         else if (body.homeImages) next.homeImages = [];
         if (Object.prototype.hasOwnProperty.call(body, 'tutorials')) next.tutorials = normalizeTutorials(body.tutorials);
+        if (Object.prototype.hasOwnProperty.call(body, 'docsSections')) next.docsSections = normalizeDocSections(body.docsSections);
         if (Object.prototype.hasOwnProperty.call(body, 'siteAnnouncement')) next.siteAnnouncement = normalizeSiteAnnouncement(body.siteAnnouncement);
 
         const config = ticketStore.setBotConfig(next);
@@ -3820,6 +3944,14 @@ function navItem(path, label, currentPath) {
         '/documentation': {
             icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
             desc: 'Placeholders and templates'
+        },
+        '/privacy': {
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+            desc: 'Privacy policy'
+        },
+        '/terms': {
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h8M8 9h2"/></svg>',
+            desc: 'Terms of service'
         }
     };
     const info = meta[path] || { icon: 'UI', desc: 'Dashboard section' };
@@ -3830,11 +3962,11 @@ function navItem(path, label, currentPath) {
 }
 
 function getAllowedDashboardPages(access = {}) {
-    const pages = new Set(['/documentation', '/tutorials']);
+    const pages = new Set(['/documentation', '/tutorials', '/privacy', '/terms']);
     pages.add('/pricing');
     pages.add('/upgrade');
     if (access?.canFullDashboard || access?.isOwner) {
-        ['/overview', '/settings', '/availability', '/commands/ticket-types', '/panels', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/tutorials', '/pricing', '/upgrade', '/setup', '/controller'].forEach(page => pages.add(page));
+        ['/overview', '/settings', '/availability', '/commands/ticket-types', '/panels', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/tutorials', '/pricing', '/upgrade', '/setup', '/controller', '/privacy', '/terms'].forEach(page => pages.add(page));
         return pages;
     }
     if (access?.canManageSettings) pages.add('/setup');
@@ -3867,7 +3999,9 @@ function pageTitleForPath(path) {
         '/embed-editor': 'Branding',
         '/pricing': 'Pricing',
         '/upgrade': 'Upgrade',
-        '/documentation': 'Documentation'
+        '/documentation': 'Documentation',
+        '/privacy': 'Privacy',
+        '/terms': 'Terms'
     };
     return map[path] || 'Dashboard';
 }
@@ -4671,13 +4805,20 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
   body[data-theme="light"] .checkbox-wrapper .label{color:rgba(15,23,42,.82);text-shadow:none}
   body[data-theme="light"] details.acc,body[data-theme="light"] details.acc summary{background:var(--solid-card-2);border-color:var(--solid-border);color:var(--tx)}
   .card,.item,.list-btn,.module-option,.stat-tile,.topbar,.topnav-item,.pill{min-width:0}
+  .card,.item,.preview-shell,details.acc,.pricing-table,.custom-select,.role-ms{max-width:100%;overflow-wrap:anywhere}
+  .list,.grid,.split,.row,.owner-summary,.owner-guilds,.controller-grid{min-width:0}
+  .cs-menu,.ms-menu,.topnav-menu{max-width:min(520px,calc(100vw - 28px));scrollbar-color:var(--ac) var(--solid-card-2)}
+  .cs-menu::-webkit-scrollbar,.ms-menu::-webkit-scrollbar,.topnav-menu::-webkit-scrollbar{width:10px}
+  .cs-menu::-webkit-scrollbar-track,.ms-menu::-webkit-scrollbar-track,.topnav-menu::-webkit-scrollbar-track{background:var(--solid-card-2);border-radius:999px}
+  .cs-menu::-webkit-scrollbar-thumb,.ms-menu::-webkit-scrollbar-thumb,.topnav-menu::-webkit-scrollbar-thumb{background:var(--ac);border-radius:999px;border:2px solid var(--solid-card-2)}
   .list-title,.list-meta,.nav-label,.nav-sub,.topnav-copy strong,.topnav-copy span,.cs-label,.ms-chip,.pill,.preview-name,.controller-name{
     min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   }
   .item-top > strong,.item-top > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .muted,.help{overflow-wrap:anywhere}
   @media(max-width:1100px){.split{grid-template-columns:1fr}}
-  @media(max-width:900px){.main{padding:18px}.topbar{align-items:flex-start}.row{grid-template-columns:1fr}.split,#app > .split{grid-template-columns:1fr}}
+  @media(max-width:900px){.main{padding:18px}.topbar{align-items:flex-start}.row{grid-template-columns:1fr}.split,#app > .split{grid-template-columns:1fr}.owner-summary{grid-template-columns:1fr}.topbar-right{width:100%;justify-content:stretch}.topbar-right > *{flex:1 1 180px}.pricing-card{min-height:0}}
+  @media(max-width:560px){.main{padding:12px}.card{padding:14px}.item-top{align-items:flex-start}.controller-actions,.row{display:grid;grid-template-columns:1fr;width:100%}.btn,.btn-soft,.btn-danger{width:100%}.topnav-menu{left:0;right:auto;min-width:min(320px,calc(100vw - 28px))}}
  </style></head>
 <body>
  <div id="auth" class="auth"><div class="auth-card"><h3>Dashboard Login</h3><div class="muted" style="margin-bottom:10px">Sign in with Discord to continue.</div><a id="authDiscord" class="btn" href="/login" style="display:block;text-align:center;text-decoration:none">Sign in with Discord</a><div class="muted" style="margin:12px 0 6px">or use a token</div><label>Token</label><input id="authToken" type="password" /><div class="row" style="margin-top:10px"><button id="authLogin" class="btn">Login</button></div><div id="authMsg" class="notice danger"></div></div></div>
@@ -5132,11 +5273,17 @@ function renderUpgrade(){return '<div class="grid">'+
 }
 function renderDocs(){
  const rows=[['{ticketType}','Ticket type name'],['{requester}','User mention'],['{username}','Requester username'],['{userId}','Requester ID'],['{reason}','Open reason'],['{timestamp}','Discord timestamp'],['{timestampIso}','ISO timestamp'],['{date}','Date YYYY-MM-DD'],['{time}','Time HH:mm:ss UTC'],['{channel}','Ticket channel mention'],['{channelId}','Ticket channel ID']];
+ const docsSections=Array.isArray(state&&state.botConfig&&state.botConfig.docsSections)?state.botConfig.docsSections:[];
+ const oauthRedirect=String((state&&state.publicBaseUrl)||'').replace(/\/+$/,'')+'/auth/discord/callback';
  const embedExample=esc(JSON.stringify({content:'Optional message content',embeds:[{title:'Embed title',description:'Embed description',color:5793266,thumbnail:{url:'https://example.com/thumb.png'},image:{url:'https://example.com/image.png'},footer:{text:'Footer text'}}]},null,2));
  const attachmentExample=esc(JSON.stringify({content:'Image from attachment',embeds:[{title:'Proof',image:{url:'attachment://proof.png'}}]},null,2));
  const sepExample=esc('## Title\\n\\nFirst paragraph.\\n\\n[[divider]]\\n\\nSecond paragraph.\\n\\n[[space:large]]\\n\\nThird paragraph.');
- return '<div class="grid">'+
-  '<div class="card"><h3>Placeholders</h3><div class="list">'+
+ const ownerDocs=(state&&state.isOwner)?('<div class="card" style="grid-column:1/-1"><h3>Owner Documentation Editor</h3><div class="muted">Edit the public documentation sections shown below. JSON format: [{ "title": "...", "body": "..." }]</div><textarea id="docsJson" style="min-height:220px;font-family:Consolas,monospace">'+esc(JSON.stringify(docsSections,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="saveDocs" class="btn">Save Documentation</button><button id="formatDocs" class="btn-soft">Format JSON</button></div></div>'):'';
+ const customDocs=docsSections.length?('<div class="card" style="grid-column:1/-1"><h3>Guide Sections</h3><div class="grid" style="margin-top:10px">'+docsSections.map(section=>'<div class="item" style="display:block"><strong>'+esc(section.title)+'</strong><div class="muted" style="margin-top:8px;white-space:pre-wrap">'+esc(section.body)+'</div></div>').join('')+'</div></div>'):'';
+  return '<div class="grid">'+
+   ownerDocs+
+   customDocs+
+   '<div class="card"><h3>Placeholders</h3><div class="list">'+
    rows.map(r=>'<div class="item"><div class="item-top"><strong>'+r[0]+'</strong><button class="btn-soft copyPH" data-v="'+r[0]+'">Copy</button></div><div class="muted">'+r[1]+'</div></div>').join('')+
   '</div></div>'+
 
@@ -5161,8 +5308,10 @@ function renderDocs(){
     '<div class="item"><div><strong>Themes and menus</strong><div class="muted">Use the top theme picker for Dark, Light, Ocean, Sunset, and Diamond. Navigation is grouped into General, Tickets, Tools, and Plans.</div></div></div>'+
     '<div class="item"><div><strong>Staff permissions</strong><div class="muted">Configure role families with STAFF_EXECUTIVE_ROLE_IDS, STAFF_SUPPORT_ROLE_IDS, STAFF_QA_ROLE_IDS, STAFF_COMMUNITY_ROLE_IDS, or SENIOR_STAFF_ROLE_IDS. Comma or space separated role IDs are supported.</div></div></div>'+
     '<div class="item"><div><strong>Online transcripts</strong><div class="muted">Saved transcripts open through /t/&lt;token&gt; when a public token exists. Downloads add ?download=1.</div></div></div>'+
+    '<div class="item"><div><strong>Discord OAuth redirect</strong><div class="muted">Add this exact URI to the Discord Developer Portal for transcript login: <code>'+esc(oauthRedirect)+'</code>. If Discord says invalid redirect_uri, update PUBLIC_BASE_URL to your public HTTPS origin and make this URI match exactly.</div></div></div>'+
     '<div class="item"><div><strong>Feedback setup</strong><div class="muted">Set a feedback channel on the Feedback page. Users run /feedback inside a claimed ticket and staff receive the rating report.</div></div></div>'+
     '<div class="item"><div><strong>Branding</strong><div class="muted">Enterprise/custom servers can edit server identity, embed templates, and preview the bot message before saving.</div></div></div>'+
+    '<div class="item"><div><strong>Recommended bot permissions</strong><div class="muted">View Channels, Send Messages, Embed Links, Attach Files, Read Message History, Use Slash Commands, Manage Channels, Manage Roles, Create Public Threads, Send Messages in Threads. Add Manage Messages only if you want cleanup/moderation actions.</div></div></div>'+
    '</div></div>'+
   '</div>'}
 function selectedRoles(id){return Array.from(document.querySelectorAll('input[data-ms-check="'+id+'"]:checked')).map(el=>el.value)}
@@ -5316,8 +5465,8 @@ function wire(){
  const aiSetPlus=document.getElementById('aiSetPlus');if(aiSetPlus)aiSetPlus.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'set-plan',plan:'plus'})});note('Plus enabled for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const aiToggleEnabled=document.getElementById('aiToggleEnabled');if(aiToggleEnabled)aiToggleEnabled.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:(state&&state.aiAccess&&state.aiAccess.enabled)?'disable':'enable'})});note('AI access updated.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const aiClear=document.getElementById('aiClear');if(aiClear)aiClear.onclick=async()=>{try{const confirmed=prompt('Type CLEAR to remove AI access for this server.');if(confirmed!=='CLEAR')return;await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'clear'})});note('AI access cleared.','ok');await boot()}catch(e){note(e.message,'danger')}};
- const saveHomeImages=document.getElementById('saveHomeImages');if(saveHomeImages)saveHomeImages.onclick=async()=>{try{const urls=[document.getElementById('homeImg1')?.value||'',document.getElementById('homeImg2')?.value||'',document.getElementById('homeImg3')?.value||''].map(s=>String(s||'').trim()).filter(Boolean);await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:urls})});note('Home images saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
- const clearHomeImages=document.getElementById('clearHomeImages');if(clearHomeImages)clearHomeImages.onclick=async()=>{try{await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:[]})});note('Home images cleared.','ok');await boot()}catch(e){note(e.message,'danger')}};
+ const saveHomeImages=document.getElementById('saveHomeImages');if(saveHomeImages)saveHomeImages.onclick=async()=>{try{const urls=[document.getElementById('homeImg1')?.value||'',document.getElementById('homeImg2')?.value||'',document.getElementById('homeImg3')?.value||''].map(s=>String(s||'').trim()).filter(Boolean);await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:urls,tutorials:Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[],docsSections:Array.isArray(state&&state.botConfig&&state.botConfig.docsSections)?state.botConfig.docsSections:[],siteAnnouncement:(state&&state.botConfig&&state.botConfig.siteAnnouncement)||{}})});note('Home images saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+ const clearHomeImages=document.getElementById('clearHomeImages');if(clearHomeImages)clearHomeImages.onclick=async()=>{try{await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:[],tutorials:Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[],docsSections:Array.isArray(state&&state.botConfig&&state.botConfig.docsSections)?state.botConfig.docsSections:[],siteAnnouncement:(state&&state.botConfig&&state.botConfig.siteAnnouncement)||{}})});note('Home images cleared.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const saveFeedback=document.getElementById('saveFeedback');if(saveFeedback)saveFeedback.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,appealsChannelId:feedbackConfigId.value||null,setup:{step:4}})});note('Feedback settings saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const feedbackCopyCommand=document.getElementById('feedbackCopyCommand');if(feedbackCopyCommand)feedbackCopyCommand.onclick=async()=>{try{await navigator.clipboard.writeText('/feedback');note('Feedback command copied.','ok')}catch{note('Copy failed.','danger')}};
  const refreshTickets=document.getElementById('refreshTickets');if(refreshTickets)refreshTickets.onclick=async()=>{try{await boot();note('Tickets refreshed.','ok')}catch(e){note(e.message,'danger')}};
@@ -5434,8 +5583,10 @@ const resetTag=document.getElementById('resetTag');if(resetTag)resetTag.onclick=
  const staffLookupBtn=document.getElementById('staffLookupBtn');if(staffLookupBtn)staffLookupBtn.onclick=async()=>{try{const q=(document.getElementById('staffLookupQuery').value||'').trim();const r=await api('/api/staff/lookup',{method:'POST',body:JSON.stringify({query:q})});const box=document.getElementById('staffLookupResult');if(box){const tag=r.user&&r.user.tag?r.user.tag:('User '+esc(r.user.id));const mk=(label,val)=>'<div class="item"><div class="item-top"><strong>'+label+'</strong><span>'+val+'</span></div></div>';box.innerHTML=[mk('User',esc(tag)+' ('+esc(r.user.id)+')'),mk('Last 7d','Claimed '+(r.stats.days7.claimed||0)+' / Closed '+(r.stats.days7.closed||0)),mk('Last 14d','Claimed '+(r.stats.days14.claimed||0)+' / Closed '+(r.stats.days14.closed||0)),mk('Last 30d','Claimed '+(r.stats.days30.claimed||0)+' / Closed '+(r.stats.days30.closed||0))].join('')}note('Lookup complete.','ok')}catch(e){note(e.message,'danger')}};
  const staffLookupClear=document.getElementById('staffLookupClear');if(staffLookupClear)staffLookupClear.onclick=()=>{const q=document.getElementById('staffLookupQuery');const box=document.getElementById('staffLookupResult');if(q)q.value='';if(box)box.innerHTML='';note('', '')};
  const formatTutorials=document.getElementById('formatTutorials');if(formatTutorials)formatTutorials.onclick=()=>{try{const box=document.getElementById('tutorialsJson');if(box)box.value=JSON.stringify(JSON.parse(box.value),null,2)}catch(e){note('Tutorial JSON is invalid.','danger')}};
- const saveTutorials=document.getElementById('saveTutorials');if(saveTutorials)saveTutorials.onclick=async()=>{try{const box=document.getElementById('tutorialsJson');const tutorials=JSON.parse((box&&box.value)||'[]');await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:Array.isArray(state&&state.botConfig&&state.botConfig.homeImages)?state.botConfig.homeImages:[],tutorials,siteAnnouncement:(state&&state.botConfig&&state.botConfig.siteAnnouncement)||{}})});note('Tutorials saved.','ok');await boot()}catch(e){note(e.message||'Invalid tutorial JSON.','danger')}};
- const saveAnnouncement=document.getElementById('saveAnnouncement');if(saveAnnouncement)saveAnnouncement.onclick=async()=>{try{const next={enabled:(document.getElementById('announcementEnabled')?.value||'false')==='true',text:document.getElementById('announcementText')?.value||'',ctaLabel:document.getElementById('announcementCta')?.value||'',linkUrl:document.getElementById('announcementUrl')?.value||''};await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:Array.isArray(state&&state.botConfig&&state.botConfig.homeImages)?state.botConfig.homeImages:[],tutorials:Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[],siteAnnouncement:next})});note('Announcement saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+ const saveTutorials=document.getElementById('saveTutorials');if(saveTutorials)saveTutorials.onclick=async()=>{try{const box=document.getElementById('tutorialsJson');const tutorials=JSON.parse((box&&box.value)||'[]');await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:Array.isArray(state&&state.botConfig&&state.botConfig.homeImages)?state.botConfig.homeImages:[],tutorials,docsSections:Array.isArray(state&&state.botConfig&&state.botConfig.docsSections)?state.botConfig.docsSections:[],siteAnnouncement:(state&&state.botConfig&&state.botConfig.siteAnnouncement)||{}})});note('Tutorials saved.','ok');await boot()}catch(e){note(e.message||'Invalid tutorial JSON.','danger')}};
+ const formatDocs=document.getElementById('formatDocs');if(formatDocs)formatDocs.onclick=()=>{try{const box=document.getElementById('docsJson');if(box)box.value=JSON.stringify(JSON.parse(box.value),null,2)}catch(e){note('Documentation JSON is invalid.','danger')}};
+ const saveDocs=document.getElementById('saveDocs');if(saveDocs)saveDocs.onclick=async()=>{try{const box=document.getElementById('docsJson');const docsSections=JSON.parse((box&&box.value)||'[]');await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:Array.isArray(state&&state.botConfig&&state.botConfig.homeImages)?state.botConfig.homeImages:[],tutorials:Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[],docsSections,siteAnnouncement:(state&&state.botConfig&&state.botConfig.siteAnnouncement)||{}})});note('Documentation saved.','ok');await boot()}catch(e){note(e.message||'Invalid documentation JSON.','danger')}};
+ const saveAnnouncement=document.getElementById('saveAnnouncement');if(saveAnnouncement)saveAnnouncement.onclick=async()=>{try{const next={enabled:(document.getElementById('announcementEnabled')?.value||'false')==='true',text:document.getElementById('announcementText')?.value||'',ctaLabel:document.getElementById('announcementCta')?.value||'',linkUrl:document.getElementById('announcementUrl')?.value||''};await api('/api/config',{method:'POST',body:JSON.stringify({appealsChannelId:(state&&state.botConfig&&state.botConfig.appealsChannelId)||'',homeImages:Array.isArray(state&&state.botConfig&&state.botConfig.homeImages)?state.botConfig.homeImages:[],tutorials:Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[],docsSections:Array.isArray(state&&state.botConfig&&state.botConfig.docsSections)?state.botConfig.docsSections:[],siteAnnouncement:next})});note('Announcement saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const tutorialCards=Array.from(document.querySelectorAll('[data-tutorial-open]'));if(tutorialCards.length){const tutorials=Array.isArray(state&&state.botConfig&&state.botConfig.tutorials)?state.botConfig.tutorials:[];const overlay=document.getElementById('tutorialOverlay');const close=document.getElementById('tutorialClose');const title=document.getElementById('tutorialModalTitle');const badge=document.getElementById('tutorialModalBadge');const body=document.getElementById('tutorialModalBody');const prev=document.getElementById('tutorialPrev');const next=document.getElementById('tutorialNext');const progressBar=document.getElementById('tutorialProgressBar');const transitionText=document.getElementById('tutorialTransitionText');const confettiCanvas=document.getElementById('tutorialConfetti');let ti=0,si=0;let confettiFrame=0;let confettiPieces=[];const stopConfetti=()=>{confettiFrame=9999;try{const ctx=confettiCanvas&&confettiCanvas.getContext?confettiCanvas.getContext('2d'):null;if(ctx)ctx.clearRect(0,0,confettiCanvas.width||0,confettiCanvas.height||0)}catch{}};const fireConfetti=()=>{if(!confettiCanvas||!confettiCanvas.getContext)return;const ctx=confettiCanvas.getContext('2d');if(!ctx)return;const dpr=Math.max(1,window.devicePixelRatio||1);confettiCanvas.width=Math.floor(window.innerWidth*dpr);confettiCanvas.height=Math.floor(window.innerHeight*dpr);confettiCanvas.style.width=window.innerWidth+'px';confettiCanvas.style.height=window.innerHeight+'px';ctx.setTransform(dpr,0,0,dpr,0,0);confettiPieces=Array.from({length:220},(_,i)=>({x:Math.random()*window.innerWidth,y:-20-Math.random()*window.innerHeight*.35,vx:(Math.random()-.5)*7,vy:3+Math.random()*6,size:6+Math.random()*10,rot:Math.random()*Math.PI,color:['#57f287','#38bdf8','#fbbf24','#fb7185','#a78bfa','#f97316'][i%6]}));confettiFrame=0;(function tick(){ctx.clearRect(0,0,window.innerWidth,window.innerHeight);for(const p of confettiPieces){p.x+=p.vx;p.y+=p.vy;p.rot+=0.08;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.color;ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*.7);ctx.restore();}confettiFrame+=1;if(confettiFrame<220&&overlay&&overlay.style.display==='flex'){requestAnimationFrame(tick)}else{ctx.clearRect(0,0,window.innerWidth,window.innerHeight)}})()};const flashText=(text)=>{if(!transitionText)return;transitionText.textContent=text;transitionText.style.opacity='1';transitionText.style.transform='translateX(-50%) translateY(0)';setTimeout(()=>{if(transitionText){transitionText.style.opacity='0';transitionText.style.transform='translateX(-50%) translateY(-6px)'}},900)};const media=(step,tutorial)=>{if(step.videoUrl){return '<div style="margin-bottom:14px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.24)"><video src="'+esc(step.videoUrl)+'" controls playsinline style="width:100%;max-height:52vh;display:block;background:#020617"></video></div>'}if(step.imageUrl){return '<div style="margin-bottom:14px;border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.24)"><img src="'+esc(step.imageUrl)+'" alt="'+esc(step.title||tutorial.title||'Tutorial media')+'" style="width:100%;max-height:52vh;object-fit:cover;display:block" loading="lazy" /></div>'}return ''};const draw=()=>{const tutorial=tutorials[ti]||null;const step=tutorial&&tutorial.steps?tutorial.steps[si]:null;if(!tutorial||!step)return;const total=tutorial.steps.length||1;const percent=Math.max(0,Math.min(100,((si+1)/total)*100));title.textContent=tutorial.title||'Tutorial';badge.textContent=(tutorial.badge?String(tutorial.badge)+' - ':'')+'Step '+(si+1)+' of '+total;body.style.opacity='0';body.style.transform='translateY(10px)';setTimeout(()=>{body.innerHTML='<div style="display:grid;gap:14px"><div class="pill" style="width:max-content">'+esc(si+1===total?'Final step':'Guided step')+'</div>'+media(step,tutorial)+'<div><h3 style="margin:0 0 10px;font-size:28px">'+esc(step.title||'Step')+'</h3><div class="muted" style="font-size:15px;line-height:1.8;white-space:pre-wrap">'+esc(step.body||'')+'</div></div></div>';body.style.opacity='1';body.style.transform='translateY(0)'},120);if(progressBar)progressBar.style.width=percent+'%';prev.disabled=si<=0;next.textContent=si>=total-1?'Finish':'Next';if(si===total-2)flashText('Almost done!')};const open=(index)=>{ti=index;si=0;stopConfetti();draw();if(overlay)overlay.style.display='flex'};const hide=()=>{stopConfetti();if(overlay)overlay.style.display='none'};tutorialCards.forEach(btn=>btn.onclick=()=>open(Number(btn.getAttribute('data-tutorial-open')||0)));if(close)close.onclick=hide;if(overlay)overlay.onclick=(e)=>{if(e.target===overlay)hide()};if(prev)prev.onclick=()=>{if(si>0){si-=1;draw()}};if(next)next.onclick=()=>{const tutorial=tutorials[ti]||null;if(!tutorial)return hide();if(si<tutorial.steps.length-1){si+=1;draw()}else{flashText('Completed!');fireConfetti();setTimeout(()=>hide(),1300)}};window.addEventListener('resize',()=>{if(overlay&&overlay.style.display==='flex'&&confettiFrame>0&&confettiFrame<220)fireConfetti()},{passive:true});}
 }
 function renderOverview(){
@@ -5760,6 +5911,16 @@ function startDashboard(client, customBotManager = null) {
                 return;
             }
 
+            if (pathname === '/privacy' || pathname === '/privacy/') {
+                sendHtml(res, 200, createLegalHtml('privacy'));
+                return;
+            }
+
+            if (pathname === '/terms' || pathname === '/terms/') {
+                sendHtml(res, 200, createLegalHtml('terms'));
+                return;
+            }
+
             if (pathname === '/commands/appeal') {
                 res.writeHead(302, { Location: '/commands/feedback' });
                 res.end();
@@ -5767,13 +5928,18 @@ function startDashboard(client, customBotManager = null) {
             }
 
             if (pathname === '/login') {
+                const next = safeDashboardNextPath(url.searchParams.get('next'));
+                if (getDashboardSessionUserId(req)) {
+                    res.writeHead(302, { Location: next, 'Cache-Control': 'no-store' });
+                    res.end();
+                    return;
+                }
                 if (!hasDiscordOAuthConfigured()) {
                     sendHtml(res, 500, '<h1>OAuth not configured</h1><p>Set DISCORD_OAUTH_CLIENT_ID and DISCORD_OAUTH_CLIENT_SECRET.</p>');
                     return;
                 }
 
                 const redirectUri = `${getPublicBaseUrl()}/auth/dashboard/callback`;
-                const next = safeDashboardNextPath(url.searchParams.get('next'));
                 const state = randomToken(18);
                 dashboardOauthStates.set(state, { next, createdAt: Date.now() });
 
