@@ -7,11 +7,11 @@ const {
 } = require('discord.js');
 const ticketStore = require('../utils/ticket-store');
 const { buildV2Notice } = require('../utils/components-v2-messages');
+const { resolveAppealsChannelId } = require('../utils/guild-defaults');
 
 const MODAL_ID = 'feedback:modal';
 const RATING_ID = 'feedback:rating';
 const COMMENT_ID = 'feedback:comment';
-const { resolveAppealsChannelId } = require('../utils/guild-defaults');
 
 const RESPONSES = {
     invalidChannelTitle: 'Invalid Channel',
@@ -23,15 +23,38 @@ const RESPONSES = {
     invalidRatingTitle: 'Invalid Rating',
     invalidRatingDescription: 'Please enter a number from 1 to 5.',
     notConfiguredTitle: 'Feedback Channel Not Configured',
-    notConfiguredDescription: 'An admin needs to configure this server’s feedback channel in the Setup page.',
+    notConfiguredDescription: 'An admin needs to configure this server\'s feedback channel in the dashboard.',
     channelErrorTitle: 'Feedback Channel Error',
     channelErrorDescription: 'Feedback channel ({channelId}) is not configured or inaccessible.',
     newFeedbackTitle: 'New Feedback',
-    thanksDescription: 'Thank you for your feedback.'
+    thanksTitle: 'Feedback Sent',
+    thanksDescription: 'Thank you for your feedback. The staff team can now review it.'
 };
 
 function getFeedbackChannelId(guildId) {
     return resolveAppealsChannelId(guildId);
+}
+
+function getTicketForInteraction(interaction) {
+    const channelId = interaction.channel?.id;
+    if (!channelId) return null;
+    return ticketStore.getTicketByChannelId(channelId, ticketStore.getActiveStorage());
+}
+
+function buildTicketError(interaction, ticket) {
+    if (!ticket) {
+        return buildV2Notice(RESPONSES.invalidChannelTitle, RESPONSES.invalidChannelDescription, 0xED4245);
+    }
+
+    if (ticket.createdBy && ticket.createdBy !== interaction.user.id) {
+        return buildV2Notice(RESPONSES.deniedTitle, RESPONSES.deniedDescription, 0xED4245);
+    }
+
+    if (!ticket.claimedBy) {
+        return buildV2Notice(RESPONSES.noStaffTitle, RESPONSES.noStaffDescription, 0xFEE75C);
+    }
+
+    return null;
 }
 
 module.exports = {
@@ -41,24 +64,10 @@ module.exports = {
         .setDescription('Leave feedback for the staff member who handled your ticket'),
 
     async execute(interaction) {
-        const ticketChannel = interaction.channel;
-        const activeStorage = ticketStore.getActiveStorage();
-        const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
-
-        if (!ticket) {
-            const base = buildV2Notice(RESPONSES.invalidChannelTitle, RESPONSES.invalidChannelDescription, 0xED4245);
-            return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
-        }
-
-        if (ticket.createdBy && ticket.createdBy !== interaction.user.id) {
-            const base = buildV2Notice(RESPONSES.deniedTitle, RESPONSES.deniedDescription, 0xED4245);
-            return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
-        }
-
-        const staffId = ticket.claimedBy || null;
-        if (!staffId) {
-            const base = buildV2Notice(RESPONSES.noStaffTitle, RESPONSES.noStaffDescription, 0xFEE75C);
-            return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
+        const ticket = getTicketForInteraction(interaction);
+        const error = buildTicketError(interaction, ticket);
+        if (error) {
+            return interaction.reply({ ...error, flags: MessageFlags.Ephemeral | error.flags });
         }
 
         const modal = new ModalBuilder()
@@ -72,6 +81,7 @@ module.exports = {
                             .setCustomId(RATING_ID)
                             .setLabel('Rating (1-5)')
                             .setStyle(TextInputStyle.Short)
+                            .setPlaceholder('5')
                             .setRequired(true)
                             .setMaxLength(1)
                     ]
@@ -81,8 +91,9 @@ module.exports = {
                     components: [
                         new TextInputBuilder()
                             .setCustomId(COMMENT_ID)
-                            .setLabel('Comments (optional)')
+                            .setLabel('What went well or could improve?')
                             .setStyle(TextInputStyle.Paragraph)
+                            .setPlaceholder('Optional details for the staff team...')
                             .setRequired(false)
                             .setMaxLength(1000)
                     ]
@@ -94,23 +105,10 @@ module.exports = {
 
     async handleModalSubmit(interaction) {
         const ticketChannel = interaction.channel;
-        const activeStorage = ticketStore.getActiveStorage();
-        const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
-
-        if (!ticket) {
-            const base = buildV2Notice(RESPONSES.invalidChannelTitle, RESPONSES.invalidChannelDescription, 0xED4245);
-            return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
-        }
-
-        if (ticket.createdBy && ticket.createdBy !== interaction.user.id) {
-            const base = buildV2Notice(RESPONSES.deniedTitle, RESPONSES.deniedDescription, 0xED4245);
-            return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
-        }
-
-        const staffId = ticket.claimedBy || null;
-        if (!staffId) {
-            const base = buildV2Notice(RESPONSES.noStaffTitle, RESPONSES.noStaffDescription, 0xFEE75C);
-            return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
+        const ticket = getTicketForInteraction(interaction);
+        const error = buildTicketError(interaction, ticket);
+        if (error) {
+            return interaction.reply({ ...error, flags: MessageFlags.Ephemeral | error.flags });
         }
 
         const ratingRaw = String(interaction.fields.getTextInputValue(RATING_ID) || '').trim();
@@ -127,9 +125,14 @@ module.exports = {
             const base = buildV2Notice(RESPONSES.notConfiguredTitle, RESPONSES.notConfiguredDescription, 0xFEE75C);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
+
         const feedbackChannel = await interaction.client.channels.fetch(feedbackChannelId).catch(() => null);
         if (!feedbackChannel || !feedbackChannel.isTextBased()) {
-            const base = buildV2Notice(RESPONSES.channelErrorTitle, RESPONSES.channelErrorDescription.replace('{channelId}', feedbackChannelId), 0xED4245);
+            const base = buildV2Notice(
+                RESPONSES.channelErrorTitle,
+                RESPONSES.channelErrorDescription.replace('{channelId}', feedbackChannelId),
+                0xED4245
+            );
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }
 
@@ -139,14 +142,14 @@ module.exports = {
                 `Ticket: <#${ticketChannel.id}>`,
                 `Ticket type: **${ticket.ticketType || 'Unknown'}**`,
                 `Requester: <@${ticket.createdBy || interaction.user.id}>`,
-                `Staff: <@${staffId}>`,
-                `Rating: **${rating}/5**`,
+                `Staff: <@${ticket.claimedBy}>`,
+                `Score: **${rating}/5**`,
                 comment ? `\n**Comments:**\n${comment}` : null
             ].filter(Boolean).join('\n'),
             0x5865F2
         ));
 
-        const base = buildV2Notice('', RESPONSES.thanksDescription, 0x5865F2);
+        const base = buildV2Notice(RESPONSES.thanksTitle, RESPONSES.thanksDescription, 0x5865F2);
         return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
     }
 };

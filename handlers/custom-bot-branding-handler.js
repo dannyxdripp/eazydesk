@@ -47,10 +47,20 @@ function patchCustomBot(guildId, patch) {
     }, storage);
 }
 
-async function deployCommands(token, appId) {
-    if (!appId || !commandPayloads.length) return;
+async function deployCommands(token, appId, guildId) {
+    if (!appId || !commandPayloads.length) return { global: false, guild: false, count: 0 };
     const rest = new REST({ version: '10' }).setToken(token);
-    await rest.put(Routes.applicationCommands(appId), { body: commandPayloads });
+    if (guildId) {
+        await rest.put(Routes.applicationGuildCommands(appId, guildId), { body: commandPayloads });
+    }
+    if (process.env.CUSTOM_BOT_DEPLOY_GLOBAL_COMMANDS !== 'false') {
+        await rest.put(Routes.applicationCommands(appId), { body: commandPayloads });
+    }
+    return {
+        global: process.env.CUSTOM_BOT_DEPLOY_GLOBAL_COMMANDS !== 'false',
+        guild: Boolean(guildId),
+        count: commandPayloads.length
+    };
 }
 
 async function announceStartup(guildId, customBot, runtimeClient) {
@@ -117,6 +127,27 @@ async function startGuild(guildId, access) {
     const fingerprint = tokenFingerprint(token);
     const existing = clients.get(String(guildId));
     if (existing && existing.fingerprint === fingerprint) {
+        if (existing.ready) {
+            const resolvedAppId = appId || existing.client.application?.id || existing.client.user?.id || '';
+            try {
+                const result = await deployCommands(token, resolvedAppId, String(guildId));
+                patchCustomBot(guildId, {
+                    runtimeStatus: 'online',
+                    lastCommandSyncAt: new Date().toISOString(),
+                    lastCommandSyncCount: result.count,
+                    lastError: null
+                });
+                return { ok: true, reused: true, synced: true, commands: result.count };
+            } catch (error) {
+                patchCustomBot(guildId, {
+                    runtimeStatus: 'online',
+                    lastError: `Command sync failed: ${error?.message || error}`,
+                    lastErrorAt: new Date().toISOString()
+                });
+                storageMonitor.reportCustomBotEvent('error', { guildId, botName, appId: resolvedAppId, reason: 'manual command sync failed' }, error).catch(() => null);
+                return { ok: false, reused: true, error };
+            }
+        }
         return { ok: true, reused: true };
     }
     if (existing) {
@@ -153,8 +184,9 @@ async function startGuild(guildId, access) {
             }
             applyPresence(runtimeClient, customBot);
             let deployError = null;
+            let deployResult = null;
             try {
-                await deployCommands(token, resolvedAppId);
+                deployResult = await deployCommands(token, resolvedAppId, String(guildId));
             } catch (error) {
                 deployError = error;
                 storageMonitor.reportCustomBotEvent('error', {
@@ -168,6 +200,8 @@ async function startGuild(guildId, access) {
                 runtimeStatus: 'online',
                 lastStartedAt: new Date().toISOString(),
                 lastError: deployError ? `Command sync failed: ${deployError?.message || deployError}` : null,
+                lastCommandSyncAt: new Date().toISOString(),
+                lastCommandSyncCount: deployResult?.count || 0,
                 appId: customBot.appId || resolvedAppId
             });
             await announceStartup(guildId, customBot, runtimeClient);
@@ -178,7 +212,7 @@ async function startGuild(guildId, access) {
                 userTag: runtimeClient.user?.tag,
                 description: deployError
                     ? `${runtimeClient.user?.tag || botName} connected, but slash command deployment failed.`
-                    : `${runtimeClient.user?.tag || botName} connected and command deployment completed.`
+                    : `${runtimeClient.user?.tag || botName} connected and ${deployResult?.count || 0} slash command(s) were synced to the server.`
             }).catch(() => null);
         } catch (error) {
             patchCustomBot(guildId, {
