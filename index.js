@@ -935,6 +935,31 @@ async function handleRuntimeMessage(message) {
 
 client.on('messageCreate', handleRuntimeMessage);
 
+client.on('guildCreate', async guild => {
+    try {
+        const setupUrl = `${getPublicBaseUrl()}/setup?guild=${encodeURIComponent(guild.id)}&page=1`;
+        const owner = await guild.fetchOwner().catch(() => null);
+        if (!owner?.user) return;
+        const message = {
+            content: [
+                `Thanks for adding ${client.user?.username || 'the support bot'} to **${guild.name}**.`,
+                '',
+                `Set up your server here: ${setupUrl}`,
+                '',
+                'You can configure ticket categories, transcript channels, support roles, panels, feedback, and permissions from that setup page.'
+            ].join('\n')
+        };
+        const sent = await owner.user.send(message).then(() => true).catch(() => false);
+        if (!sent) {
+            await guild.systemChannel?.send({
+                content: `<@${owner.user.id}> ${message.content}`
+            }).catch(() => null);
+        }
+    } catch (error) {
+        console.warn('[Dashboard] Failed to DM setup link to new guild owner:', error?.message || error);
+    }
+});
+
 runtimeReady.then(() => loginWithRetry(client, process.env.TOKEN)).catch(error => {
     console.error('[Startup] Discord client failed to start:', error);
     process.exit(1);

@@ -6264,7 +6264,7 @@ function startDashboard(client, customBotManager = null) {
                 return;
             }
 
-            const pages = new Set(['/overview', '/settings', '/availability', '/tutorials', '/commands/ticket-types', '/panels', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/documentation']);
+            const pages = new Set(['/overview', '/settings', '/availability', '/tutorials', '/commands/ticket-types', '/panels', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/documentation', '/privacy', '/terms']);
             if (pages.has(pathname)) {
                 if (!isAuthed(req)) {
                     if (hasDiscordOAuthConfigured()) {
