@@ -31,6 +31,9 @@ const AI_SUPPORT_BUTTON_ID = 'ai_prompt_support';
 const TICKET_REASON_MODAL_PREFIX = 'ticket_reason_modal:';
 const TICKET_REASON_INPUT_ID = 'ticket_open_reason';
 const TICKET_FILE_UPLOAD_INPUT_ID = 'ticket_open_files';
+const CHANNEL_CREATE_PERMISSIONS = [
+    PermissionsBitField.Flags.ManageChannels
+];
 
 function getAutomaticAvailabilityStatus(count) {
     if (count > REDUCED_THRESHOLD) return 'reduced_assistance';
@@ -209,10 +212,65 @@ function resolveParentCategoryId(guild, ticketConfig) {
     for (const id of candidates) {
         if (!guild?.channels?.cache) return id;
         const ch = guild.channels.cache.get(id);
-        if (!ch) return id;
+        if (!ch) continue;
         if (ch.type === ChannelType.GuildCategory) return id;
     }
-    return configured || guildDefault || null;
+    return null;
+}
+
+function getMissingPermissionNames(permissions, required) {
+    const labels = {
+        [PermissionsBitField.Flags.ManageChannels]: 'Manage Channels',
+        [PermissionsBitField.Flags.ManageRoles]: 'Manage Roles',
+        [PermissionsBitField.Flags.ViewChannel]: 'View Channels',
+        [PermissionsBitField.Flags.SendMessages]: 'Send Messages',
+        [PermissionsBitField.Flags.EmbedLinks]: 'Embed Links',
+        [PermissionsBitField.Flags.ReadMessageHistory]: 'Read Message History',
+        [PermissionsBitField.Flags.AttachFiles]: 'Attach Files'
+    };
+    return required
+        .filter(permission => !permissions?.has?.(permission))
+        .map(permission => labels[permission] || String(permission));
+}
+
+function resolveTicketParentCategory(guild, parentCategoryId) {
+    const id = String(parentCategoryId || '').trim();
+    if (!id || !guild?.channels?.cache) return { id: null, channel: null, missing: false };
+    const channel = guild.channels.cache.get(id);
+    if (!channel || channel.type !== ChannelType.GuildCategory) {
+        return { id: null, channel: null, missing: true, originalId: id };
+    }
+    return { id, channel, missing: false };
+}
+
+function validateCreateTicketPermissions(guild, parentInfo, allowAttachments = true) {
+    const me = guild?.members?.me;
+    if (!me) {
+        return { ok: false, message: 'I could not read my server member permissions. Please try again in a moment.' };
+    }
+
+    const guildMissing = getMissingPermissionNames(me.permissions, [
+        PermissionsBitField.Flags.ManageChannels,
+        PermissionsBitField.Flags.ManageRoles
+    ]);
+    if (guildMissing.length) {
+        return {
+            ok: false,
+            message: `I am missing these server permissions: **${guildMissing.join(', ')}**.`
+        };
+    }
+
+    if (parentInfo?.channel) {
+        const categoryPermissions = parentInfo.channel.permissionsFor(me);
+        const categoryMissing = getMissingPermissionNames(categoryPermissions, CHANNEL_CREATE_PERMISSIONS);
+        if (categoryMissing.length) {
+            return {
+                ok: false,
+                message: `I cannot create tickets in **${parentInfo.channel.name}** because I am missing: **${categoryMissing.join(', ')}**.\n\nAllow those permissions on that category, or choose a different ticket category in setup.`
+            };
+        }
+    }
+    return { ok: true };
 }
 
 function getRestrictedTicketTypeForChannel(interaction) {
@@ -507,7 +565,8 @@ module.exports = {
             const activeStorage = ticketStore.cleanupMissingTicketChannels(interaction.guild);
             const ticketConfig = ticketStore.findTicketType(ticketType, interaction.guildId);
             const matchingTeam = ticketStore.findSupportTeamForTicketType(ticketType, interaction.guildId);
-            const teamRoleIds = ticketStore.getSupportTeamRoleIds(matchingTeam);
+            const teamRoleIds = ticketStore.getSupportTeamRoleIds(matchingTeam)
+                .filter(roleId => interaction.guild.roles.cache.has(roleId));
             const allowAttachments = ticketConfig?.allowAttachments !== false;
 
             const statusInfo = options.statusInfo || getEffectiveAvailability(activeStorage, ticketType, interaction.guildId);
@@ -523,6 +582,34 @@ module.exports = {
                 ...options,
                 statusInfo
             });
+
+            if (!interaction.guild.members.me) {
+                await interaction.guild.members.fetchMe().catch(() => null);
+            }
+            const botMember = interaction.guild.members.me;
+            const blockedTeamRoles = botMember
+                ? teamRoleIds
+                    .map(roleId => interaction.guild.roles.cache.get(roleId))
+                    .filter(role => role && role.position >= botMember.roles.highest.position)
+                : [];
+            if (blockedTeamRoles.length) {
+                return sendEphemeral(
+                    interaction,
+                    buildInfoMessage(
+                        'Role Hierarchy Issue',
+                        `Move my bot role above these support roles, then try again: **${blockedTeamRoles.map(role => role.name).join(', ')}**.`,
+                        0xED4245
+                    )
+                );
+            }
+            const parentInfo = resolveTicketParentCategory(interaction.guild, parentCategoryId);
+            const permissionCheck = validateCreateTicketPermissions(interaction.guild, parentInfo, allowAttachments);
+            if (!permissionCheck.ok) {
+                return sendEphemeral(interaction, buildInfoMessage('Missing Permissions', permissionCheck.message, 0xED4245));
+            }
+            if (parentInfo.missing && parentInfo.originalId) {
+                console.warn(`[Tickets] Configured ticket category ${parentInfo.originalId} was not found in guild ${interaction.guildId}; creating ticket without a parent category.`);
+            }
 
             const botMemberId = interaction.guild.members.me?.id || interaction.client.user?.id;
             const permissionOverwrites = [
@@ -568,7 +655,7 @@ module.exports = {
             const ticketChannel = await interaction.guild.channels.create({
                 name: channelName,
                 type: ChannelType.GuildText,
-                parent: parentCategoryId || null,
+                parent: parentInfo.id || null,
                 permissionOverwrites
             });
 
@@ -635,6 +722,15 @@ module.exports = {
             return sendEphemeral(interaction, { flags: MessageFlags.IsComponentsV2, components: [createdContainer] });
         } catch (error) {
             console.error('Error creating ticket:', error);
+            if (error?.code === 50013 || error?.status === 403) {
+                return sendEphemeral(interaction, {
+                    ...buildInfoMessage(
+                        'Missing Permissions',
+                        'Discord blocked the ticket channel creation. Check that I have **Manage Channels** at server level and that the selected ticket category allows me to **View Channels**, **Send Messages**, and **Manage Channels**. If the bot was removed and re-added, re-save the ticket category in setup so stale IDs are repaired.',
+                        0xED4245
+                    )
+                });
+            }
             return sendEphemeral(interaction, {
                 ...buildInfoMessage('Error', 'There was an error creating your ticket.', 0xED4245)
             });
