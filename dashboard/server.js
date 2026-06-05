@@ -2423,6 +2423,9 @@ async function getDashboardState(client, req = null) {
             branding: guildConfig?.branding && typeof guildConfig.branding === 'object' ? guildConfig.branding : {},
             panelConfig: guildConfig?.panelConfig && typeof guildConfig.panelConfig === 'object' ? guildConfig.panelConfig : {},
             panels: guildConfig?.panels && typeof guildConfig.panels === 'object' ? guildConfig.panels : {},
+            exclusionList: typeof ticketStore.getExclusionListForGuild === 'function'
+                ? ticketStore.getExclusionListForGuild(guildId, activeStorage)
+                : (Array.isArray(guildConfig?.exclusionList) ? guildConfig.exclusionList : []),
             escalationRoles: guildConfig?.escalationRoles && typeof guildConfig.escalationRoles === 'object' ? guildConfig.escalationRoles : {}
         },
         availability: ticketTypes.map(type => ({
@@ -3176,6 +3179,9 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         }
 
         const mode = String(body.mode || 'multi').trim() === 'single' ? 'single' : 'multi';
+        const displayStyle = mode === 'single'
+            ? 'buttons'
+            : (String(body.displayStyle || 'buttons').trim() === 'select' ? 'select' : 'buttons');
         const ticketTypeInput = String(body.ticketType || '').trim();
         const activeStorage = ticketStore.getActiveStorage();
         const ticketType = ticketTypeInput ? ticketStore.resolveTicketTypeSelectValue(ticketTypeInput, guildId, activeStorage) : '';
@@ -3194,6 +3200,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             advisory: String(body.advisory || '').trim().slice(0, 4000),
             buttonLabel: String(body.buttonLabel || '').trim().slice(0, 80) || 'Select a prompt',
             mode,
+            displayStyle,
             ticketType: mode === 'single' ? ticketType : null
         };
 
@@ -3241,6 +3248,55 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         };
         await ticketHandler.createTicketPanel(fakeInteraction, { channel, notice: 'Ticket panel has been published from the dashboard.' });
         sendJson(res, 200, { ok: true, guildId, channelId });
+        return true;
+    }
+
+    if (method === 'POST' && pathname === '/api/exclusion/upsert') {
+        const body = await readBody(req);
+        const guildId = String(body.guildId || '').trim();
+        if (!/^\d{17,20}$/.test(guildId)) {
+            sendJson(res, 400, { error: 'Invalid guildId' });
+            return true;
+        }
+        if (!(await ensureDashboardPermission(client, req, guildId, 'canManageSettings'))) {
+            sendJson(res, 403, { error: 'Forbidden' });
+            return true;
+        }
+        const userId = String(body.userId || '').trim();
+        if (!/^\d{17,20}$/.test(userId)) {
+            sendJson(res, 400, { error: 'Enter a valid Discord user ID.' });
+            return true;
+        }
+        const activeStorage = ticketStore.getActiveStorage();
+        const entry = ticketStore.upsertExclusionForGuild(guildId, {
+            userId,
+            ticketTypes: Array.isArray(body.ticketTypes) ? body.ticketTypes : [],
+            reason: String(body.reason || '').trim(),
+            createdBy: getDashboardSessionUserId(req) || getBotOwnerId() || null
+        }, activeStorage);
+        if (!entry) {
+            sendJson(res, 400, { error: 'Could not save that exclusion.' });
+            return true;
+        }
+        sendJson(res, 200, { ok: true, guildId, exclusionList: ticketStore.getExclusionListForGuild(guildId, activeStorage) });
+        return true;
+    }
+
+    if (method === 'POST' && pathname === '/api/exclusion/delete') {
+        const body = await readBody(req);
+        const guildId = String(body.guildId || '').trim();
+        const userId = String(body.userId || '').trim();
+        if (!/^\d{17,20}$/.test(guildId) || !/^\d{17,20}$/.test(userId)) {
+            sendJson(res, 400, { error: 'Invalid guildId or userId' });
+            return true;
+        }
+        if (!(await ensureDashboardPermission(client, req, guildId, 'canManageSettings'))) {
+            sendJson(res, 403, { error: 'Forbidden' });
+            return true;
+        }
+        const activeStorage = ticketStore.getActiveStorage();
+        ticketStore.removeExclusionForGuild(guildId, userId, activeStorage);
+        sendJson(res, 200, { ok: true, guildId, exclusionList: ticketStore.getExclusionListForGuild(guildId, activeStorage) });
         return true;
     }
 
@@ -5027,6 +5083,14 @@ function channelLabel(channelId,placeholder){const ch=(state.channelCatalog||[])
 function channelSelect(id,selectedId,placeholder){const channels=Array.isArray(state.channelCatalog)?state.channelCatalog:[];return '<div class="custom-select" data-cs="'+id+'"><input id="'+id+'" type="hidden" value="'+esc(selectedId||'')+'" /><button type="button" class="cs-trigger" data-cs-trigger="'+id+'"><span class="cs-label" id="'+id+'Label">'+esc(channelLabel(selectedId,placeholder))+'</span><span class="cs-caret">v</span></button><div class="cs-menu"><input class="cs-search" data-cs-search="'+id+'" placeholder="Search channels" /><div class="cs-list">'+['<button type="button" class="cs-opt '+(!selectedId?'active':'')+'" data-cs-opt="'+id+'" data-value="">'+esc(placeholder||'Select a channel')+'</button>'].concat(channels.map(ch=>'<button type="button" class="cs-opt '+(selectedId===ch.id?'active':'')+'" data-cs-opt="'+id+'" data-value="'+ch.id+'">#'+esc(ch.name)+'</button>')).join('')+'</div></div></div>'}
 function categoryLabel(categoryId,placeholder){const ch=(state.categoryCatalog||[]).find(c=>c.id===categoryId);return ch?(ch.name):(placeholder||'Select a category')}
 function categorySelect(id,selectedId,placeholder){const cats=Array.isArray(state.categoryCatalog)?state.categoryCatalog:[];return '<div class="custom-select" data-cs="'+id+'"><input id="'+id+'" type="hidden" value="'+esc(selectedId||'')+'" /><button type="button" class="cs-trigger" data-cs-trigger="'+id+'"><span class="cs-label" id="'+id+'Label">'+esc(categoryLabel(selectedId,placeholder))+'</span><span class="cs-caret">v</span></button><div class="cs-menu"><input class="cs-search" data-cs-search="'+id+'" placeholder="Search categories" /><div class="cs-list">'+['<button type="button" class="cs-opt '+(!selectedId?'active':'')+'" data-cs-opt="'+id+'" data-value="">'+esc(placeholder||'Use default ticket category')+'</button>'].concat(cats.map(ch=>'<button type="button" class="cs-opt '+(selectedId===ch.id?'active':'')+'" data-cs-opt="'+id+'" data-value="'+ch.id+'">'+esc(ch.name)+'</button>')).join('')+'</div></div></div>'}
+function renderExclusionList(){
+ const list=Array.isArray(state.guildConfigSummary&&state.guildConfigSummary.exclusionList)?state.guildConfigSummary.exclusionList:[];
+ const toSelectValue=s=>String(s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,90);
+ const typeOptions=(state.ticketTypes||[]).map(t=>'<label class="checkbox-wrapper"><input type="checkbox" class="exType" value="'+esc(t.name||'')+'" /><span class="checkmark"></span><span class="label">'+esc(t.name||'Ticket')+'</span></label>').join('')||'<div class="muted">No ticket types yet. Leave empty to block all ticket types.</div>';
+ const typeLabel=value=>{const found=(state.ticketTypes||[]).find(t=>toSelectValue(t.name)===String(value));return found?found.name:value};
+ const rows=list.map(entry=>{const types=Array.isArray(entry.ticketTypes)&&entry.ticketTypes.length?entry.ticketTypes.map(typeLabel).join(', '):'All ticket types';return '<div class="item"><div class="item-top"><strong>'+esc(entry.userId)+'</strong><button type="button" class="btn-danger removeExclusion" data-user="'+esc(entry.userId)+'" style="width:auto">Remove</button></div><div class="muted">'+esc(types)+(entry.reason?' - '+esc(entry.reason):'')+'</div></div>'}).join('')||'<div class="muted">No users are excluded from opening tickets.</div>';
+ return '<div class="card" style="margin-top:14px"><h3>Exclusion List</h3><p class="muted">Stop a user from opening all tickets, or only selected ticket types.</p><div class="row"><div><label>User ID</label><input id="exUserId" placeholder="123456789012345678" /></div><div><label>Reason</label><input id="exReason" placeholder="Optional internal note" /></div></div><label>Ticket Types</label><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">'+typeOptions+'</div><div class="help">Select no ticket types to exclude the user from all ticket types.</div><div style="margin-top:12px"><button id="saveExclusion" class="btn" style="width:auto">Add Exclusion</button></div><div class="list" style="margin-top:14px">'+rows+'</div></div>'
+}
  function renderSettings(){
  const teams=Array.isArray(state.supportTeams)?state.supportTeams:[];
   const ai=state&&state.aiAccess?state.aiAccess:{plan:'none',enabled:false,statusLabel:'No AI subscription',trialRemainingDays:0};
@@ -5119,7 +5183,8 @@ function categorySelect(id,selectedId,placeholder){const cats=Array.isArray(stat
         (selectedTeam?'<button id="deleteTeamBtn" class="btn-danger">Delete</button>':'')+
       '</div>'+
     '</div>'+
-  '</div>';
+  '</div>'+
+  renderExclusionList();
  }
 function availabilityLabel(status){if(status==='reduced_assistance')return 'Reduced Assistance';if(status==='increased_volume')return 'Increased Volume';return 'Available'}
 function availabilityBadge(info){const s=info.status||'available';const cls=s==='reduced_assistance'?'danger':(s==='increased_volume'?'warn':'ok');const src=info.source==='manual'?'Manual':'Auto';return '<span class="pill '+cls+'">'+availabilityLabel(s)+'</span> <span class="muted">'+src+' - '+(info.count||0)+' active</span>'}
@@ -5385,7 +5450,7 @@ function renderTranscripts(){
   '<div class=\"card\"><h3>Saved Transcripts</h3><div id=\"transcriptsList\" class=\"list\" style=\"margin-top:10px\">'+(items.length?items.map(row).join(''):'<div class=\"muted\">No transcripts saved yet.</div>')+'</div></div>'+
  '</div>';
 }
-function renderPanels(){const panels=(state.guildConfigSummary&&state.guildConfigSummary.panels)||{};const selected=String((ui&&ui.selectedPanelChannel)||Object.keys(panels)[0]||'');const panel=selected&&panels[selected]&&typeof panels[selected]==='object'?panels[selected]:{};const toSelectValue=s=>String(s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,90);const typeOptions=['<option value="">Select ticket type</option>'].concat((state.ticketTypes||[]).map(t=>{const v=String(t.name||'');const selectValue=String(t.selectValue||toSelectValue(v));const current=String(panel.ticketType||'');const sel=(current===v||current===selectValue)?' selected':'';return '<option value="'+esc(v)+'"'+sel+'>'+esc(v)+'</option>'})).join('');const rows=Object.entries(panels).map(([id,p])=>'<button type="button" class="list-btn panelPick '+(id===selected?'active':'')+'" data-id="'+esc(id)+'"><div class="list-title">'+esc(p.title||p.name||channelLabel(id,'Panel'))+'</div><div class="list-meta">'+esc(channelLabel(id,'No channel'))+' &middot; '+esc((p.mode==='single'?'Single type':'Multi selector'))+'</div></button>').join('')||'<div class="muted">No custom panels yet.</div>';return '<div class="split"><div class="card list-card"><div class="list-head"><div><h3 style="margin:0">Panel Library</h3><div class="muted">Each channel can have its own panel copy and button.</div></div><button id="newPanelBtn" class="btn-soft" style="width:auto">New</button></div><div class="list list-compact" id="panelsList" style="margin-top:10px">'+rows+'</div></div><div class="card"><h3>'+(selected?'Edit Panel':'Create Panel')+'</h3><label>Destination Channel</label>'+channelSelect('panelChannel',selected,'Select panel channel')+'<div class="row"><div><label>Panel Mode</label><select id="panelMode"><option value="multi" '+(panel.mode!=='single'?'selected':'')+'>Multi-panel selector</option><option value="single" '+(panel.mode==='single'?'selected':'')+'>Single ticket type</option></select></div><div><label>Ticket Type</label><select id="panelTicketType">'+typeOptions+'</select></div></div><label>Panel Title</label><input id="panelEditTitle" value="'+esc(panel.title||panel.name||'Support Desk')+'" /><label>Panel Description</label><textarea id="panelEditDescription" style="min-height:150px" placeholder="Explain what this panel is for.">'+esc(panel.description||'')+'</textarea><label>Button Text</label><input id="panelButtonLabel" value="'+esc(panel.buttonLabel||'Select a prompt')+'" maxlength="80" /><label>Advisory</label><textarea id="panelEditAdvisory" placeholder="Rules, policy notes, or expected response times.">'+esc(panel.advisory||'')+'</textarea><div class="row" style="margin-top:12px;grid-template-columns:1fr 1fr"><button id="savePanelDesign" class="btn">Save Panel</button><button id="publishPanelDesign" class="btn-soft">Publish Panel</button></div><div class="preview-shell" style="margin-top:14px"><div class="preview-msg"><div class="preview-avatar"></div><div class="preview-content"><div class="preview-name">'+esc((state.guildConfigSummary&&state.guildConfigSummary.branding&&state.guildConfigSummary.branding.botName)||'Tickets Bot')+' <span class="preview-tag">BOT</span></div><div class="preview-embed"><div class="preview-bar"></div><div class="preview-main"><div class="preview-title" id="panelPreviewTitle"></div><div class="preview-desc" id="panelPreviewDesc"></div><button type="button" class="btn-soft" id="panelPreviewButton" style="width:auto;margin-top:12px"></button></div></div></div></div></div></div></div>'}
+function renderPanels(){const panels=(state.guildConfigSummary&&state.guildConfigSummary.panels)||{};const selected=String((ui&&ui.selectedPanelChannel)||Object.keys(panels)[0]||'');const panel=selected&&panels[selected]&&typeof panels[selected]==='object'?panels[selected]:{};const toSelectValue=s=>String(s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,90);const displayStyle=panel.mode==='single'?'buttons':(panel.displayStyle==='select'?'select':'buttons');const typeOptions=['<option value="">Select ticket type</option>'].concat((state.ticketTypes||[]).map(t=>{const v=String(t.name||'');const selectValue=String(t.selectValue||toSelectValue(v));const current=String(panel.ticketType||'');const sel=(current===v||current===selectValue)?' selected':'';return '<option value="'+esc(v)+'"'+sel+'>'+esc(v)+'</option>'})).join('');const rows=Object.entries(panels).map(([id,p])=>'<button type="button" class="list-btn panelPick '+(id===selected?'active':'')+'" data-id="'+esc(id)+'"><div class="list-title">'+esc(p.title||p.name||channelLabel(id,'Panel'))+'</div><div class="list-meta">'+esc(channelLabel(id,'No channel'))+' &middot; '+esc((p.mode==='single'?'Single type':(p.displayStyle==='select'?'Select menu':'Button flow')))+'</div></button>').join('')||'<div class="muted">No custom panels yet.</div>';const selectPreview='<select style="width:auto;margin-top:12px"><option>Choose a ticket type</option></select>';return '<div class="split"><div class="card list-card"><div class="list-head"><div><h3 style="margin:0">Panel Library</h3><div class="muted">Each channel can have its own panel copy and opener style.</div></div><button id="newPanelBtn" class="btn-soft" style="width:auto">New</button></div><div class="list list-compact" id="panelsList" style="margin-top:10px">'+rows+'</div></div><div class="card"><h3>'+(selected?'Edit Panel':'Create Panel')+'</h3><label>Destination Channel</label>'+channelSelect('panelChannel',selected,'Select panel channel')+'<div class="row"><div><label>Panel Mode</label><select id="panelMode"><option value="multi" '+(panel.mode!=='single'?'selected':'')+'>Multi ticket panel</option><option value="single" '+(panel.mode==='single'?'selected':'')+'>Single ticket type</option></select></div><div><label>Display Style</label><select id="panelDisplayStyle" '+(panel.mode==='single'?'disabled':'')+'><option value="buttons" '+(displayStyle!=='select'?'selected':'')+'>Button opens choices</option><option value="select" '+(displayStyle==='select'?'selected':'')+'>Select menu on panel</option></select><div class="help">Select menus are only available for multi ticket panels.</div></div></div><label>Ticket Type</label><select id="panelTicketType">'+typeOptions+'</select><label>Panel Title</label><input id="panelEditTitle" value="'+esc(panel.title||panel.name||'Support Desk')+'" /><label>Panel Description</label><textarea id="panelEditDescription" style="min-height:150px" placeholder="Explain what this panel is for.">'+esc(panel.description||'')+'</textarea><label>Button Text</label><input id="panelButtonLabel" value="'+esc(panel.buttonLabel||'Select a prompt')+'" maxlength="80" /><label>Advisory</label><textarea id="panelEditAdvisory" placeholder="Rules, policy notes, or expected response times.">'+esc(panel.advisory||'')+'</textarea><div class="row" style="margin-top:12px;grid-template-columns:1fr 1fr"><button id="savePanelDesign" class="btn">Save Panel</button><button id="publishPanelDesign" class="btn-soft">Publish Panel</button></div><div class="preview-shell" style="margin-top:14px"><div class="preview-msg"><div class="preview-avatar"></div><div class="preview-content"><div class="preview-name">'+esc((state.guildConfigSummary&&state.guildConfigSummary.branding&&state.guildConfigSummary.branding.botName)||'Tickets Bot')+' <span class="preview-tag">BOT</span></div><div class="preview-embed"><div class="preview-bar"></div><div class="preview-main"><div class="preview-title" id="panelPreviewTitle"></div><div class="preview-desc" id="panelPreviewDesc"></div><div id="panelPreviewControl">'+(displayStyle==='select'?selectPreview:'<button type="button" class="btn-soft" id="panelPreviewButton" style="width:auto;margin-top:12px"></button>')+'</div></div></div></div></div></div></div></div>'}
 function renderFeedback(){const feedbackChannel=state.botConfig.appealsChannelId||'';return '<div class="split">'+
  '<div class="card list-card"><div class="list-head"><div><h3 style="margin:0">Feedback Flow</h3><div class="muted">Choose where completed ticket feedback is sent.</div></div><span class="pill '+(feedbackChannel?'ok':'warn')+'">'+(feedbackChannel?'Ready':'Needs channel')+'</span></div><div class="list" style="margin-top:14px">'+
   '<div class="item"><div><strong>User runs /feedback</strong><div class="muted">Only the ticket opener can submit it after a staff member claims the ticket.</div></div></div>'+
@@ -5510,8 +5575,8 @@ function getBrandingTemplates(){const box=document.getElementById('brandingTempl
 function renderBrandingPreview(){const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');const brandNameEl=document.getElementById('serverBrandName');const brandAvatarEl=document.getElementById('serverBrandAvatar');const bar=document.getElementById('brandingPreviewBar');const titleView=document.getElementById('brandingPreviewTitle');const descView=document.getElementById('brandingPreviewDesc');const nameView=document.getElementById('brandingPreviewName');const avatarView=document.getElementById('brandingPreviewAvatar');const color=((colorEl&&colorEl.value)||'#5865F2').trim();if(bar)bar.style.background=color.startsWith('#')?color:('#'+color.replace('#',''));if(nameView)nameView.innerHTML=esc((brandNameEl&&brandNameEl.value)||'Tickets Bot')+' <span class="preview-tag">BOT</span>';if(avatarView){const avatar=((brandAvatarEl&&brandAvatarEl.value)||'').trim();avatarView.style.backgroundImage=avatar?'url('+avatar.replace(/["')]/g,'')+')':'';avatarView.style.backgroundSize='cover';avatarView.style.backgroundPosition='center'}if(titleView)titleView.textContent=(titleEl&&titleEl.value)||'(No title)';const rawDesc=(descEl&&descEl.value)||'';const cleaned=rawDesc.split(/\\r?\\n/).map(line=>{const t=String(line||'').trim();if(/^\\[\\[(divider|sep|separator)(?::(small|large))?\\]\\]$/i.test(t))return '--------';if(/^\\[\\[(space|spacer)(?::(small|large))?\\]\\]$/i.test(t))return '';return line}).join('\\n').replace(/\\n{3,}/g,'\\n\\n').trim()||'(No description)';if(descView)descView.textContent=cleaned}
 function loadBrandingKey(key){const templates=getBrandingTemplates();const t=templates[key]||defaultEmbedTemplates[key]||{title:'',description:'',color:'#5865F2'};const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');if(colorEl)colorEl.value=t.color||'#5865F2';if(titleEl)titleEl.value=t.title||'';if(descEl)descEl.value=t.description||'';renderBrandingPreview()}
 function applyBrandingFormToTemplate(){const keyEl=document.getElementById('brandingKey');const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');const box=document.getElementById('brandingTemplates');if(!keyEl||!box)return;const key=keyEl.value;const templates=getBrandingTemplates();templates[key]={...(templates[key]||{}),color:((colorEl&&colorEl.value)||'').trim(),title:(titleEl&&titleEl.value)||'',description:(descEl&&descEl.value)||''};box.value=JSON.stringify(templates,null,2);renderBrandingPreview()}
-function renderPanelPreview(){const title=document.getElementById('panelEditTitle');const desc=document.getElementById('panelEditDescription');const adv=document.getElementById('panelEditAdvisory');const button=document.getElementById('panelButtonLabel');const mode=document.getElementById('panelMode');const type=document.getElementById('panelTicketType');const titleView=document.getElementById('panelPreviewTitle');const descView=document.getElementById('panelPreviewDesc');const buttonView=document.getElementById('panelPreviewButton');if(titleView)titleView.textContent=(title&&title.value)||'Support Desk';const bits=[(desc&&desc.value)||'',(adv&&adv.value)||''].filter(v=>String(v||'').trim());if(descView)descView.textContent=bits.join('\\n\\n')||'Panel description preview';if(buttonView){const suffix=mode&&mode.value==='single'&&type&&type.value?(' - '+type.value):'';buttonView.textContent=((button&&button.value)||'Select a prompt')+suffix;}}
-async function savePanelDesign(publish=false){const channelId=(document.getElementById('panelChannel')?.value||'').trim();if(!channelId)return note('Choose a panel channel first.','danger');const payload={guildId:state.guildId,channelId,title:(document.getElementById('panelEditTitle')?.value||'').trim(),description:document.getElementById('panelEditDescription')?.value||'',advisory:document.getElementById('panelEditAdvisory')?.value||'',buttonLabel:(document.getElementById('panelButtonLabel')?.value||'').trim(),mode:document.getElementById('panelMode')?.value||'multi',ticketType:document.getElementById('panelTicketType')?.value||''};await api('/api/panel/upsert',{method:'POST',body:JSON.stringify(payload)});ui.selectedPanelChannel=channelId;saveUi();if(publish)await api('/api/panel/publish',{method:'POST',body:JSON.stringify({guildId:state.guildId,channelId})});note(publish?'Panel saved and published.':'Panel saved.','ok');await boot()}
+function renderPanelPreview(){const title=document.getElementById('panelEditTitle');const desc=document.getElementById('panelEditDescription');const adv=document.getElementById('panelEditAdvisory');const button=document.getElementById('panelButtonLabel');const mode=document.getElementById('panelMode');const type=document.getElementById('panelTicketType');const display=document.getElementById('panelDisplayStyle');const titleView=document.getElementById('panelPreviewTitle');const descView=document.getElementById('panelPreviewDesc');const control=document.getElementById('panelPreviewControl');if(display&&mode){display.disabled=mode.value==='single';if(mode.value==='single')display.value='buttons'}if(titleView)titleView.textContent=(title&&title.value)||'Support Desk';const bits=[(desc&&desc.value)||'',(adv&&adv.value)||''].filter(v=>String(v||'').trim());if(descView)descView.textContent=bits.join('\\n\\n')||'Panel description preview';if(control){const useSelect=mode&&mode.value!=='single'&&display&&display.value==='select';if(useSelect){control.innerHTML='<select style="width:auto;margin-top:12px"><option>Choose a ticket type</option></select>'}else{const suffix=mode&&mode.value==='single'&&type&&type.value?(' - '+type.value):'';control.innerHTML='<button type="button" class="btn-soft" id="panelPreviewButton" style="width:auto;margin-top:12px">'+esc(((button&&button.value)||'Select a prompt')+suffix)+'</button>'}}}
+async function savePanelDesign(publish=false){const channelId=(document.getElementById('panelChannel')?.value||'').trim();if(!channelId)return note('Choose a panel channel first.','danger');const payload={guildId:state.guildId,channelId,title:(document.getElementById('panelEditTitle')?.value||'').trim(),description:document.getElementById('panelEditDescription')?.value||'',advisory:document.getElementById('panelEditAdvisory')?.value||'',buttonLabel:(document.getElementById('panelButtonLabel')?.value||'').trim(),mode:document.getElementById('panelMode')?.value||'multi',displayStyle:document.getElementById('panelDisplayStyle')?.value||'buttons',ticketType:document.getElementById('panelTicketType')?.value||''};await api('/api/panel/upsert',{method:'POST',body:JSON.stringify(payload)});ui.selectedPanelChannel=channelId;saveUi();if(publish)await api('/api/panel/publish',{method:'POST',body:JSON.stringify({guildId:state.guildId,channelId})});note(publish?'Panel saved and published.':'Panel saved.','ok');await boot()}
 function setupModuleDrilldown(){
  if(['/overview','/tutorials','/documentation','/pricing','/upgrade'].includes(currentPath))return;
  const root=app.querySelector(':scope > .grid, :scope > .split');
@@ -5641,6 +5706,8 @@ function wire(){
  document.querySelectorAll('.copyPH').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText(b.dataset.v||'');note('Placeholder copied.','ok')});
  const saveConfig=document.getElementById('saveConfig');if(saveConfig)saveConfig.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,appealsChannelId:feedbackId.value||null,setup:{step:4}})});note('Settings saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const savePanelConfig=document.getElementById('savePanelConfig');if(savePanelConfig)savePanelConfig.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,panelConfig:{title:(document.getElementById('panelTitle')?.value||'').trim(),description:document.getElementById('panelDescription')?.value||'',advisory:document.getElementById('panelAdvisory')?.value||''},setup:{step:4}})});note('Panel saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+ const saveExclusion=document.getElementById('saveExclusion');if(saveExclusion)saveExclusion.onclick=async()=>{try{const userId=(document.getElementById('exUserId')?.value||'').trim();const reason=(document.getElementById('exReason')?.value||'').trim();const ticketTypes=[...document.querySelectorAll('.exType:checked')].map(input=>input.value);await api('/api/exclusion/upsert',{method:'POST',body:JSON.stringify({guildId:state.guildId,userId,reason,ticketTypes})});note('Exclusion saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+ document.querySelectorAll('.removeExclusion').forEach(btn=>btn.onclick=async()=>{try{await api('/api/exclusion/delete',{method:'POST',body:JSON.stringify({guildId:state.guildId,userId:btn.dataset.user||''})});note('Exclusion removed.','ok');await boot()}catch(e){note(e.message,'danger')}});
  const aiUpsell=document.getElementById('aiUpsell');if(aiUpsell)aiUpsell.onclick=()=>{window.location='/pricing'};
  const aiStartTrial=document.getElementById('aiStartTrial');if(aiStartTrial)aiStartTrial.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'start-trial',days:7})});note('AI free trial started for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const aiSetPlus=document.getElementById('aiSetPlus');if(aiSetPlus)aiSetPlus.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'set-plan',plan:'plus'})});note('Plus enabled for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
@@ -5682,7 +5749,7 @@ const savePanelDesignBtn=document.getElementById('savePanelDesign');if(savePanel
 const publishPanelDesign=document.getElementById('publishPanelDesign');if(publishPanelDesign)publishPanelDesign.onclick=async()=>{try{await savePanelDesign(true)}catch(e){note(e.message,'danger')}};
 const newPanelBtn=document.getElementById('newPanelBtn');if(newPanelBtn)newPanelBtn.onclick=()=>{ui.selectedPanelChannel='';saveUi();if(window.__dashNav)window.__dashNav.navigate('/panels')};
 document.querySelectorAll('.panelPick').forEach(b=>b.onclick=()=>{ui.selectedPanelChannel=b.dataset.id||'';saveUi();if(window.__dashNav)window.__dashNav.navigate('/panels')});
-['panelEditTitle','panelEditDescription','panelEditAdvisory','panelButtonLabel','panelMode','panelTicketType'].forEach(id=>{const el=document.getElementById(id);if(el)el.oninput=renderPanelPreview;if(el)el.onchange=renderPanelPreview});
+['panelEditTitle','panelEditDescription','panelEditAdvisory','panelButtonLabel','panelMode','panelDisplayStyle','panelTicketType'].forEach(id=>{const el=document.getElementById(id);if(el)el.oninput=renderPanelPreview;if(el)el.onchange=renderPanelPreview});
 if(document.getElementById('panelPreviewTitle'))renderPanelPreview();
 
   const wirePickList=(opts)=>{
@@ -6446,7 +6513,7 @@ function startDashboard(client, customBotManager = null) {
                 return;
             }
 
-            const pages = new Set(['/overview', '/settings', '/availability', '/tutorials', '/commands/ticket-types', '/panels', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/documentation', '/privacy', '/terms']);
+            const pages = new Set(['/overview', '/settings', '/availability', '/tutorials', '/commands/ticket-types', '/panels', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/pricing', '/upgrade', '/documentation', '/privacy', '/terms']);
             if (pages.has(pathname)) {
                 if (!isAuthed(req)) {
                     if (hasDiscordOAuthConfigured()) {

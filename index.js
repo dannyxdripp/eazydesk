@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ActivityType, MessageFlags } = require('discord.js');
+const { Client, GatewayIntentBits, ActivityType, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const { REST, Routes } = require('discord.js');
@@ -8,6 +8,7 @@ const { archiveTranscript } = require('./utils/transcript-archive');
 const closeRequestCommand = require('./commands/closerequest');
 const tagCommand = require('./commands/tag');
 const feedbackCommand = require('./commands/feedback');
+const setupConversation = require('./utils/setup-conversation');
 const customBotBrandingHandler = require('./handlers/custom-bot-branding-handler');
 const { startDashboard } = require('./dashboard/server');
 const { loadEnv } = require('./utils/load-env');
@@ -887,6 +888,8 @@ async function handleRuntimeMessage(message) {
     if (!message.guild || message.author.bot) return;
 
     const activeStorage = ticketStore.getActiveStorage();
+    if (await setupConversation.handleMessage(message)) return;
+
     const ticket = ticketStore.getTicketByChannelId(message.channel.id, activeStorage);
     if (ticket) {
         const lastActivityMs = Date.parse(ticket.lastActivityAt || '');
@@ -938,21 +941,31 @@ client.on('messageCreate', handleRuntimeMessage);
 client.on('guildCreate', async guild => {
     try {
         const setupUrl = `${getPublicBaseUrl()}/setup?guild=${encodeURIComponent(guild.id)}&page=1`;
+        const dashboardUrl = `${getPublicBaseUrl()}/dashboard?guild=${encodeURIComponent(guild.id)}`;
+        const supportUrl = process.env.SUPPORT_SERVER_URL || process.env.DISCORD_SUPPORT_URL || 'https://discord.gg/JSUX9GQP6J';
         const owner = await guild.fetchOwner().catch(() => null);
         if (!owner?.user) return;
         const message = {
             content: [
-                `Thanks for adding ${client.user?.username || 'the support bot'} to **${guild.name}**.`,
+                `Hey, thanks for adding **${client.user?.username || 'the support bot'}** to **${guild.name}**.`,
                 '',
-                `Set up your server here: ${setupUrl}`,
+                'I can help you get tickets running in a couple of replies. Use `/setup` in your server for the quick Discord setup, or open the dashboard for the full control panel.',
                 '',
-                'You can configure ticket categories, transcript channels, support roles, panels, feedback, and permissions from that setup page.'
-            ].join('\n')
+                'If you get stuck, the support server is one click away.'
+            ].join('\n'),
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Open Dashboard').setURL(dashboardUrl),
+                    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Web Setup').setURL(setupUrl),
+                    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Support Server').setURL(supportUrl)
+                )
+            ]
         };
         const sent = await owner.user.send(message).then(() => true).catch(() => false);
         if (!sent) {
             await guild.systemChannel?.send({
-                content: `<@${owner.user.id}> ${message.content}`
+                content: `<@${owner.user.id}> ${message.content}`,
+                components: message.components
             }).catch(() => null);
         }
     } catch (error) {

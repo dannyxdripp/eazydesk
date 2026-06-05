@@ -969,6 +969,76 @@ function setRestrictedTicketTypeForChannel(channelId, ticketTypeInput, storage =
     return selectValue;
 }
 
+function normalizeExclusionEntry(entry, guildId = null, storage = null) {
+    const userId = String(entry?.userId || '').trim();
+    if (!/^\d{17,20}$/.test(userId)) return null;
+
+    const rawTypes = Array.isArray(entry?.ticketTypes)
+        ? entry.ticketTypes
+        : String(entry?.ticketTypes || '').split(/[,\n]+/);
+    const ticketTypes = [...new Set(rawTypes
+        .map(value => String(value || '').trim())
+        .filter(Boolean)
+        .map(value => resolveTicketTypeSelectValue(value, guildId, storage))
+        .filter(Boolean)
+    )];
+
+    return {
+        userId,
+        ticketTypes,
+        reason: String(entry?.reason || '').trim().slice(0, 240),
+        createdAt: entry?.createdAt || new Date().toISOString(),
+        createdBy: entry?.createdBy ? String(entry.createdBy) : null
+    };
+}
+
+function getExclusionListForGuild(guildId, storage = null) {
+    const cfg = getGuildConfig(guildId, storage);
+    const list = Array.isArray(cfg.exclusionList) ? cfg.exclusionList : [];
+    return list.map(entry => normalizeExclusionEntry(entry, guildId, storage)).filter(Boolean);
+}
+
+function setExclusionListForGuild(guildId, list, storage = null) {
+    const activeStorage = storage || getActiveStorage();
+    const normalized = (Array.isArray(list) ? list : [])
+        .map(entry => normalizeExclusionEntry(entry, guildId, activeStorage))
+        .filter(Boolean)
+        .slice(0, 500);
+    return setGuildConfig(guildId, { exclusionList: normalized }, activeStorage);
+}
+
+function upsertExclusionForGuild(guildId, entry, storage = null) {
+    const activeStorage = storage || getActiveStorage();
+    const nextEntry = normalizeExclusionEntry(entry, guildId, activeStorage);
+    if (!nextEntry) return null;
+    const list = getExclusionListForGuild(guildId, activeStorage)
+        .filter(item => item.userId !== nextEntry.userId);
+    list.push(nextEntry);
+    setExclusionListForGuild(guildId, list, activeStorage);
+    return nextEntry;
+}
+
+function removeExclusionForGuild(guildId, userId, storage = null) {
+    const id = String(userId || '').trim();
+    if (!/^\d{17,20}$/.test(id)) return false;
+    const activeStorage = storage || getActiveStorage();
+    const list = getExclusionListForGuild(guildId, activeStorage);
+    const next = list.filter(entry => entry.userId !== id);
+    if (next.length === list.length) return false;
+    setExclusionListForGuild(guildId, next, activeStorage);
+    return true;
+}
+
+function getTicketExclusionForUser(guildId, userId, ticketTypeInput, storage = null) {
+    const id = String(userId || '').trim();
+    if (!/^\d{17,20}$/.test(id)) return null;
+    const selectedType = resolveTicketTypeSelectValue(ticketTypeInput, guildId, storage);
+    const entry = getExclusionListForGuild(guildId, storage).find(item => item.userId === id);
+    if (!entry) return null;
+    if (!entry.ticketTypes.length) return entry;
+    return selectedType && entry.ticketTypes.includes(selectedType) ? entry : null;
+}
+
 module.exports = {
     getTestGuildId,
     clearCaches,
@@ -1039,6 +1109,11 @@ module.exports = {
     resolveTicketTypeSelectValue,
     getRestrictedTicketTypeForChannel,
     setRestrictedTicketTypeForChannel,
+    getExclusionListForGuild,
+    setExclusionListForGuild,
+    upsertExclusionForGuild,
+    removeExclusionForGuild,
+    getTicketExclusionForUser,
     upsertTicketType,
     upsertSupportTeam
 };

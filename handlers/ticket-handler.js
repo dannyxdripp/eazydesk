@@ -10,6 +10,7 @@ const {
     SeparatorBuilder,
     SeparatorSpacingSize,
     ContainerBuilder,
+    StringSelectMenuBuilder,
     PermissionsBitField,
     ChannelType,
     ComponentType
@@ -262,6 +263,31 @@ function buildTicketTypeButtonRows(guildId) {
     return rows;
 }
 
+function buildTicketTypeSelectRows(guildId) {
+    const ticketTypes = ticketStore.getTicketTypesForGuild(guildId).slice(0, 25);
+    if (!ticketTypes.length) return [];
+    const select = new StringSelectMenuBuilder()
+        .setCustomId('select-ticket-type')
+        .setPlaceholder('Choose a ticket type')
+        .addOptions(ticketTypes.map(ticketType => {
+            const teamData = ticketStore.findSupportTeamForTicketType(ticketType.name, guildId);
+            const option = {
+                label: String(ticketType.name || 'Ticket').slice(0, 100),
+                value: ticketStore.toTicketSelectValue(ticketType.name),
+                description: String(ticketType.description || teamData?.description || 'Open a support ticket').slice(0, 100)
+            };
+            const emoji = parseComponentEmoji(teamData?.emoji || ticketType.emoji);
+            if (emoji) option.emoji = emoji;
+            return option;
+        }));
+    return [new ActionRowBuilder().addComponents(select)];
+}
+
+function resolvePanelDisplayStyle(panel) {
+    const display = String(panel?.displayStyle || panel?.selectorStyle || '').trim().toLowerCase();
+    return display === 'select' ? 'select' : 'buttons';
+}
+
 async function sendEphemeral(interaction, payload) {
     const baseFlags = Number(payload?.flags || 0);
     const response = { ...payload, flags: baseFlags | MessageFlags.Ephemeral };
@@ -485,6 +511,14 @@ module.exports = {
             const allowAttachments = ticketConfig?.allowAttachments !== false;
 
             const statusInfo = options.statusInfo || getEffectiveAvailability(activeStorage, ticketType, interaction.guildId);
+            const exclusion = ticketStore.getTicketExclusionForUser(interaction.guildId, interaction.user.id, ticketType, activeStorage);
+            if (exclusion) {
+                const typeText = Array.isArray(exclusion.ticketTypes) && exclusion.ticketTypes.length
+                    ? 'this ticket type'
+                    : 'tickets';
+                const reason = exclusion.reason ? `\n\nReason: ${exclusion.reason}` : '';
+                return sendEphemeral(interaction, buildInfoMessage('Exclusion List', `You are currently excluded from opening ${typeText} in this server.${reason}`, 0xED4245));
+            }
             const channelName = resolveTicketChannelName(ticketConfig, ticketType, interaction.user, activeStorage, interaction.guildId, {
                 ...options,
                 statusInfo
@@ -665,6 +699,7 @@ module.exports = {
             const directTicketType = storedPanel.mode === 'single' && storedTicketType
                 ? ticketStore.resolveTicketTypeSelectValue(storedTicketType, interaction.guildId, activeStorage)
                 : '';
+            const displayStyle = storedPanel.mode === 'single' ? 'buttons' : resolvePanelDisplayStyle(storedPanel);
             const branding = guildConfig?.branding && typeof guildConfig.branding === 'object' ? guildConfig.branding : {};
             const accentColor = parseHexColor(storedPanel.accentColor || branding.accentColor, 0x5865F2);
             const actionRow = buildOpenSupportRow({
@@ -702,7 +737,10 @@ module.exports = {
 
             await targetChannel.send({
                 flags: MessageFlags.IsComponentsV2,
-                components: [...components, actionRow]
+                components: [
+                    ...components,
+                    ...(displayStyle === 'select' ? buildTicketTypeSelectRows(interaction.guildId) : [actionRow])
+                ]
             });
             const notice = String(options?.notice || 'Ticket panel has been set up.').trim() || 'Ticket panel has been set up.';
             await sendEphemeral(interaction, buildInfoMessage('Panel Created', notice, 0x57F287));

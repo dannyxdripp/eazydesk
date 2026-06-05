@@ -45,10 +45,20 @@ module.exports = {
         .addStringOption(option =>
             option
                 .setName('panel_mode')
-                .setDescription('Use multi for the normal selector or single for one direct ticket button')
+                .setDescription('Choose one direct ticket button or a multi-ticket panel')
                 .addChoices(
-                    { name: 'Multi-panel selector', value: 'multi' },
+                    { name: 'Multi ticket panel', value: 'multi' },
                     { name: 'Single ticket type', value: 'single' }
+                )
+                .setRequired(false)
+        )
+        .addStringOption(option =>
+            option
+                .setName('display_style')
+                .setDescription('For multi panels, choose a button flow or a select menu')
+                .addChoices(
+                    { name: 'Button opens ticket choices', value: 'buttons' },
+                    { name: 'Select menu on the panel', value: 'select' }
                 )
                 .setRequired(false)
         )
@@ -88,6 +98,7 @@ module.exports = {
         const ticketTypeInput = interaction.options.getString('ticket_type');
         const panelName = String(interaction.options.getString('panel_name') || '').trim();
         const panelMode = String(interaction.options.getString('panel_mode') || '').trim();
+        const displayStyle = String(interaction.options.getString('display_style') || '').trim();
         const panelDescription = String(interaction.options.getString('description') || '').trim();
         const buttonLabel = String(interaction.options.getString('button_text') || '').trim();
         const panelAdvisory = String(interaction.options.getString('advisory') || '').trim();
@@ -106,7 +117,11 @@ module.exports = {
             notice = RESPONSES.panelRestricted.replace('{ticketType}', allowedConfig?.name || restrictedSelectValue);
         }
 
-        if (panelName || panelDescription || buttonLabel || panelAdvisory || panelMode || clearRestriction || restrictedSelectValue) {
+        if (panelMode === 'single' && displayStyle === 'select') {
+            return interaction.reply({ content: 'Select menus can only be used on multi ticket panels.', flags: MessageFlags.Ephemeral }).catch(() => null);
+        }
+
+        if (panelName || panelDescription || buttonLabel || panelAdvisory || panelMode || displayStyle || clearRestriction || restrictedSelectValue) {
             const activeStorage = ticketStore.getActiveStorage();
             const guildConfig = ticketStore.getGuildConfig(interaction.guildId, activeStorage);
             const panels = guildConfig.panels && typeof guildConfig.panels === 'object' ? guildConfig.panels : {};
@@ -120,11 +135,14 @@ module.exports = {
             if (panelAdvisory) nextPanel.advisory = panelAdvisory.slice(0, 4000);
             if (buttonLabel) nextPanel.buttonLabel = buttonLabel.slice(0, 80);
             if (panelMode) nextPanel.mode = panelMode;
+            if (displayStyle) nextPanel.displayStyle = displayStyle === 'select' && nextPanel.mode !== 'single' ? 'select' : 'buttons';
             if (restrictedSelectValue) nextPanel.ticketType = restrictedSelectValue;
             if (clearRestriction) {
                 nextPanel.ticketType = null;
                 if (nextPanel.mode === 'single') nextPanel.mode = 'multi';
+                if (nextPanel.displayStyle === 'select') nextPanel.displayStyle = 'buttons';
             }
+            if (nextPanel.mode === 'single') nextPanel.displayStyle = 'buttons';
             panels[targetChannel.id] = nextPanel;
             ticketStore.setGuildConfig(interaction.guildId, { panels }, activeStorage);
             if (!ticketTypeInput && !clearRestriction) {
