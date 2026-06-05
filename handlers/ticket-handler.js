@@ -273,6 +273,60 @@ function validateCreateTicketPermissions(guild, parentInfo, allowAttachments = t
     return { ok: true };
 }
 
+async function ensureBotCategoryPermissions(guild, parentInfo, allowAttachments = true) {
+    const category = parentInfo?.channel || null;
+    const me = guild?.members?.me;
+    if (!category || !me) return { ok: true, repaired: false };
+
+    const required = [
+        PermissionsBitField.Flags.ManageChannels,
+        PermissionsBitField.Flags.ViewChannel,
+        PermissionsBitField.Flags.SendMessages,
+        PermissionsBitField.Flags.EmbedLinks,
+        PermissionsBitField.Flags.ReadMessageHistory,
+        PermissionsBitField.Flags.ManageRoles,
+        ...(allowAttachments ? [PermissionsBitField.Flags.AttachFiles] : [])
+    ];
+    const missing = getMissingPermissionNames(category.permissionsFor(me), required);
+    if (!missing.length) return { ok: true, repaired: false };
+
+    if (!me.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+        return {
+            ok: false,
+            repaired: false,
+            message: `I am missing **Manage Channels**, so I cannot repair my permissions in **${category.name}**.`
+        };
+    }
+
+    try {
+        await category.permissionOverwrites.edit(me.id, {
+            ViewChannel: true,
+            SendMessages: true,
+            EmbedLinks: true,
+            AttachFiles: allowAttachments,
+            ReadMessageHistory: true,
+            ManageChannels: true,
+            ManageRoles: true
+        }, { reason: 'Repair ticket category permissions for ticket creation' });
+    } catch (error) {
+        console.warn(`[Tickets] Failed to repair category permissions for ${category.id}:`, error?.message || error);
+        return {
+            ok: false,
+            repaired: false,
+            message: `I could not repair my permissions in **${category.name}**. Please allow me **${missing.join(', ')}** on that category.`
+        };
+    }
+
+    const stillMissing = getMissingPermissionNames(category.permissionsFor(me), required);
+    return stillMissing.length
+        ? {
+            ok: false,
+            repaired: true,
+            message: `I tried to repair **${category.name}**, but I am still missing: **${stillMissing.join(', ')}**.`
+        }
+        : { ok: true, repaired: true };
+}
+
 function getRestrictedTicketTypeForChannel(interaction) {
     const channelId = interaction?.channelId || interaction?.channel?.id;
     if (!channelId) return null;
@@ -603,6 +657,10 @@ module.exports = {
                 );
             }
             const parentInfo = resolveTicketParentCategory(interaction.guild, parentCategoryId);
+            const categoryRepair = await ensureBotCategoryPermissions(interaction.guild, parentInfo, allowAttachments);
+            if (!categoryRepair.ok) {
+                return sendEphemeral(interaction, buildInfoMessage('Category Permissions', categoryRepair.message, 0xED4245));
+            }
             const permissionCheck = validateCreateTicketPermissions(interaction.guild, parentInfo, allowAttachments);
             if (!permissionCheck.ok) {
                 return sendEphemeral(interaction, buildInfoMessage('Missing Permissions', permissionCheck.message, 0xED4245));

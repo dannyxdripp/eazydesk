@@ -3417,10 +3417,27 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             .slice(0, 90)
             .replace(/^-|-$/g, '') || defaults[kind].toLowerCase();
 
+        const botMemberId = guild.members.me?.id || client?.user?.id || null;
+        const permissionOverwrites = botMemberId && kind === 'category'
+            ? [{
+                id: botMemberId,
+                allow: [
+                    PermissionsBitField.Flags.ViewChannel,
+                    PermissionsBitField.Flags.SendMessages,
+                    PermissionsBitField.Flags.EmbedLinks,
+                    PermissionsBitField.Flags.AttachFiles,
+                    PermissionsBitField.Flags.ReadMessageHistory,
+                    PermissionsBitField.Flags.ManageChannels,
+                    PermissionsBitField.Flags.ManageRoles
+                ]
+            }]
+            : undefined;
+
         const channel = await guild.channels.create({
             name: safeName,
             type: kind === 'category' ? ChannelType.GuildCategory : ChannelType.GuildText,
-            parent: kind === 'category' ? null : (/^\d{17,20}$/.test(parentCategoryId) ? parentCategoryId : null)
+            parent: kind === 'category' ? null : (/^\d{17,20}$/.test(parentCategoryId) ? parentCategoryId : null),
+            permissionOverwrites
         }).catch(() => null);
 
         if (!channel) {
