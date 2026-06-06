@@ -1,7 +1,8 @@
-const { SlashCommandBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags, PermissionsBitField } = require('discord.js');
 const ticketStore = require('../utils/ticket-store');
 const { resolveEmbedByTitle } = require('../utils/embed-config');
 const { buildV2FromTemplate } = require('../utils/components-v2-messages');
+const { describeChannelPermissionFailure } = require('../utils/permission-messages');
 
 const RESPONSES = {
     invalidChannelTitle: 'Invalid Channel',
@@ -12,7 +13,7 @@ const RESPONSES = {
     configDescription: 'That team does not have a valid role configured in JSON.',
     transferredBody: '<:transfer:1487470747097104575> **Ticket Transferred**\n> Ticket type changed from **{from}** to **{to}**\n-# Action by {user}',
     warningTitle: 'Transfer Warning',
-    warningDescription: 'Team permissions update is delayed. Please retry `/transfer` in a few seconds.',
+    warningDescription: 'Team permissions update failed. {details}',
     errorTitle: 'Command Error',
     errorDescription: 'Failed to transfer ticket. Please try again.'
 };
@@ -114,7 +115,11 @@ module.exports = {
                         await sleep(250);
                     }
                 } catch (error) {
-                    await interaction.followUp(buildMessage(RESPONSES.warningTitle, RESPONSES.warningDescription, 0xFEE75C)).catch(() => null);
+                    const details = describeChannelPermissionFailure(ticketChannel, [
+                        PermissionsBitField.Flags.ManageChannels,
+                        PermissionsBitField.Flags.ManageRoles
+                    ], 'add the new support team to this ticket');
+                    await interaction.followUp(buildMessage(RESPONSES.warningTitle, RESPONSES.warningDescription.replace('{details}', details), 0xFEE75C)).catch(() => null);
                     throw error;
                 }
             });

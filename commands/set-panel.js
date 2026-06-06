@@ -2,6 +2,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const ticketHandler = require('../handlers/ticket-handler');
 const ticketStore = require('../utils/ticket-store');
 const { ChannelType, PermissionsBitField, MessageFlags } = require('discord.js');
+const { channelMissingPermissionNames } = require('../utils/permission-messages');
 
 const RESPONSES = {
     invalidChannel: 'Invalid channel selected.',
@@ -88,9 +89,14 @@ module.exports = {
 
         const me = interaction.guild?.members?.me;
         if (me) {
-            const perms = targetChannel.permissionsFor(me);
-            if (!perms?.has(PermissionsBitField.Flags.SendMessages)) {
-                return interaction.reply({ content: RESPONSES.cannotSend, flags: MessageFlags.Ephemeral }).catch(() => null);
+            const missing = channelMissingPermissionNames(targetChannel, [
+                PermissionsBitField.Flags.ViewChannel,
+                PermissionsBitField.Flags.SendMessages,
+                PermissionsBitField.Flags.EmbedLinks,
+                PermissionsBitField.Flags.ReadMessageHistory
+            ]);
+            if (missing.length) {
+                return interaction.reply({ content: `I cannot post the ticket panel in ${targetChannel} because I am missing: **${missing.join(', ')}**.`, flags: MessageFlags.Ephemeral }).catch(() => null);
             }
         }
 

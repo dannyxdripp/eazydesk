@@ -5,13 +5,15 @@ const {
     ButtonStyle,
     ContainerBuilder,
     TextDisplayBuilder,
-    MessageFlags
+    MessageFlags,
+    PermissionsBitField
 } = require('discord.js');
 const ticketStore = require('../utils/ticket-store');
 const transcriptionHandler = require('../handlers/transcription-handler');
 const { archiveTranscript } = require('../utils/transcript-archive');
 const { resolveEmbedPayload, resolveEmbedByTitle } = require('../utils/embed-config');
 const { buildV2FromTemplate } = require('../utils/components-v2-messages');
+const { describeChannelPermissionFailure } = require('../utils/permission-messages');
 
 const CLOSE_NOW_ID = 'closerequest_close_now';
 const CANCEL_ID = 'closerequest_cancel';
@@ -77,7 +79,16 @@ async function closeTicketWithTranscript(ticketChannel, reason, closedByUserId =
         closedBy: closedByUserId ? `<@${closedByUserId}>` : 'System',
         reason
     });
-    await ticketChannel.send(buildEmbed(closedEmbed.title, closedEmbed.description, closedEmbed.color));
+    try {
+        await ticketChannel.send(buildEmbed(closedEmbed.title, closedEmbed.description, closedEmbed.color));
+    } catch (error) {
+        error.permissionMessage = describeChannelPermissionFailure(ticketChannel, [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.EmbedLinks
+        ], 'send the ticket closed message');
+        throw error;
+    }
 
     try {
         const transcript = await transcriptionHandler.createTranscript(ticketChannel, { includeParticipants: true });
@@ -109,7 +120,7 @@ async function closeTicketWithTranscript(ticketChannel, reason, closedByUserId =
         });
     } catch (error) {
         console.error('Error generating or sending transcript:', error);
-        await ticketChannel.send(buildEmbed('Transcript Error', 'Could not generate or send transcript for this ticket.', 0xED4245));
+        await ticketChannel.send(buildEmbed('Transcript Error', 'Could not generate or send transcript for this ticket.', 0xED4245)).catch(() => null);
     }
 
     if (closedByUserId) {
@@ -117,8 +128,15 @@ async function closeTicketWithTranscript(ticketChannel, reason, closedByUserId =
     }
 
     ticketStore.removeCloseRequest(ticketChannel.id);
+    try {
+        await ticketChannel.delete();
+    } catch (error) {
+        error.permissionMessage = describeChannelPermissionFailure(ticketChannel, [
+            PermissionsBitField.Flags.ManageChannels
+        ], 'delete the ticket channel');
+        throw error;
+    }
     ticketStore.removeTicketByChannelId(ticketChannel.id);
-    await ticketChannel.delete();
 }
 
 module.exports = {
@@ -209,15 +227,20 @@ module.exports = {
         }
 
         if (interaction.customId === CLOSE_NOW_ID) {
-            {
+            try {
+                {
                 const base = buildEmbed(RESPONSES.closingNowTitle, RESPONSES.closingNowDescription, 0xFEE75C);
                 await interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
+                }
+                await closeTicketWithTranscript(
+                    ticketChannel,
+                    `Closed immediately from close request.\nReason: ${request.reason}`,
+                    interaction.user.id
+                );
+            } catch (error) {
+                const base = buildEmbed('Close Failed', error.permissionMessage || 'Could not close this ticket. Check my channel permissions.', 0xED4245);
+                await interaction.followUp({ ...base, flags: MessageFlags.Ephemeral | base.flags }).catch(() => null);
             }
-            await closeTicketWithTranscript(
-                ticketChannel,
-                `Closed immediately from close request.\nReason: ${request.reason}`,
-                interaction.user.id
-            );
         }
     }
 };

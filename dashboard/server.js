@@ -2174,16 +2174,55 @@ function describeGuildPermissionScan(guild) {
     return missing;
 }
 
+function getConfiguredTicketCategoryIds(guildId, config = {}, storage = null) {
+    const ids = new Set();
+    const add = value => {
+        const id = String(value || '').trim();
+        if (/^\d{17,20}$/.test(id)) ids.add(id);
+    };
+    add(config?.parentCategoryId);
+    const activeStorage = storage || ticketStore.getActiveStorage();
+    for (const type of ticketStore.getTicketTypesForGuild(guildId, activeStorage)) {
+        add(type?.categoryId);
+    }
+    return [...ids];
+}
+
+function getTicketCategoryPermissionProblems(guild, categoryIds = []) {
+    const botMember = getBotGuildMember(guild);
+    if (!botMember) return [];
+    const required = [
+        ['Manage Channels', PermissionsBitField.Flags.ManageChannels],
+        ['View Channel', PermissionsBitField.Flags.ViewChannel],
+        ['Send Messages', PermissionsBitField.Flags.SendMessages],
+        ['Manage Roles', PermissionsBitField.Flags.ManageRoles]
+    ];
+    const problems = [];
+    for (const categoryId of categoryIds) {
+        const category = guild?.channels?.cache?.get?.(categoryId);
+        if (!category || category.type !== ChannelType.GuildCategory) continue;
+        const perms = category.permissionsFor(botMember);
+        const missing = required.filter(([, flag]) => !perms?.has?.(flag)).map(([label]) => label);
+        if (missing.length) problems.push(`${category.name}: missing ${missing.join(', ')}`);
+    }
+    return problems;
+}
+
 function inspectGuildSystemHealth(guild, config = {}, storage = null) {
     const activeStorage = storage || ticketStore.getActiveStorage();
-    const parentCategory = config?.parentCategoryId ? guild?.channels?.cache?.get?.(String(config.parentCategoryId)) : null;
+    const categoryIds = getConfiguredTicketCategoryIds(guild?.id || null, config, activeStorage);
+    const existingCategories = categoryIds
+        .map(id => guild?.channels?.cache?.get?.(id))
+        .filter(channel => channel && channel.type === ChannelType.GuildCategory);
     const feedbackChannel = config?.appealsChannelId ? guild?.channels?.cache?.get?.(String(config.appealsChannelId)) : null;
     const transcriptsChannel = config?.transcriptsChannelId ? guild?.channels?.cache?.get?.(String(config.transcriptsChannelId)) : null;
     const panelEntries = config?.panels && typeof config.panels === 'object' ? Object.entries(config.panels) : [];
     const missingPermissions = describeGuildPermissionScan(guild);
     const brokenPanels = panelEntries.filter(([channelId]) => !guild?.channels?.cache?.has?.(String(channelId)));
     const brokenChannels = [];
-    if (config?.parentCategoryId && !parentCategory) brokenChannels.push('Ticket category missing');
+    const missingCategoryIds = categoryIds.filter(id => !guild?.channels?.cache?.has?.(id));
+    for (const id of missingCategoryIds) brokenChannels.push(`Ticket category missing (${id})`);
+    const categoryPermissionProblems = getTicketCategoryPermissionProblems(guild, categoryIds);
     if (config?.appealsChannelId && !feedbackChannel) brokenChannels.push('Feedback channel missing');
     if (config?.transcriptsChannelId && !transcriptsChannel) brokenChannels.push('Transcripts channel missing');
     const botMember = getBotGuildMember(guild);
@@ -2197,7 +2236,7 @@ function inspectGuildSystemHealth(guild, config = {}, storage = null) {
         ticketPanelStatus: panelEntries.length ? (brokenPanels.length ? 'Needs repair' : 'Healthy') : 'No panels configured',
         transcriptStatus: config?.transcriptsChannelId ? (transcriptsChannel ? 'Configured' : 'Broken') : 'Not configured',
         feedbackStatus: config?.appealsChannelId ? (feedbackChannel ? 'Configured' : 'Broken') : 'Not configured',
-        categoryStatus: config?.parentCategoryId ? (parentCategory ? 'Configured' : 'Broken') : 'Not configured',
+        categoryStatus: categoryIds.length ? `${existingCategories.length}/${categoryIds.length} configured` : 'Not configured',
         brokenChannels,
         brokenPanels: brokenPanels.map(([channelId]) => String(channelId)),
         missingPermissions,
@@ -2205,13 +2244,13 @@ function inspectGuildSystemHealth(guild, config = {}, storage = null) {
         webhookValidity: 'Unchecked',
         buttonIntegrity: brokenPanels.length ? 'Broken panel references found' : 'No broken panel references detected',
         failedAutomations: [],
-        brokenOverwrites: []
+        brokenOverwrites: categoryPermissionProblems
     };
 }
 
-function getGuildEnabledModules(config = {}) {
+function getGuildEnabledModules(config = {}, guildId = null, storage = null) {
     const modules = [];
-    if (config?.parentCategoryId) modules.push('Ticket Categories');
+    if (getConfiguredTicketCategoryIds(guildId, config, storage).length) modules.push('Ticket Categories');
     if (config?.appealsChannelId) modules.push('Feedback');
     if (config?.transcriptsChannelId) modules.push('Transcripts');
     if (config?.tutorialEnabled) modules.push('Tutorials');
@@ -2233,7 +2272,7 @@ function getGuildRuntimeDiagnostics(client, guild, config = {}, storage = null) 
         botJoinDate: getBotGuildMember(guild)?.joinedAt ? new Date(getBotGuildMember(guild).joinedAt).toISOString() : null,
         shardAssignment: shardIds.length ? `Shard ${shardIds.join(', ')}` : `Process ${process.pid}`,
         subscriptionPlan: guildAi.premiumActive ? `${guildAi.planLabel || 'Plus'} AI` : guildAi.trialActive ? `${guildAi.planLabel || 'AI'} Trial` : String(botConfig?.subscriptions?.[guild?.id]?.plan || botConfig?.defaultPlan || 'Free'),
-        enabledModules: getGuildEnabledModules(config),
+        enabledModules: getGuildEnabledModules(config, guild?.id || null, activeStorage),
         apiLatencyMs: Number(client?.ws?.ping || 0),
         databaseLatencyMs: null,
         redisLatencyMs: null,
@@ -2541,16 +2580,41 @@ async function requireStaffCapability(client, req, capabilityKey, actionKey, opt
 }
 
 async function syncGuildCategoryPermissions(guild, config = {}) {
-    const parentId = String(config?.parentCategoryId || '').trim();
-    if (!/^\d{17,20}$/.test(parentId)) return { ok: false, message: 'No ticket category is configured.' };
     await guild.channels.fetch().catch(() => null);
-    const targets = guild.channels.cache.filter(channel => String(channel?.parentId || '') === parentId && typeof channel.lockPermissions === 'function');
-    let synced = 0;
-    for (const channel of targets.values()) {
-        const done = await channel.lockPermissions().then(() => true).catch(() => false);
-        if (done) synced += 1;
+    const categoryIds = new Set();
+    const parentId = String(config?.parentCategoryId || '').trim();
+    if (/^\d{17,20}$/.test(parentId)) categoryIds.add(parentId);
+    for (const type of ticketStore.getTicketTypesForGuild(guild.id, ticketStore.getActiveStorage())) {
+        const categoryId = String(type?.categoryId || '').trim();
+        if (/^\d{17,20}$/.test(categoryId)) categoryIds.add(categoryId);
     }
-    return { ok: true, message: synced ? `Synced permissions for ${synced} channel(s).` : 'No child channels were available to sync.' };
+    if (!categoryIds.size) return { ok: false, message: 'No ticket categories are configured.' };
+
+    const botMemberId = guild.members.me?.id;
+    let repairedCategories = 0;
+    let synced = 0;
+    for (const categoryId of categoryIds) {
+        const category = guild.channels.cache.get(categoryId);
+        if (!category || category.type !== ChannelType.GuildCategory) continue;
+        if (botMemberId) {
+            const repaired = await category.permissionOverwrites.edit(botMemberId, {
+                ViewChannel: true,
+                SendMessages: true,
+                EmbedLinks: true,
+                AttachFiles: true,
+                ReadMessageHistory: true,
+                ManageChannels: true,
+                ManageRoles: true
+            }, { reason: 'Repair ticket category permissions' }).then(() => true).catch(() => false);
+            if (repaired) repairedCategories += 1;
+        }
+        const targets = guild.channels.cache.filter(channel => String(channel?.parentId || '') === categoryId && typeof channel.lockPermissions === 'function');
+        for (const channel of targets.values()) {
+            const done = await channel.lockPermissions().then(() => true).catch(() => false);
+            if (done) synced += 1;
+        }
+    }
+    return { ok: true, message: `Repaired ${repairedCategories} ticket categor${repairedCategories === 1 ? 'y' : 'ies'} and synced ${synced} child channel(s).` };
 }
 
 async function repairGuildChannels(guild, config = {}) {
@@ -3717,6 +3781,26 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         if (categoryId && !/^\d{17,20}$/.test(categoryId)) {
             sendJson(res, 400, { error: 'Invalid category id' });
             return true;
+        }
+        if (categoryId && guildId) {
+            const guild = client?.guilds?.cache?.get(guildId) || await client?.guilds?.fetch?.(guildId).catch(() => null);
+            const category = guild ? (guild.channels.cache.get(categoryId) || await guild.channels.fetch(categoryId).catch(() => null)) : null;
+            if (!category || category.type !== ChannelType.GuildCategory) {
+                sendJson(res, 400, { error: 'Selected ticket category was not found in this server.' });
+                return true;
+            }
+            const botMemberId = guild.members.me?.id || client?.user?.id || null;
+            if (botMemberId) {
+                await category.permissionOverwrites.edit(botMemberId, {
+                    ViewChannel: true,
+                    SendMessages: true,
+                    EmbedLinks: true,
+                    AttachFiles: true,
+                    ReadMessageHistory: true,
+                    ManageChannels: true,
+                    ManageRoles: true
+                }, { reason: 'Repair ticket category permissions after ticket type save' }).catch(() => null);
+            }
         }
         const roleIds = sanitizeRoleIds(body.roleIds);
         const nextType = {

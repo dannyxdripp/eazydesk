@@ -45,7 +45,7 @@ module.exports = {
         try {
             await closeRequestCommand.closeTicketWithTranscript(ticketChannel, reason, interaction.user.id);
         } catch (error) {
-            const base = buildMessage(RESPONSES.failedTitle, RESPONSES.failedDescription, 0xED4245);
+            const base = buildMessage(RESPONSES.failedTitle, error.permissionMessage || RESPONSES.failedDescription, 0xED4245);
             await interaction.editReply({ ...base, flags: MessageFlags.Ephemeral | base.flags }).catch(() => null);
         }
     }

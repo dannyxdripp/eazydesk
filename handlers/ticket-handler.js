@@ -35,6 +35,25 @@ const CHANNEL_CREATE_PERMISSIONS = [
     PermissionsBitField.Flags.ManageChannels
 ];
 
+const BOT_TICKET_GUILD_PERMISSIONS = [
+    PermissionsBitField.Flags.ManageChannels,
+    PermissionsBitField.Flags.ManageRoles,
+    PermissionsBitField.Flags.ViewChannel,
+    PermissionsBitField.Flags.SendMessages,
+    PermissionsBitField.Flags.EmbedLinks,
+    PermissionsBitField.Flags.ReadMessageHistory,
+    PermissionsBitField.Flags.UseApplicationCommands
+];
+
+const BOT_TICKET_CHANNEL_PERMISSIONS = [
+    PermissionsBitField.Flags.ViewChannel,
+    PermissionsBitField.Flags.SendMessages,
+    PermissionsBitField.Flags.EmbedLinks,
+    PermissionsBitField.Flags.ReadMessageHistory,
+    PermissionsBitField.Flags.ManageChannels,
+    PermissionsBitField.Flags.ManageRoles
+];
+
 function getAutomaticAvailabilityStatus(count) {
     if (count > REDUCED_THRESHOLD) return 'reduced_assistance';
     if (count > INCREASED_THRESHOLD) return 'increased_volume';
@@ -204,14 +223,17 @@ function parseHexColor(raw, fallback = 0x5865F2) {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function resolveParentCategoryId(guild, ticketConfig) {
+async function resolveParentCategoryId(guild, ticketConfig) {
     const configured = String(ticketConfig?.categoryId || '').trim();
     const guildDefault = resolveDefaultParentCategoryId(guild?.id);
 
     const candidates = [configured, guildDefault].filter(Boolean);
     for (const id of candidates) {
         if (!guild?.channels?.cache) return id;
-        const ch = guild.channels.cache.get(id);
+        let ch = guild.channels.cache.get(id);
+        if (!ch && typeof guild.channels.fetch === 'function') {
+            ch = await guild.channels.fetch(id).catch(() => null);
+        }
         if (!ch) continue;
         if (ch.type === ChannelType.GuildCategory) return id;
     }
@@ -226,17 +248,80 @@ function getMissingPermissionNames(permissions, required) {
         [PermissionsBitField.Flags.SendMessages]: 'Send Messages',
         [PermissionsBitField.Flags.EmbedLinks]: 'Embed Links',
         [PermissionsBitField.Flags.ReadMessageHistory]: 'Read Message History',
-        [PermissionsBitField.Flags.AttachFiles]: 'Attach Files'
+        [PermissionsBitField.Flags.AttachFiles]: 'Attach Files',
+        [PermissionsBitField.Flags.UseApplicationCommands]: 'Use Application Commands',
+        [PermissionsBitField.Flags.SendMessagesInThreads]: 'Send Messages in Threads',
+        [PermissionsBitField.Flags.CreatePublicThreads]: 'Create Public Threads',
+        [PermissionsBitField.Flags.ManageMessages]: 'Manage Messages',
+        [PermissionsBitField.Flags.CreateInstantInvite]: 'Create Instant Invite'
     };
     return required
         .filter(permission => !permissions?.has?.(permission))
         .map(permission => labels[permission] || String(permission));
 }
 
-function resolveTicketParentCategory(guild, parentCategoryId) {
+function getRequiredTicketPermissions(allowAttachments = true) {
+    return [
+        ...BOT_TICKET_GUILD_PERMISSIONS,
+        ...(allowAttachments ? [PermissionsBitField.Flags.AttachFiles] : [])
+    ];
+}
+
+function formatMissingPermissionsMessage(context, missing) {
+    const list = Array.from(new Set(missing || [])).filter(Boolean);
+    if (!list.length) return '';
+    return `${context}: **${list.join(', ')}**.`;
+}
+
+function describeDiscordPermissionError(error, guild, parentInfo, ticketChannel = null, allowAttachments = true) {
+    const me = guild?.members?.me;
+    const lines = ['Discord blocked this because I am missing permissions.'];
+    if (error?.code === 50001) lines[0] = 'Discord says I do not have access to that channel or category.';
+    if (error?.code === 50013) lines[0] = 'Discord says I do not have permission to complete that action.';
+
+    if (me) {
+        const serverMissing = getMissingPermissionNames(me.permissions, getRequiredTicketPermissions(allowAttachments));
+        if (serverMissing.length) lines.push(formatMissingPermissionsMessage('Server permissions missing', serverMissing));
+        const target = ticketChannel || parentInfo?.channel || null;
+        if (target && typeof target.permissionsFor === 'function') {
+            const channelMissing = getMissingPermissionNames(target.permissionsFor(me), [
+                ...BOT_TICKET_CHANNEL_PERMISSIONS,
+                ...(allowAttachments ? [PermissionsBitField.Flags.AttachFiles] : [])
+            ]);
+            if (channelMissing.length) lines.push(formatMissingPermissionsMessage(`Channel/category permissions missing in ${target.name ? `**${target.name}**` : 'the selected channel'}`, channelMissing));
+        }
+    }
+
+    if (parentInfo?.channel) {
+        lines.push(`Check the configured ticket category: **${parentInfo.channel.name}**.`);
+    }
+    lines.push('Recommended fix: give the bot role the required permissions at server level and allow them on the ticket category, then make sure the bot role is above support roles it needs to add.');
+    return lines.filter(Boolean).join('\n');
+}
+
+function validateSendPanelPermissions(channel, guild) {
+    const me = guild?.members?.me || channel?.guild?.members?.me;
+    if (!me || !channel || typeof channel.permissionsFor !== 'function') {
+        return { ok: false, message: 'I could not read my permissions for that channel. Please try again in a moment.' };
+    }
+    const missing = getMissingPermissionNames(channel.permissionsFor(me), [
+        PermissionsBitField.Flags.ViewChannel,
+        PermissionsBitField.Flags.SendMessages,
+        PermissionsBitField.Flags.EmbedLinks,
+        PermissionsBitField.Flags.ReadMessageHistory
+    ]);
+    return missing.length
+        ? { ok: false, message: `I cannot post the ticket panel in **${channel.name || 'that channel'}** because I am missing: **${missing.join(', ')}**.` }
+        : { ok: true };
+}
+
+async function resolveTicketParentCategory(guild, parentCategoryId) {
     const id = String(parentCategoryId || '').trim();
     if (!id || !guild?.channels?.cache) return { id: null, channel: null, missing: false };
-    const channel = guild.channels.cache.get(id);
+    let channel = guild.channels.cache.get(id);
+    if (!channel && typeof guild.channels.fetch === 'function') {
+        channel = await guild.channels.fetch(id).catch(() => null);
+    }
     if (!channel || channel.type !== ChannelType.GuildCategory) {
         return { id: null, channel: null, missing: true, originalId: id };
     }
@@ -249,10 +334,7 @@ function validateCreateTicketPermissions(guild, parentInfo, allowAttachments = t
         return { ok: false, message: 'I could not read my server member permissions. Please try again in a moment.' };
     }
 
-    const guildMissing = getMissingPermissionNames(me.permissions, [
-        PermissionsBitField.Flags.ManageChannels,
-        PermissionsBitField.Flags.ManageRoles
-    ]);
+    const guildMissing = getMissingPermissionNames(me.permissions, getRequiredTicketPermissions(allowAttachments));
     if (guildMissing.length) {
         return {
             ok: false,
@@ -262,7 +344,10 @@ function validateCreateTicketPermissions(guild, parentInfo, allowAttachments = t
 
     if (parentInfo?.channel) {
         const categoryPermissions = parentInfo.channel.permissionsFor(me);
-        const categoryMissing = getMissingPermissionNames(categoryPermissions, CHANNEL_CREATE_PERMISSIONS);
+        const categoryMissing = getMissingPermissionNames(categoryPermissions, [
+            ...BOT_TICKET_CHANNEL_PERMISSIONS,
+            ...(allowAttachments ? [PermissionsBitField.Flags.AttachFiles] : [])
+        ]);
         if (categoryMissing.length) {
             return {
                 ok: false,
@@ -290,11 +375,15 @@ async function ensureBotCategoryPermissions(guild, parentInfo, allowAttachments 
     const missing = getMissingPermissionNames(category.permissionsFor(me), required);
     if (!missing.length) return { ok: true, repaired: false };
 
-    if (!me.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+    const repairMissing = getMissingPermissionNames(me.permissions, [
+        PermissionsBitField.Flags.ManageChannels,
+        PermissionsBitField.Flags.ManageRoles
+    ]);
+    if (repairMissing.length) {
         return {
             ok: false,
             repaired: false,
-            message: `I am missing **Manage Channels**, so I cannot repair my permissions in **${category.name}**.`
+            message: `I am missing **${repairMissing.join(', ')}**, so I cannot repair my permissions in **${category.name}**.`
         };
     }
 
@@ -611,6 +700,12 @@ module.exports = {
     loadTicketTypes: ticketStore.getTicketTypes,
 
     async createTicket(interaction, ticketType, parentCategoryId, options = {}) {
+        const permissionContext = {
+            guild: interaction?.guild || null,
+            parentInfo: null,
+            ticketChannel: null,
+            allowAttachments: true
+        };
         try {
             if (!interaction.guild) {
                 return sendEphemeral(interaction, buildInfoMessage('Invalid Context', 'This action can only be used in a server.', 0xED4245));
@@ -622,6 +717,7 @@ module.exports = {
             const teamRoleIds = ticketStore.getSupportTeamRoleIds(matchingTeam)
                 .filter(roleId => interaction.guild.roles.cache.has(roleId));
             const allowAttachments = ticketConfig?.allowAttachments !== false;
+            permissionContext.allowAttachments = allowAttachments;
 
             const statusInfo = options.statusInfo || getEffectiveAvailability(activeStorage, ticketType, interaction.guildId);
             const exclusion = ticketStore.getTicketExclusionForUser(interaction.guildId, interaction.user.id, ticketType, activeStorage);
@@ -656,7 +752,8 @@ module.exports = {
                     )
                 );
             }
-            const parentInfo = resolveTicketParentCategory(interaction.guild, parentCategoryId);
+            const parentInfo = await resolveTicketParentCategory(interaction.guild, parentCategoryId);
+            permissionContext.parentInfo = parentInfo;
             const categoryRepair = await ensureBotCategoryPermissions(interaction.guild, parentInfo, allowAttachments);
             if (!categoryRepair.ok) {
                 return sendEphemeral(interaction, buildInfoMessage('Category Permissions', categoryRepair.message, 0xED4245));
@@ -670,18 +767,7 @@ module.exports = {
             }
 
             const botMemberId = interaction.guild.members.me?.id || interaction.client.user?.id;
-            const permissionOverwrites = [
-                { id: interaction.guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.AttachFiles] },
-                {
-                    id: interaction.user.id,
-                    allow: [
-                        PermissionsBitField.Flags.ViewChannel,
-                        PermissionsBitField.Flags.SendMessages,
-                        PermissionsBitField.Flags.ReadMessageHistory,
-                        ...(allowAttachments ? [PermissionsBitField.Flags.AttachFiles] : [])
-                    ]
-                }
-            ];
+            const permissionOverwrites = [];
 
             if (botMemberId) {
                 permissionOverwrites.push({
@@ -697,6 +783,19 @@ module.exports = {
                     ]
                 });
             }
+
+            permissionOverwrites.push(
+                { id: interaction.guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.AttachFiles] },
+                {
+                    id: interaction.user.id,
+                    allow: [
+                        PermissionsBitField.Flags.ViewChannel,
+                        PermissionsBitField.Flags.SendMessages,
+                        PermissionsBitField.Flags.ReadMessageHistory,
+                        ...(allowAttachments ? [PermissionsBitField.Flags.AttachFiles] : [])
+                    ]
+                }
+            );
 
             for (const roleId of teamRoleIds) {
                 permissionOverwrites.push({
@@ -716,6 +815,7 @@ module.exports = {
                 parent: parentInfo.id || null,
                 permissionOverwrites
             });
+            permissionContext.ticketChannel = ticketChannel;
 
             const mentionText = teamRoleIds.length ? teamRoleIds.map(roleId => `<@&${roleId}>`).join(' ') : '';
             if (mentionText) {
@@ -784,7 +884,13 @@ module.exports = {
                 return sendEphemeral(interaction, {
                     ...buildInfoMessage(
                         'Missing Permissions',
-                        'Discord blocked the ticket channel creation. Check that I have **Manage Channels** at server level and that the selected ticket category allows me to **View Channels**, **Send Messages**, and **Manage Channels**. If the bot was removed and re-added, re-save the ticket category in setup so stale IDs are repaired.',
+                        describeDiscordPermissionError(
+                            error,
+                            permissionContext.guild,
+                            permissionContext.parentInfo,
+                            permissionContext.ticketChannel,
+                            permissionContext.allowAttachments
+                        ),
                         0xED4245
                     )
                 });
@@ -830,6 +936,13 @@ module.exports = {
             const targetChannel = options?.channel || interaction.channel;
             if (!targetChannel || typeof targetChannel.send !== 'function') {
                 return sendEphemeral(interaction, buildInfoMessage('Invalid Channel', 'Unable to send the ticket panel to that channel.', 0xED4245));
+            }
+            if (!interaction.guild?.members?.me) {
+                await interaction.guild?.members?.fetchMe?.().catch(() => null);
+            }
+            const panelPermissionCheck = validateSendPanelPermissions(targetChannel, interaction.guild);
+            if (!panelPermissionCheck.ok) {
+                return sendEphemeral(interaction, buildInfoMessage('Missing Permissions', panelPermissionCheck.message, 0xED4245));
             }
 
             const supportsV2Panel =
@@ -900,6 +1013,14 @@ module.exports = {
             await sendEphemeral(interaction, buildInfoMessage('Panel Created', notice, 0x57F287));
         } catch (error) {
             console.error('Error creating ticket panel:', error);
+            if (error?.code === 50013 || error?.status === 403 || error?.code === 50001) {
+                const channel = options?.channel || interaction.channel;
+                const check = validateSendPanelPermissions(channel, interaction.guild);
+                const message = check.ok
+                    ? 'Discord blocked me from posting the panel. Check that I can **View Channel**, **Send Messages**, **Embed Links**, and **Read Message History** in that channel.'
+                    : check.message;
+                return sendEphemeral(interaction, buildInfoMessage('Missing Permissions', message, 0xED4245));
+            }
             await sendEphemeral(interaction, buildInfoMessage('Error', 'There was an error setting up the ticket panel.', 0xED4245));
         }
     },
@@ -946,7 +1067,7 @@ module.exports = {
             return sendEphemeral(interaction, { ...base, components: [...base.components, urgentRow] });
         }
 
-        const parentCategoryId = resolveParentCategoryId(interaction.guild, ticketConfig);
+        const parentCategoryId = await resolveParentCategoryId(interaction.guild, ticketConfig);
         const attachments = Array.isArray(extra?.attachments) ? extra.attachments : [];
         return this.createTicket(interaction, ticketConfig.name, parentCategoryId, { statusInfo, reason, attachments });
     },
@@ -1099,7 +1220,7 @@ module.exports = {
             const reason = pendingUrgent && pendingUrgent.selectedType === selectedType
                 ? pendingUrgent.reason
                 : 'Marked as urgent by requester.';
-            const parentCategoryId = resolveParentCategoryId(interaction.guild, ticketConfig);
+            const parentCategoryId = await resolveParentCategoryId(interaction.guild, ticketConfig);
             return this.createTicket(interaction, ticketConfig.name, parentCategoryId, {
                 statusInfo,
                 urgentConfirmed: true,

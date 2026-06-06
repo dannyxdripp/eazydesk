@@ -1,9 +1,10 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 const ticketStore = require('../utils/ticket-store');
 const { touchTicket, updateTicketChannelMetadata } = require('../utils/ticket-metadata');
 const { resolveEmbedByTitle } = require('../utils/embed-config');
 const { buildV2FromTemplate, buildV2Notice } = require('../utils/components-v2-messages');
 const { resolveManagerRoleId } = require('../utils/guild-defaults');
+const { describeChannelPermissionFailure } = require('../utils/permission-messages');
 
 const RESPONSES = {
     invalidChannelTitle: 'Invalid Channel',
@@ -39,7 +40,7 @@ async function syncClaimerOverwrite(ticketChannel, ticket, guildId, userId, enab
 
     if (!enabled) {
         if (ticket?.createdBy !== userId) {
-            await ticketChannel.permissionOverwrites.delete(userId).catch(() => null);
+            await ticketChannel.permissionOverwrites.delete(userId);
         }
         return;
     }
@@ -51,7 +52,7 @@ async function syncClaimerOverwrite(ticketChannel, ticket, guildId, userId, enab
         SendMessages: true,
         ReadMessageHistory: true,
         ...(allowAttachments ? { AttachFiles: true } : {})
-    }).catch(() => null);
+    });
 }
 
 module.exports = {
@@ -107,8 +108,17 @@ module.exports = {
                 await interaction.editReply(buildV2Notice('', RESPONSES.claimedDescription.replace('{userId}', interaction.user.id), 0x5865F2));
 
                 runDeferredTask(async () => {
-                    await syncClaimerOverwrite(ticketChannel, ticket, interaction.guildId, interaction.user.id, rolePermanence);
-                    await updateTicketChannelMetadata(ticketChannel, ticket);
+                    try {
+                        await syncClaimerOverwrite(ticketChannel, ticket, interaction.guildId, interaction.user.id, rolePermanence);
+                        await updateTicketChannelMetadata(ticketChannel, ticket);
+                    } catch (error) {
+                        const message = describeChannelPermissionFailure(ticketChannel, [
+                            PermissionsBitField.Flags.ManageChannels,
+                            PermissionsBitField.Flags.ManageRoles
+                        ], 'update ticket channel permissions for the claimer');
+                        await interaction.followUp(buildMessage('Permission Warning', message, 0xFEE75C)).catch(() => null);
+                        throw error;
+                    }
                 });
                 return null;
             }
@@ -122,8 +132,17 @@ module.exports = {
             await interaction.editReply(buildV2Notice('', RESPONSES.unclaimedDescription.replace('{userId}', previousAssignee), 0x5865F2));
 
             runDeferredTask(async () => {
-                await syncClaimerOverwrite(ticketChannel, ticket, interaction.guildId, previousAssignee, false);
-                await updateTicketChannelMetadata(ticketChannel, ticket);
+                try {
+                    await syncClaimerOverwrite(ticketChannel, ticket, interaction.guildId, previousAssignee, false);
+                    await updateTicketChannelMetadata(ticketChannel, ticket);
+                } catch (error) {
+                    const message = describeChannelPermissionFailure(ticketChannel, [
+                        PermissionsBitField.Flags.ManageChannels,
+                        PermissionsBitField.Flags.ManageRoles
+                    ], 'update ticket channel permissions after unclaiming');
+                    await interaction.followUp(buildMessage('Permission Warning', message, 0xFEE75C)).catch(() => null);
+                    throw error;
+                }
             });
             return null;
         } catch (error) {
