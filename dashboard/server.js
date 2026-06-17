@@ -3210,16 +3210,22 @@ async function handleApi(req, res, url, client, customBotManager = null) {
                 sendJson(res, 403, { error: 'This server does not currently own AI features.' });
                 return true;
             }
+            if (Boolean(body.aiSettings.autoResolution) && !plan.isProOrHigher) {
+                sendJson(res, 403, { error: 'Auto-resolution requires the Pro plan or higher.' });
+                return true;
+            }
             if (Boolean(body.aiSettings.conversation) && !plan.isCustom) {
                 sendJson(res, 403, { error: 'AI Conversation requires the Custom plan.' });
                 return true;
             }
-            next.aiSettings = {
-                enabled: Boolean(body.aiSettings.enabled),
-                autoResolution: Boolean(body.aiSettings.autoResolution),
-                autoLearn: Boolean(body.aiSettings.autoLearn),
-                conversation: Boolean(body.aiSettings.conversation) && plan.isCustom
-            };
+            next.aiSettings = typeof ticketStore.setGuildAiSettings === 'function'
+                ? ticketStore.setGuildAiSettings(guildId, body.aiSettings, activeStorage)
+                : {
+                    enabled: Boolean(body.aiSettings.enabled),
+                    autoResolution: Boolean(body.aiSettings.autoResolution) && plan.isProOrHigher,
+                    autoLearn: Boolean(body.aiSettings.autoLearn),
+                    conversation: Boolean(body.aiSettings.conversation) && plan.isCustom
+                };
         }
 
         if (body.branding && typeof body.branding === 'object') {
@@ -5225,6 +5231,9 @@ function renderExclusionList(){
   const teams=Array.isArray(state.supportTeams)?state.supportTeams:[];
    const ai=state&&state.aiAccess?state.aiAccess:{plan:'none',enabled:false,statusLabel:'No AI subscription',trialRemainingDays:0};
    const aiSettings=ai.settings||{enabled:false,autoResolution:false,autoLearn:false,conversation:false};
+   const aiSubToggleDisabled=!ai.hasAccess||!aiSettings.enabled;
+   const aiResolutionDisabled=!ai.hasAccess||!ai.isProOrHigher||!aiSettings.enabled;
+   const aiConversationDisabled=!ai.isCustom||!aiSettings.enabled;
    const isOwner=Boolean(state&&state.access&&state.access.isOwner);
   const selectedName=(ui&&ui.selectedTeam)?String(ui.selectedTeam):'';
   const selectedTeam=teams.find(t=>t&&t.name===selectedName)||null;
@@ -5272,9 +5281,9 @@ function renderExclusionList(){
         : 'This server does not currently own AI features. Upgrade or ask the bot owner for access.')+'</p>'+
      '<div class="list" style="margin-top:12px">'+
        '<label class="setup-toggle"><input id="aiFeatureEnabled" type="checkbox" '+(aiSettings.enabled?'checked':'')+' '+(!ai.hasAccess?'disabled':'')+' /><div><strong>AI enabled</strong><div class="muted">Master switch for every AI action in this server.</div></div></label>'+
-       '<label class="setup-toggle"><input id="aiAutoResolution" type="checkbox" '+(aiSettings.autoResolution?'checked':'')+' '+(!ai.hasAccess?'disabled':'')+' /><div><strong>Auto-resolution</strong><div class="muted">Searches Roblox Developer Forum results and uses them to suggest likely fixes.</div></div></label>'+
-       '<label class="setup-toggle"><input id="aiAutoLearn" type="checkbox" '+(aiSettings.autoLearn?'checked':'')+' '+(!ai.hasAccess?'disabled':'')+' /><div><strong>Auto-learn</strong><div class="muted">Uses your tags and the model knowledge to offer a concise first response.</div></div></label>'+
-       '<label class="setup-toggle"><input id="aiConversation" type="checkbox" '+(aiSettings.conversation?'checked':'')+' '+(!ai.isCustom?'disabled':'')+' /><div><strong>AI Conversation</strong><div class="muted">Custom plan only. The AI asks follow-up questions, keeps short text context, and stores image summaries instead of images.</div></div></label>'+
+       '<label class="setup-toggle"><input id="aiAutoResolution" type="checkbox" '+(aiSettings.autoResolution?'checked':'')+' '+(aiResolutionDisabled?'disabled':'')+' /><div><strong>Auto-resolution</strong><span class="pill warn" style="margin-left:8px">Pro+</span><div class="muted">Searches Roblox Developer Forum results and uses them to suggest likely fixes.</div></div></label>'+
+       '<label class="setup-toggle"><input id="aiAutoLearn" type="checkbox" '+(aiSettings.autoLearn?'checked':'')+' '+(aiSubToggleDisabled?'disabled':'')+' /><div><strong>Auto-learn</strong><div class="muted">Uses your tags and model knowledge to offer a concise first response when a ticket opens.</div></div></label>'+
+       '<label class="setup-toggle"><input id="aiConversation" type="checkbox" '+(aiSettings.conversation?'checked':'')+' '+(aiConversationDisabled?'disabled':'')+' /><div><strong>AI Conversation</strong><span class="pill warn" style="margin-left:8px">Custom</span><div class="muted">The AI asks follow-up questions, keeps short text context, and stores image summaries instead of images.</div></div></label>'+
      '</div>'+
      '<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">'+
        (ai.hasAccess?'<button id="saveAiSettings" class="btn" type="button" style="width:auto">Save AI Settings</button>':'<button id="aiUpsell" class="btn-soft" type="button">Learn About AI Access</button>')+
@@ -5851,6 +5860,7 @@ function wire(){
  document.querySelectorAll('.removeExclusion').forEach(btn=>btn.onclick=async()=>{try{await api('/api/exclusion/delete',{method:'POST',body:JSON.stringify({guildId:state.guildId,userId:btn.dataset.user||''})});note('Exclusion removed.','ok');await boot()}catch(e){note(e.message,'danger')}});
   const aiUpsell=document.getElementById('aiUpsell');if(aiUpsell)aiUpsell.onclick=()=>{window.location='/pricing'};
   const saveAiSettings=document.getElementById('saveAiSettings');if(saveAiSettings)saveAiSettings.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,aiSettings:{enabled:!!document.getElementById('aiFeatureEnabled')?.checked,autoResolution:!!document.getElementById('aiAutoResolution')?.checked,autoLearn:!!document.getElementById('aiAutoLearn')?.checked,conversation:!!document.getElementById('aiConversation')?.checked},setup:{step:4}})});note('AI settings saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+  const aiFeatureEnabled=document.getElementById('aiFeatureEnabled');if(aiFeatureEnabled)aiFeatureEnabled.onchange=()=>{const on=!!aiFeatureEnabled.checked;const access=state&&state.aiAccess?state.aiAccess:{};const autoLearn=document.getElementById('aiAutoLearn');if(autoLearn)autoLearn.disabled=!on||!access.hasAccess;const autoRes=document.getElementById('aiAutoResolution');if(autoRes)autoRes.disabled=!on||!access.hasAccess||!access.isProOrHigher;const conv=document.getElementById('aiConversation');if(conv)conv.disabled=!on||!access.isCustom;};
   const aiStartTrial=document.getElementById('aiStartTrial');if(aiStartTrial)aiStartTrial.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'start-trial',days:7})});note('AI free trial started for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const aiSetPlus=document.getElementById('aiSetPlus');if(aiSetPlus)aiSetPlus.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'set-plan',plan:'plus'})});note('Plus enabled for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const aiToggleEnabled=document.getElementById('aiToggleEnabled');if(aiToggleEnabled)aiToggleEnabled.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:(state&&state.aiAccess&&state.aiAccess.enabled)?'disable':'enable'})});note('AI access updated.','ok');await boot()}catch(e){note(e.message,'danger')}};

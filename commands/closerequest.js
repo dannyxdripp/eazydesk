@@ -137,6 +137,9 @@ async function closeTicketWithTranscript(ticketChannel, reason, closedByUserId =
         throw error;
     }
     ticketStore.removeTicketByChannelId(ticketChannel.id);
+    if (typeof ticketStore.clearAiConversation === 'function') {
+        ticketStore.clearAiConversation(ticketChannel.id);
+    }
 }
 
 module.exports = {

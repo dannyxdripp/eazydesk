@@ -399,12 +399,15 @@ function getDefaultAiSettings(access = null) {
 function normalizeAiSettings(input, access = null) {
     const defaults = getDefaultAiSettings(access);
     const raw = input && typeof input === 'object' ? input : {};
-    const isCustom = ['custom', 'custom_trial'].includes(String(access?.plan || '').trim()) && Boolean(access?.hasAccess);
+    const plan = String(access?.plan || '').trim();
+    const hasAccess = Boolean(access?.hasAccess);
+    const isProOrCustom = ['pro', 'custom', 'pro_trial', 'custom_trial'].includes(plan) && hasAccess;
+    const isCustom = ['custom', 'custom_trial'].includes(plan) && hasAccess;
     const enabled = Object.prototype.hasOwnProperty.call(raw, 'enabled') ? Boolean(raw.enabled) : defaults.enabled;
     return {
-        enabled,
-        autoResolution: Object.prototype.hasOwnProperty.call(raw, 'autoResolution') ? Boolean(raw.autoResolution) : defaults.autoResolution,
-        autoLearn: Object.prototype.hasOwnProperty.call(raw, 'autoLearn') ? Boolean(raw.autoLearn) : defaults.autoLearn,
+        enabled: hasAccess && enabled,
+        autoResolution: isProOrCustom && (Object.prototype.hasOwnProperty.call(raw, 'autoResolution') ? Boolean(raw.autoResolution) : defaults.autoResolution),
+        autoLearn: hasAccess && (Object.prototype.hasOwnProperty.call(raw, 'autoLearn') ? Boolean(raw.autoLearn) : defaults.autoLearn),
         conversation: isCustom && (Object.prototype.hasOwnProperty.call(raw, 'conversation') ? Boolean(raw.conversation) : defaults.conversation)
     };
 }
@@ -472,6 +475,20 @@ function appendAiConversation(channelId, patch, storage = null) {
     activeStorage.aiConversations[id] = next;
     saveActiveStorage(activeStorage);
     return next;
+}
+
+function clearAiConversation(channelId, storage = null) {
+    const id = String(channelId || '').trim();
+    if (!id) return false;
+    const activeStorage = storage || getActiveStorage();
+    if (!activeStorage.aiConversations || typeof activeStorage.aiConversations !== 'object') {
+        activeStorage.aiConversations = {};
+        return false;
+    }
+    if (!Object.prototype.hasOwnProperty.call(activeStorage.aiConversations, id)) return false;
+    delete activeStorage.aiConversations[id];
+    saveActiveStorage(activeStorage);
+    return true;
 }
 
 function getGuildAiAccess(guildId, storage = null) {
@@ -1183,6 +1200,7 @@ module.exports = {
     setGuildAiSettings,
     getAiConversation,
     appendAiConversation,
+    clearAiConversation,
     getGuildAiAccess,
     setGuildAiAccess,
     getEffectiveGuildAiAccess,

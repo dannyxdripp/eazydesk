@@ -511,7 +511,9 @@ async function getGeminiSuggestion(reasonText, matchedTags, options = {}) {
             'You are a formal support assistant for a Discord server.',
             options.conversation
                 ? 'Continue the support conversation. Ask one useful follow-up question when details are missing. Keep the reply concise and practical.'
-                : 'Provide a concise suggested response based on the user reason, matching tags, and relevant Roblox Developer Forum results.',
+                : matchedTags.length
+                    ? 'Provide a concise suggested response based on the user reason, matching tags, and relevant Roblox Developer Forum results.'
+                    : 'Provide a concise first-step suggested response using your general support knowledge. Do not invent server-specific policies or account actions.',
             `Reason: ${reasonText}`,
             `Matching tags: ${matchedTags.map(tag => tag.name).join(', ') || 'none'}`,
             forumLinks.length ? `Roblox Developer Forum results:\n${forumLinks.map(item => `- ${item.title}: ${item.url}`).join('\n')}` : '',
@@ -575,6 +577,14 @@ function isBasicRobloxIssue(reasonText) {
     return true;
 }
 
+function canAttemptAiFirstReply(aiSettings, matchedTags, reasonText, hasGemini) {
+    const safeReason = String(reasonText || '').trim();
+    if (matchedTags.length) return true;
+    if (aiSettings.autoResolution && isBasicRobloxIssue(safeReason)) return true;
+    if (aiSettings.autoLearn && hasGemini && safeReason.length >= 12) return true;
+    return false;
+}
+
 async function notifyGuildOwnerTrialExpired(guild, aiAccess, storage) {
     if (!guild?.id || !aiAccess?.expiredTrial || aiAccess?.notifiedTrialExpiredAt) return;
     try {
@@ -617,9 +627,10 @@ async function sendAiPromptedResponse(channel, reasonText) {
     const matchedTags = collectTagMatches(safeReason, channel?.guild?.id || null);
 
     if (!aiSettings.autoLearn && !aiSettings.autoResolution) return;
-    if (!matchedTags.length && (!aiSettings.autoResolution || !isBasicRobloxIssue(safeReason))) return;
 
     const hasGemini = Boolean(process.env.GEMINI_API_KEY);
+    if (!canAttemptAiFirstReply(aiSettings, matchedTags, safeReason, hasGemini)) return;
+
     const primaryTag = matchedTags[0] || null;
     const forumLinks = aiSettings.autoResolution && isBasicRobloxIssue(safeReason)
         ? await searchRobloxDevForum(safeReason)
@@ -721,12 +732,19 @@ async function handleAiConversationMessage(message, ticket, activeStorage = null
         if (summary) imageSummaries.push(summary);
     }
 
+    const userContent = [
+        content,
+        imageSummaries.length
+            ? `[Image summary: ${imageSummaries.map(item => item.summary).join(' | ')}]`
+            : ''
+    ].filter(Boolean).join('\n');
+
     const entry = ticketStore.appendAiConversation(message.channel.id, {
-        messages: content ? [{ role: 'user', content, createdAt: new Date().toISOString() }] : [],
+        messages: userContent ? [{ role: 'user', content: userContent, createdAt: new Date().toISOString() }] : [],
         imageSummaries
     }, storage);
     const contextMessages = Array.isArray(entry?.messages) ? entry.messages.slice(-10) : [];
-    const responseText = compactText(await getGeminiSuggestion(content || 'The user uploaded an image.', [], {
+    const responseText = compactText(await getGeminiSuggestion(userContent || 'The user uploaded an image.', [], {
         conversation: true,
         contextMessages,
         imageSummaries: Array.isArray(entry?.imageSummaries) ? entry.imageSummaries.slice(-5) : []
