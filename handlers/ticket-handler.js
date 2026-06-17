@@ -390,12 +390,13 @@ function buildTicketTypeButtonRows(guildId) {
     return rows;
 }
 
-function buildTicketTypeSelectRows(guildId) {
+function buildTicketTypeSelectRows(guildId, panelChannelId = null) {
     const ticketTypes = ticketStore.getTicketTypesForGuild(guildId).slice(0, 25);
     if (!ticketTypes.length) return [];
+    const suffix = panelChannelId ? `:${String(panelChannelId).slice(0, 32)}` : '';
     const select = new StringSelectMenuBuilder()
-        .setCustomId('select-ticket-type')
-        .setPlaceholder('Choose a ticket type')
+        .setCustomId(`select-ticket-type${suffix}`)
+        .setPlaceholder('Choose the support topic')
         .addOptions(ticketTypes.map(ticketType => {
             const teamData = ticketStore.findSupportTeamForTicketType(ticketType.name, guildId);
             const option = {
@@ -470,16 +471,52 @@ function collectTagMatches(reasonText, guildId) {
         .map(entry => entry.tag);
 }
 
-async function getGeminiSuggestion(reasonText, matchedTags) {
+function compactText(value, max = 1800) {
+    return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+function robloxDevForumSearchUrl(query) {
+    const q = encodeURIComponent(String(query || '').trim().slice(0, 160));
+    return q ? `https://devforum.roblox.com/search?q=${q}` : 'https://devforum.roblox.com/';
+}
+
+async function searchRobloxDevForum(reasonText) {
+    const query = compactText(reasonText, 180).replace(/\broblox\b/ig, '').trim() || compactText(reasonText, 180);
+    if (!query) return [];
+    try {
+        const response = await fetch(`https://devforum.roblox.com/search.json?q=${encodeURIComponent(query)}`, {
+            headers: { Accept: 'application/json' }
+        });
+        if (!response.ok) return [];
+        const data = await response.json().catch(() => ({}));
+        const topics = Array.isArray(data?.topics) ? data.topics : [];
+        return topics.slice(0, 3).map(topic => ({
+            title: compactText(topic?.title, 120),
+            url: topic?.slug && topic?.id ? `https://devforum.roblox.com/t/${topic.slug}/${topic.id}` : ''
+        })).filter(item => item.title && item.url);
+    } catch {
+        return [];
+    }
+}
+
+async function getGeminiSuggestion(reasonText, matchedTags, options = {}) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return null;
     try {
         const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+        const forumLinks = Array.isArray(options.forumLinks) ? options.forumLinks : [];
+        const contextMessages = Array.isArray(options.contextMessages) ? options.contextMessages : [];
+        const imageSummaries = Array.isArray(options.imageSummaries) ? options.imageSummaries : [];
         const prompt = [
             'You are a formal support assistant for a Discord server.',
-            'Provide a concise suggested response based on the user reason and matching tags.',
+            options.conversation
+                ? 'Continue the support conversation. Ask one useful follow-up question when details are missing. Keep the reply concise and practical.'
+                : 'Provide a concise suggested response based on the user reason, matching tags, and relevant Roblox Developer Forum results.',
             `Reason: ${reasonText}`,
-            `Matching tags: ${matchedTags.map(tag => tag.name).join(', ') || 'none'}`
+            `Matching tags: ${matchedTags.map(tag => tag.name).join(', ') || 'none'}`,
+            forumLinks.length ? `Roblox Developer Forum results:\n${forumLinks.map(item => `- ${item.title}: ${item.url}`).join('\n')}` : '',
+            imageSummaries.length ? `Image upload summaries:\n${imageSummaries.map(item => `- ${item.summary}`).join('\n')}` : '',
+            contextMessages.length ? `Recent conversation:\n${contextMessages.map(item => `${item.role}: ${item.content}`).join('\n')}` : ''
         ].join('\n');
 
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
@@ -493,6 +530,39 @@ async function getGeminiSuggestion(reasonText, matchedTags) {
         if (!response.ok) return null;
         const data = await response.json();
         return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+    } catch {
+        return null;
+    }
+}
+
+async function summarizeImageAttachment(attachment) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    const contentType = String(attachment?.contentType || '').toLowerCase();
+    const url = String(attachment?.url || '').trim();
+    if (!apiKey || !url || !contentType.startsWith('image/')) return null;
+    try {
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        const arrayBuffer = await response.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString('base64');
+        const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+        const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [
+                        { text: 'Summarize this support-ticket image in one short sentence. Do not store or refer to the image itself.' },
+                        { inlineData: { mimeType: contentType, data: base64 } }
+                    ]
+                }],
+                generationConfig: { temperature: 0.2, maxOutputTokens: 80 }
+            })
+        });
+        if (!aiResponse.ok) return null;
+        const data = await aiResponse.json().catch(() => ({}));
+        const summary = compactText(data?.candidates?.[0]?.content?.parts?.[0]?.text, 500);
+        return summary ? { summary, url } : null;
     } catch {
         return null;
     }
@@ -540,24 +610,39 @@ async function sendAiPromptedResponse(channel, reasonText) {
         return;
     }
     if (!guildAiAccess.hasAccess) return;
+    const aiSettings = ticketStore.getGuildAiSettings(channel?.guild?.id || null, activeStorage);
+    if (!aiSettings.enabled) return;
 
     const safeReason = String(reasonText || '').trim();
     const matchedTags = collectTagMatches(safeReason, channel?.guild?.id || null);
 
-    if (!matchedTags.length && !isBasicRobloxIssue(safeReason)) return;
+    if (!aiSettings.autoLearn && !aiSettings.autoResolution) return;
+    if (!matchedTags.length && (!aiSettings.autoResolution || !isBasicRobloxIssue(safeReason))) return;
 
     const hasGemini = Boolean(process.env.GEMINI_API_KEY);
     const primaryTag = matchedTags[0] || null;
+    const forumLinks = aiSettings.autoResolution && isBasicRobloxIssue(safeReason)
+        ? await searchRobloxDevForum(safeReason)
+        : [];
 
     let suggestion = '';
     if (hasGemini) {
-        suggestion = String(await getGeminiSuggestion(safeReason, matchedTags) || '').trim();
-    } else if (primaryTag?.description) {
+        suggestion = String(await getGeminiSuggestion(safeReason, aiSettings.autoLearn ? matchedTags : [], { forumLinks }) || '').trim();
+    } else if (aiSettings.autoLearn && primaryTag?.description) {
         suggestion = String(primaryTag.description).trim();
     }
 
-    // Do not post AI noise unless there's a tag to anchor the response, or the model returned a real suggestion.
-    if (!matchedTags.length && !suggestion) return;
+    if (!suggestion && forumLinks.length) {
+        suggestion = [
+            'I found a few Roblox Developer Forum threads that may be related:',
+            ...forumLinks.map(item => `- [${item.title}](${item.url})`),
+            '',
+            `Search link: ${robloxDevForumSearchUrl(safeReason)}`
+        ].join('\n');
+    }
+
+    // Do not post AI noise unless there's a tag, forum result, or model returned a real suggestion.
+    if (!matchedTags.length && !forumLinks.length && !suggestion) return;
 
     const responseText = suggestion || String(primaryTag?.description || '').trim();
     if (!responseText) return;
@@ -614,6 +699,53 @@ async function sendAiPromptedResponse(channel, reasonText) {
     await channel.send({ flags: MessageFlags.IsComponentsV2, components: [container] }).catch(() => null);
 }
 
+async function handleAiConversationMessage(message, ticket, activeStorage = null) {
+    const storage = activeStorage || ticketStore.getActiveStorage();
+    const guildAiAccess = ticketStore.getEffectiveGuildAiAccess(message?.guild?.id || ticket?.guildId || null, storage);
+    if (!guildAiAccess.hasAccess || !['custom', 'custom_trial'].includes(String(guildAiAccess.plan || ''))) return false;
+    const aiControl = ticketStore.getAiControl(storage);
+    if (aiControl.manualDisabled) return false;
+    const aiSettings = ticketStore.getGuildAiSettings(message?.guild?.id || ticket?.guildId || null, storage);
+    if (!aiSettings.enabled || !aiSettings.conversation) return false;
+    if (ticket?.createdBy && String(ticket.createdBy) !== String(message.author?.id || '')) return false;
+
+    const content = compactText(message.content, 1800);
+    const imageAttachments = [...(message.attachments?.values?.() || [])]
+        .filter(att => String(att?.contentType || '').toLowerCase().startsWith('image/'))
+        .slice(0, 3);
+    if (!content && !imageAttachments.length) return false;
+
+    const imageSummaries = [];
+    for (const attachment of imageAttachments) {
+        const summary = await summarizeImageAttachment(attachment);
+        if (summary) imageSummaries.push(summary);
+    }
+
+    const entry = ticketStore.appendAiConversation(message.channel.id, {
+        messages: content ? [{ role: 'user', content, createdAt: new Date().toISOString() }] : [],
+        imageSummaries
+    }, storage);
+    const contextMessages = Array.isArray(entry?.messages) ? entry.messages.slice(-10) : [];
+    const responseText = compactText(await getGeminiSuggestion(content || 'The user uploaded an image.', [], {
+        conversation: true,
+        contextMessages,
+        imageSummaries: Array.isArray(entry?.imageSummaries) ? entry.imageSummaries.slice(-5) : []
+    }), 1800);
+
+    if (!responseText) return false;
+    ticketStore.appendAiConversation(message.channel.id, {
+        messages: [{ role: 'assistant', content: responseText, createdAt: new Date().toISOString() }]
+    }, storage);
+
+    const container = new ContainerBuilder()
+        .setAccentColor(0x667EF9)
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent('## <:userrobot:1487431675570032681> AI Assistant'))
+        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(responseText));
+    await message.channel.send({ flags: MessageFlags.IsComponentsV2, components: [container] }).catch(() => null);
+    return true;
+}
+
 module.exports = {
     AI_RESOLVED_BUTTON_ID,
     AI_SUPPORT_BUTTON_ID,
@@ -624,6 +756,7 @@ module.exports = {
     loadActiveStorage: ticketStore.getActiveStorage,
     saveActiveStorage: ticketStore.saveActiveStorage,
     loadTicketTypes: ticketStore.getTicketTypes,
+    handleAiConversationMessage,
 
     async createTicket(interaction, ticketType, parentCategoryId, options = {}) {
         const permissionContext = {
@@ -927,13 +1060,13 @@ module.exports = {
                 options?.panelDescription ||
                 storedPanel.description ||
                 panelConfig.description ||
-                `> At Codex Customs, we are committed to providing high quality support to all customers, regardless of their needs therefore we have a support system for customers to contact our dedicated team when in need.\n\n> If you're needing to contact support, please click the "select a prompt" button below & select which option best fits your needs to get in touch with us. Please remain patient throughout the whole process; a response from us may take up to 24 hours.`
+                'Open a ticket when you need help from the team. Choose the topic that best matches your request, add the details we should know, and we will keep the conversation organized from there.'
             ).trim();
             const panelAdvisory = String(
                 options?.panelAdvisory ||
                 storedPanel.advisory ||
                 panelConfig.advisory ||
-                `**Advisories:**\n> All tickets are monitored and logged for training and security purposes.\n> By opening a ticket, you are agreeing to our https://discord.com/channels/1327842668734185492/1327846022159929474`
+                '**Before opening a ticket**\n> Share the goal, what you already tried, and any screenshots or files that can help.\n> Ticket history may be saved for moderation, training, and quality review.'
             ).trim();
             const header = `# <:questions:1477710100889079909> ${panelName}`;
 
@@ -950,7 +1083,7 @@ module.exports = {
                 );
 
             if (displayStyle === 'select') {
-                const selectRows = buildTicketTypeSelectRows(interaction.guildId);
+                const selectRows = buildTicketTypeSelectRows(interaction.guildId, targetChannel.id);
                 if (!selectRows.length) {
                     return sendEphemeral(
                         interaction,

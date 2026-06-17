@@ -241,6 +241,9 @@ function getActiveStorage() {
     if (!data.aiGuildAccess || typeof data.aiGuildAccess !== 'object') {
         data.aiGuildAccess = {};
     }
+    if (!data.aiConversations || typeof data.aiConversations !== 'object') {
+        data.aiConversations = {};
+    }
     if (!data.ticketNotes || typeof data.ticketNotes !== 'object') {
         data.ticketNotes = {};
     }
@@ -378,6 +381,97 @@ function setAiControl(nextControl, storage = null) {
     };
     saveActiveStorage(activeStorage);
     return activeStorage.aiControl;
+}
+
+function getDefaultAiSettings(access = null) {
+    const plan = String(access?.plan || '').trim();
+    const hasAccess = Boolean(access?.hasAccess);
+    const isProOrCustom = ['pro', 'custom', 'pro_trial', 'custom_trial'].includes(plan) && hasAccess;
+    const isCustom = ['custom', 'custom_trial'].includes(plan) && hasAccess;
+    return {
+        enabled: Boolean(hasAccess),
+        autoResolution: Boolean(isProOrCustom),
+        autoLearn: Boolean(hasAccess),
+        conversation: Boolean(isCustom)
+    };
+}
+
+function normalizeAiSettings(input, access = null) {
+    const defaults = getDefaultAiSettings(access);
+    const raw = input && typeof input === 'object' ? input : {};
+    const isCustom = ['custom', 'custom_trial'].includes(String(access?.plan || '').trim()) && Boolean(access?.hasAccess);
+    const enabled = Object.prototype.hasOwnProperty.call(raw, 'enabled') ? Boolean(raw.enabled) : defaults.enabled;
+    return {
+        enabled,
+        autoResolution: Object.prototype.hasOwnProperty.call(raw, 'autoResolution') ? Boolean(raw.autoResolution) : defaults.autoResolution,
+        autoLearn: Object.prototype.hasOwnProperty.call(raw, 'autoLearn') ? Boolean(raw.autoLearn) : defaults.autoLearn,
+        conversation: isCustom && (Object.prototype.hasOwnProperty.call(raw, 'conversation') ? Boolean(raw.conversation) : defaults.conversation)
+    };
+}
+
+function getGuildAiSettings(guildId, storage = null) {
+    const activeStorage = storage || getActiveStorage();
+    const access = getEffectiveGuildAiAccess(guildId, activeStorage);
+    const cfg = getGuildConfig(guildId, activeStorage);
+    return normalizeAiSettings(cfg?.aiSettings, access);
+}
+
+function setGuildAiSettings(guildId, settings, storage = null) {
+    const activeStorage = storage || getActiveStorage();
+    const access = getEffectiveGuildAiAccess(guildId, activeStorage);
+    const normalized = normalizeAiSettings(settings, access);
+    setGuildConfig(guildId, { aiSettings: normalized }, activeStorage);
+    return normalized;
+}
+
+function getAiConversation(channelId, storage = null) {
+    const id = String(channelId || '').trim();
+    if (!id) return { messages: [], imageSummaries: [] };
+    const activeStorage = storage || getActiveStorage();
+    if (!activeStorage.aiConversations || typeof activeStorage.aiConversations !== 'object') {
+        activeStorage.aiConversations = {};
+    }
+    const entry = activeStorage.aiConversations[id];
+    return entry && typeof entry === 'object'
+        ? {
+            messages: Array.isArray(entry.messages) ? entry.messages : [],
+            imageSummaries: Array.isArray(entry.imageSummaries) ? entry.imageSummaries : []
+        }
+        : { messages: [], imageSummaries: [] };
+}
+
+function appendAiConversation(channelId, patch, storage = null) {
+    const id = String(channelId || '').trim();
+    if (!id) return null;
+    const activeStorage = storage || getActiveStorage();
+    if (!activeStorage.aiConversations || typeof activeStorage.aiConversations !== 'object') {
+        activeStorage.aiConversations = {};
+    }
+    const current = getAiConversation(id, activeStorage);
+    const incomingMessages = Array.isArray(patch?.messages) ? patch.messages : [];
+    const incomingImages = Array.isArray(patch?.imageSummaries) ? patch.imageSummaries : [];
+    const next = {
+        messages: [...current.messages, ...incomingMessages]
+            .map(item => ({
+                role: String(item?.role || 'user').slice(0, 20),
+                content: String(item?.content || '').trim().slice(0, 1800),
+                createdAt: item?.createdAt || new Date().toISOString()
+            }))
+            .filter(item => item.content)
+            .slice(-16),
+        imageSummaries: [...current.imageSummaries, ...incomingImages]
+            .map(item => ({
+                summary: String(item?.summary || '').trim().slice(0, 500),
+                url: /^https?:\/\//i.test(String(item?.url || '').trim()) ? String(item.url).trim().slice(0, 500) : '',
+                createdAt: item?.createdAt || new Date().toISOString()
+            }))
+            .filter(item => item.summary)
+            .slice(-8),
+        updatedAt: new Date().toISOString()
+    };
+    activeStorage.aiConversations[id] = next;
+    saveActiveStorage(activeStorage);
+    return next;
 }
 
 function getGuildAiAccess(guildId, storage = null) {
@@ -1085,6 +1179,10 @@ module.exports = {
     popPendingUrgentReason,
     getAiControl,
     setAiControl,
+    getGuildAiSettings,
+    setGuildAiSettings,
+    getAiConversation,
+    appendAiConversation,
     getGuildAiAccess,
     setGuildAiAccess,
     getEffectiveGuildAiAccess,

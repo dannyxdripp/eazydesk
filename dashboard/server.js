@@ -135,6 +135,14 @@ const DEFAULT_DOC_SECTIONS = [
     {
         title: 'Minimal Permissions',
         body: 'Recommended invite permissions: Create Instant Invite, View Channels, Send Messages, Embed Links, Attach Files, Read Message History, Manage Channels, Manage Roles, Use Slash Commands, Create Public Threads, and Send Messages in Threads. Add Manage Messages only if staff tooling needs cleanup actions.'
+    },
+    {
+        title: 'Ticket Type Examples',
+        body: 'Ticket types are intentionally blank for new servers so every server can define its own flow. Common examples: General Support, Billing, Bug Report, Purchase Help, Partnership, Staff Report, Appeal, and Roblox Studio Help. Use {number} in channel formats when you want ticket-1, ticket-2, and ticket-3 to mean the first, second, and third ticket IDs.'
+    },
+    {
+        title: 'AI Feature Controls',
+        body: 'Servers that own AI features can toggle AI on or off from Settings. Auto-resolution looks for Roblox Developer Forum results, auto-learn uses saved tags and model knowledge for first replies, and Custom servers can enable AI Conversation for short contextual follow-up replies. Image uploads are summarized into short text and the original image is not retained in conversation context.'
     }
 ];
 
@@ -1767,6 +1775,14 @@ function assertDashboardCsrf(req) {
 function getGuildAiUiState(guildId, storage = null) {
     const access = ticketStore.getEffectiveGuildAiAccess(guildId, storage);
     const customBot = access.customBot && typeof access.customBot === 'object' ? access.customBot : {};
+    const settings = typeof ticketStore.getGuildAiSettings === 'function'
+        ? ticketStore.getGuildAiSettings(guildId, storage)
+        : {
+            enabled: Boolean(access.hasAccess),
+            autoResolution: Boolean(access.hasAccess && ['pro', 'custom', 'pro_trial', 'custom_trial'].includes(access.plan)),
+            autoLearn: Boolean(access.hasAccess),
+            conversation: Boolean(access.hasAccess && ['custom', 'custom_trial'].includes(access.plan))
+        };
     const trialEndsAtMs = Date.parse(access.trialEndsAt || '');
     const trialRemainingMs = access.trialActive && !Number.isNaN(trialEndsAtMs)
         ? Math.max(0, trialEndsAtMs - Date.now())
@@ -1797,6 +1813,7 @@ function getGuildAiUiState(guildId, storage = null) {
         isPlusOrHigher: ['premium', 'plus', 'pro', 'custom', 'plus_trial', 'pro_trial', 'custom_trial'].includes(access.plan) && access.hasAccess,
         isProOrHigher: ['pro', 'custom', 'pro_trial', 'custom_trial'].includes(access.plan) && access.hasAccess,
         isCustom: ['custom', 'custom_trial'].includes(access.plan) && access.hasAccess,
+        settings,
         customBot: {
             enabled: Boolean(String(customBot.token || '').trim()) && customBot.enabled !== false,
             botName: String(customBot.botName || ''),
@@ -3184,6 +3201,24 @@ async function handleApi(req, res, url, client, customBotManager = null) {
                 description: String(body.panelConfig.description || '').trim().slice(0, 4000),
                 advisory: String(body.panelConfig.advisory || '').trim().slice(0, 4000),
                 buttonLabel: String(body.panelConfig.buttonLabel || '').trim().slice(0, 80)
+            };
+        }
+
+        if (body.aiSettings && typeof body.aiSettings === 'object') {
+            const plan = getGuildAiUiState(guildId, activeStorage);
+            if (!plan.hasAccess) {
+                sendJson(res, 403, { error: 'This server does not currently own AI features.' });
+                return true;
+            }
+            if (Boolean(body.aiSettings.conversation) && !plan.isCustom) {
+                sendJson(res, 403, { error: 'AI Conversation requires the Custom plan.' });
+                return true;
+            }
+            next.aiSettings = {
+                enabled: Boolean(body.aiSettings.enabled),
+                autoResolution: Boolean(body.aiSettings.autoResolution),
+                autoLearn: Boolean(body.aiSettings.autoLearn),
+                conversation: Boolean(body.aiSettings.conversation) && plan.isCustom
             };
         }
 
@@ -5187,9 +5222,10 @@ function renderExclusionList(){
  return '<div class="card" style="margin-top:14px"><h3>Exclusion List</h3><p class="muted">Stop a user from opening all tickets, or only selected ticket types.</p><div class="row"><div><label>User ID</label><input id="exUserId" placeholder="123456789012345678" /></div><div><label>Reason</label><input id="exReason" placeholder="Optional internal note" /></div></div><label>Ticket Types</label><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">'+typeOptions+'</div><div class="help">Select no ticket types to exclude the user from all ticket types.</div><div style="margin-top:12px"><button id="saveExclusion" class="btn" style="width:auto">Add Exclusion</button></div><div class="list" style="margin-top:14px">'+rows+'</div></div>'
 }
  function renderSettings(){
- const teams=Array.isArray(state.supportTeams)?state.supportTeams:[];
-  const ai=state&&state.aiAccess?state.aiAccess:{plan:'none',enabled:false,statusLabel:'No AI subscription',trialRemainingDays:0};
-  const isOwner=Boolean(state&&state.access&&state.access.isOwner);
+  const teams=Array.isArray(state.supportTeams)?state.supportTeams:[];
+   const ai=state&&state.aiAccess?state.aiAccess:{plan:'none',enabled:false,statusLabel:'No AI subscription',trialRemainingDays:0};
+   const aiSettings=ai.settings||{enabled:false,autoResolution:false,autoLearn:false,conversation:false};
+   const isOwner=Boolean(state&&state.access&&state.access.isOwner);
   const selectedName=(ui&&ui.selectedTeam)?String(ui.selectedTeam):'';
   const selectedTeam=teams.find(t=>t&&t.name===selectedName)||null;
   const list=teams
@@ -5228,14 +5264,22 @@ function renderExclusionList(){
     '</div>'+
    '</div>'+
 
-   '<div class="card">'+
-    '<h3>AI Access</h3>'+
-    '<div class="pill '+(ai.premiumActive?'ok':ai.trialActive?'warn':ai.expiredTrial?'danger':'')+'">'+esc(ai.statusLabel||'Free plan')+'</div>'+
-    '<p class="muted" style="margin-top:10px">'+(ai.hasAccess
-        ? 'AI suggested replies are enabled for this server.'
-        : 'This server does not own a Plus AI subscription. Ask the bot owner for access or a trial.')+'</p>'+
-    '<div style="margin-top:12px"><button id="aiUpsell" class="btn-soft" type="button">Learn About AI Access</button></div>'+
-   '</div>'+
+    '<div class="card">'+
+     '<h3>AI Features</h3>'+
+     '<div class="pill '+(ai.premiumActive?'ok':ai.trialActive?'warn':ai.expiredTrial?'danger':'')+'">'+esc(ai.statusLabel||'Free plan')+'</div>'+
+     '<p class="muted" style="margin-top:10px">'+(ai.hasAccess
+        ? 'Control exactly how AI participates in this server. Changes apply to new ticket activity immediately.'
+        : 'This server does not currently own AI features. Upgrade or ask the bot owner for access.')+'</p>'+
+     '<div class="list" style="margin-top:12px">'+
+       '<label class="setup-toggle"><input id="aiFeatureEnabled" type="checkbox" '+(aiSettings.enabled?'checked':'')+' '+(!ai.hasAccess?'disabled':'')+' /><div><strong>AI enabled</strong><div class="muted">Master switch for every AI action in this server.</div></div></label>'+
+       '<label class="setup-toggle"><input id="aiAutoResolution" type="checkbox" '+(aiSettings.autoResolution?'checked':'')+' '+(!ai.hasAccess?'disabled':'')+' /><div><strong>Auto-resolution</strong><div class="muted">Searches Roblox Developer Forum results and uses them to suggest likely fixes.</div></div></label>'+
+       '<label class="setup-toggle"><input id="aiAutoLearn" type="checkbox" '+(aiSettings.autoLearn?'checked':'')+' '+(!ai.hasAccess?'disabled':'')+' /><div><strong>Auto-learn</strong><div class="muted">Uses your tags and the model knowledge to offer a concise first response.</div></div></label>'+
+       '<label class="setup-toggle"><input id="aiConversation" type="checkbox" '+(aiSettings.conversation?'checked':'')+' '+(!ai.isCustom?'disabled':'')+' /><div><strong>AI Conversation</strong><div class="muted">Custom plan only. The AI asks follow-up questions, keeps short text context, and stores image summaries instead of images.</div></div></label>'+
+     '</div>'+
+     '<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">'+
+       (ai.hasAccess?'<button id="saveAiSettings" class="btn" type="button" style="width:auto">Save AI Settings</button>':'<button id="aiUpsell" class="btn-soft" type="button">Learn About AI Access</button>')+
+     '</div>'+
+    '</div>'+
   '</div>'+
 
   '<div class="split" style="margin-top:14px">'+
@@ -5626,7 +5670,9 @@ function renderDocs(){
     '<div class="item"><div><strong>Discord OAuth redirect</strong><div class="muted">Add this exact URI to the Discord Developer Portal for transcript login: <code>'+esc(oauthRedirect)+'</code>. If Discord says invalid redirect_uri, update PUBLIC_BASE_URL to your public HTTPS origin and make this URI match exactly.</div></div></div>'+
     '<div class="item"><div><strong>Feedback setup</strong><div class="muted">Set a feedback channel on the Feedback page. Users run /feedback inside a claimed ticket and staff receive the rating report.</div></div></div>'+
     '<div class="item"><div><strong>Branding</strong><div class="muted">Enterprise/custom servers can edit server identity, embed templates, and preview the bot message before saving.</div></div></div>'+
-    '<div class="item"><div><strong>Recommended bot permissions</strong><div class="muted">Create Instant Invite, View Channels, Send Messages, Embed Links, Attach Files, Read Message History, Use Slash Commands, Manage Channels, Manage Roles, Create Public Threads, Send Messages in Threads. Add Manage Messages only if you want cleanup/moderation actions.</div></div></div>'+
+     '<div class="item"><div><strong>Recommended bot permissions</strong><div class="muted">Create Instant Invite, View Channels, Send Messages, Embed Links, Attach Files, Read Message History, Use Slash Commands, Manage Channels, Manage Roles, Create Public Threads, Send Messages in Threads. Add Manage Messages only if you want cleanup/moderation actions. Administrator is not required.</div></div></div>'+
+     '<div class="item"><div><strong>Ticket type examples</strong><div class="muted">New servers start with no preset ticket types. Suggested documentation examples: General Support, Billing, Bug Report, Purchase Help, Partnership, Staff Report, Appeal, and Roblox Studio Help. Use channel format <code>ticket-{number}</code> when ticket-1, ticket-2, and ticket-3 should mean ticket IDs.</div></div></div>'+
+     '<div class="item"><div><strong>AI feature switches</strong><div class="muted">Settings includes a master AI switch, auto-resolution, auto-learn, and Custom-only AI Conversation. Conversation mode stores recent text and short image summaries, not the image files themselves.</div></div></div>'+
    '</div></div>'
  ):'';
   return '<div class="grid">'+
@@ -5803,8 +5849,9 @@ function wire(){
  const savePanelConfig=document.getElementById('savePanelConfig');if(savePanelConfig)savePanelConfig.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,panelConfig:{title:(document.getElementById('panelTitle')?.value||'').trim(),description:document.getElementById('panelDescription')?.value||'',advisory:document.getElementById('panelAdvisory')?.value||''},setup:{step:4}})});note('Panel saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const saveExclusion=document.getElementById('saveExclusion');if(saveExclusion)saveExclusion.onclick=async()=>{try{const userId=(document.getElementById('exUserId')?.value||'').trim();const reason=(document.getElementById('exReason')?.value||'').trim();const ticketTypes=[...document.querySelectorAll('.exType:checked')].map(input=>input.value);await api('/api/exclusion/upsert',{method:'POST',body:JSON.stringify({guildId:state.guildId,userId,reason,ticketTypes})});note('Exclusion saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
  document.querySelectorAll('.removeExclusion').forEach(btn=>btn.onclick=async()=>{try{await api('/api/exclusion/delete',{method:'POST',body:JSON.stringify({guildId:state.guildId,userId:btn.dataset.user||''})});note('Exclusion removed.','ok');await boot()}catch(e){note(e.message,'danger')}});
- const aiUpsell=document.getElementById('aiUpsell');if(aiUpsell)aiUpsell.onclick=()=>{window.location='/pricing'};
- const aiStartTrial=document.getElementById('aiStartTrial');if(aiStartTrial)aiStartTrial.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'start-trial',days:7})});note('AI free trial started for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
+  const aiUpsell=document.getElementById('aiUpsell');if(aiUpsell)aiUpsell.onclick=()=>{window.location='/pricing'};
+  const saveAiSettings=document.getElementById('saveAiSettings');if(saveAiSettings)saveAiSettings.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,aiSettings:{enabled:!!document.getElementById('aiFeatureEnabled')?.checked,autoResolution:!!document.getElementById('aiAutoResolution')?.checked,autoLearn:!!document.getElementById('aiAutoLearn')?.checked,conversation:!!document.getElementById('aiConversation')?.checked},setup:{step:4}})});note('AI settings saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+  const aiStartTrial=document.getElementById('aiStartTrial');if(aiStartTrial)aiStartTrial.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'start-trial',days:7})});note('AI free trial started for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const aiSetPlus=document.getElementById('aiSetPlus');if(aiSetPlus)aiSetPlus.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'set-plan',plan:'plus'})});note('Plus enabled for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const aiToggleEnabled=document.getElementById('aiToggleEnabled');if(aiToggleEnabled)aiToggleEnabled.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:(state&&state.aiAccess&&state.aiAccess.enabled)?'disable':'enable'})});note('AI access updated.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const aiClear=document.getElementById('aiClear');if(aiClear)aiClear.onclick=async()=>{try{const confirmed=prompt('Type CLEAR to remove AI access for this server.');if(confirmed!=='CLEAR')return;await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'clear'})});note('AI access cleared.','ok');await boot()}catch(e){note(e.message,'danger')}};

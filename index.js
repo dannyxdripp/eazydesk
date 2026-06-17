@@ -825,7 +825,7 @@ async function handleRuntimeInteraction(interaction, runtimeClient = client) {
             await ticketHandler.handleTicketReasonSubmit(interaction);
         }
     } else if (interaction.isStringSelectMenu()) {
-        if (interaction.customId === 'select-ticket-type') {
+        if (interaction.customId === 'select-ticket-type' || interaction.customId.startsWith('select-ticket-type:')) {
             const ticketHandler = require('./handlers/ticket-handler');
             await ticketHandler.handleTicketSelection(interaction);
         }
@@ -896,6 +896,13 @@ async function handleRuntimeMessage(message) {
         const shouldPersistNow = Number.isNaN(lastActivityMs) || (Date.now() - lastActivityMs) >= 30000;
         touchTicket(ticket, message.author.id);
         if (shouldPersistNow) ticketStore.saveActiveStorage(activeStorage);
+
+        const ticketHandler = require('./handlers/ticket-handler');
+        const aiHandled = await ticketHandler.handleAiConversationMessage(message, ticket, activeStorage).catch(error => {
+            console.warn('[AI] Conversation handler failed:', error?.message || error);
+            return false;
+        });
+        if (aiHandled) return;
     }
 
     const rawContent = message.content.trim();
