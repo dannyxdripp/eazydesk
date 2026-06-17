@@ -321,84 +321,25 @@ async function resolveTicketParentCategory(guild, parentCategoryId) {
     return { id, channel, missing: false };
 }
 
-function validateCreateTicketPermissions(guild, parentInfo, allowAttachments = true) {
+function validateCreateTicketPermissions(guild, parentInfo) {
     const me = guild?.members?.me;
     if (!me) {
         return { ok: false, message: 'I could not read my server member permissions. Please try again in a moment.' };
     }
 
-    const guildMissing = getMissingPermissionNames(me.permissions, getRequiredTicketPermissions(allowAttachments));
+    const guildMissing = getMissingPermissionNames(me.permissions, getRequiredTicketPermissions());
     if (guildMissing.length) {
         return {
             ok: false,
-            message: `I am missing these server permissions: **${guildMissing.join(', ')}**.`
+            message: `I need **${guildMissing.join(', ')}** in this server to create tickets.`
         };
     }
 
-    if (parentInfo?.channel) {
-        const categoryPermissions = parentInfo.channel.permissionsFor(me);
-        const categoryMissing = getMissingPermissionNames(categoryPermissions, [
-            ...BOT_TICKET_CHANNEL_PERMISSIONS,
-            ...(allowAttachments ? [PermissionsBitField.Flags.AttachFiles] : [])
-        ]);
-        if (categoryMissing.length) {
-            return {
-                ok: false,
-                message: `I cannot create tickets in **${parentInfo.channel.name}** because I am missing: **${categoryMissing.join(', ')}**.\n\nAllow those permissions on that category, or choose a different ticket category in setup.`
-            };
-        }
-    }
     return { ok: true };
 }
 
-async function ensureBotCategoryPermissions(guild, parentInfo, allowAttachments = true) {
-    const category = parentInfo?.channel || null;
-    const me = guild?.members?.me;
-    if (!category || !me) return { ok: true, repaired: false };
-
-    const required = [
-        PermissionsBitField.Flags.ManageChannels
-    ];
-    const missing = getMissingPermissionNames(category.permissionsFor(me), required);
-    if (!missing.length) return { ok: true, repaired: false };
-
-    const repairMissing = getMissingPermissionNames(me.permissions, [
-        PermissionsBitField.Flags.ManageChannels
-    ]);
-    if (repairMissing.length) {
-        return {
-            ok: false,
-            repaired: false,
-            message: `I am missing **${repairMissing.join(', ')}**, so I cannot repair my permissions in **${category.name}**.`
-        };
-    }
-
-    try {
-        await category.permissionOverwrites.edit(me.id, {
-            ViewChannel: true,
-            SendMessages: true,
-            EmbedLinks: true,
-            AttachFiles: allowAttachments,
-            ReadMessageHistory: true,
-            ManageChannels: true
-        }, { reason: 'Repair ticket category permissions for ticket creation' });
-    } catch (error) {
-        console.warn(`[Tickets] Failed to repair category permissions for ${category.id}:`, error?.message || error);
-        return {
-            ok: false,
-            repaired: false,
-            message: `I could not repair my permissions in **${category.name}**. Please allow me **${missing.join(', ')}** on that category.`
-        };
-    }
-
-    const stillMissing = getMissingPermissionNames(category.permissionsFor(me), required);
-    return stillMissing.length
-        ? {
-            ok: false,
-            repaired: true,
-            message: `I tried to repair **${category.name}**, but I am still missing: **${stillMissing.join(', ')}**.`
-        }
-        : { ok: true, repaired: true };
+async function ensureBotCategoryPermissions(/* guild, parentInfo, allowAttachments = true */) {
+    return { ok: true, repaired: false };
 }
 
 function getRestrictedTicketTypeForChannel(interaction) {
@@ -737,16 +678,27 @@ module.exports = {
                     )
                 );
             }
-            const parentInfo = await resolveTicketParentCategory(interaction.guild, parentCategoryId);
+            let parentInfo = await resolveTicketParentCategory(interaction.guild, parentCategoryId);
             permissionContext.parentInfo = parentInfo;
-            const categoryRepair = await ensureBotCategoryPermissions(interaction.guild, parentInfo, allowAttachments);
-            if (!categoryRepair.ok) {
-                return sendEphemeral(interaction, buildInfoMessage('Category Permissions', categoryRepair.message, 0xED4245));
-            }
-            const permissionCheck = validateCreateTicketPermissions(interaction.guild, parentInfo, allowAttachments);
+            const permissionCheck = validateCreateTicketPermissions(interaction.guild);
             if (!permissionCheck.ok) {
+                console.warn('[Permissions] Ticket creation blocked by missing guild permission:', permissionCheck.message, { guildId: interaction.guildId });
                 return sendEphemeral(interaction, buildInfoMessage('Missing Permissions', permissionCheck.message, 0xED4245));
             }
+
+            if (parentInfo.channel) {
+                const categoryPermissions = parentInfo.channel.permissionsFor(botMember);
+                if (categoryPermissions && !categoryPermissions.has(PermissionsBitField.Flags.ManageChannels)) {
+                    console.warn('[Permissions] Bot lacks ManageChannels in configured category; falling back to create ticket without parent category.', {
+                        guildId: interaction.guildId,
+                        categoryId: parentInfo.channel.id,
+                        categoryName: parentInfo.channel.name
+                    });
+                    parentInfo = { id: null, channel: null, missing: false };
+                    permissionContext.parentInfo = parentInfo;
+                }
+            }
+
             if (parentInfo.missing && parentInfo.originalId) {
                 console.warn(`[Tickets] Configured ticket category ${parentInfo.originalId} was not found in guild ${interaction.guildId}; creating ticket without a parent category.`);
             }
@@ -763,8 +715,7 @@ module.exports = {
                         PermissionsBitField.Flags.EmbedLinks,
                         PermissionsBitField.Flags.AttachFiles,
                         PermissionsBitField.Flags.ReadMessageHistory,
-                        PermissionsBitField.Flags.ManageChannels,
-                        PermissionsBitField.Flags.ManageRoles
+                        PermissionsBitField.Flags.ManageChannels
                     ]
                 });
             }
@@ -865,7 +816,15 @@ module.exports = {
             return sendEphemeral(interaction, { flags: MessageFlags.IsComponentsV2, components: [createdContainer] });
         } catch (error) {
             console.error('Error creating ticket:', error);
-            if (error?.code === 50013 || error?.status === 403) {
+            if (error?.code === 50013 || error?.status === 403 || error?.code === 50001) {
+                console.warn('[Permissions] Ticket creation permission failure:', {
+                    guildId: interaction.guildId,
+                    channelId: permissionContext.ticketChannel?.id,
+                    parentCategoryId: permissionContext.parentInfo?.id,
+                    errorCode: error?.code,
+                    status: error?.status,
+                    message: error?.message
+                });
                 return sendEphemeral(interaction, {
                     ...buildInfoMessage(
                         'Missing Permissions',
@@ -927,6 +886,11 @@ module.exports = {
             }
             const panelPermissionCheck = validateSendPanelPermissions(targetChannel, interaction.guild);
             if (!panelPermissionCheck.ok) {
+                console.warn('[Permissions] Ticket panel creation blocked by missing channel permissions:', {
+                    guildId: interaction.guildId,
+                    channelId: targetChannel?.id,
+                    message: panelPermissionCheck.message
+                });
                 return sendEphemeral(interaction, buildInfoMessage('Missing Permissions', panelPermissionCheck.message, 0xED4245));
             }
 
@@ -1018,6 +982,13 @@ module.exports = {
                 const message = check.ok
                     ? 'Discord blocked me from posting the panel. Check that I can **View Channel**, **Send Messages**, **Embed Links**, and **Read Message History** in that channel.'
                     : check.message;
+                console.warn('[Permissions] Ticket panel creation permission failure:', {
+                    guildId: interaction.guildId,
+                    channelId: channel?.id,
+                    errorCode: error?.code,
+                    status: error?.status,
+                    message: error?.message
+                });
                 return sendEphemeral(interaction, buildInfoMessage('Missing Permissions', message, 0xED4245));
             }
             await sendEphemeral(interaction, buildInfoMessage('Error', 'There was an error setting up the ticket panel.', 0xED4245));

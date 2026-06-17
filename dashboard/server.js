@@ -2603,8 +2603,7 @@ async function syncGuildCategoryPermissions(guild, config = {}) {
                 EmbedLinks: true,
                 AttachFiles: true,
                 ReadMessageHistory: true,
-                ManageChannels: true,
-                ManageRoles: true
+                ManageChannels: true
             }, { reason: 'Repair ticket category permissions' }).then(() => true).catch(() => false);
             if (repaired) repairedCategories += 1;
         }
@@ -3487,12 +3486,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
                 id: botMemberId,
                 allow: [
                     PermissionsBitField.Flags.ViewChannel,
-                    PermissionsBitField.Flags.SendMessages,
-                    PermissionsBitField.Flags.EmbedLinks,
-                    PermissionsBitField.Flags.AttachFiles,
-                    PermissionsBitField.Flags.ReadMessageHistory,
-                    PermissionsBitField.Flags.ManageChannels,
-                    PermissionsBitField.Flags.ManageRoles
+                    PermissionsBitField.Flags.ManageChannels
                 ]
             }]
             : undefined;
@@ -3797,8 +3791,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
                     EmbedLinks: true,
                     AttachFiles: true,
                     ReadMessageHistory: true,
-                    ManageChannels: true,
-                    ManageRoles: true
+                    ManageChannels: true
                 }, { reason: 'Repair ticket category permissions after ticket type save' }).catch(() => null);
             }
         }
