@@ -34,9 +34,38 @@ function describeChannelPermissionFailure(channel, required = [], action = 'do t
         : `Discord blocked me from doing that. Check my role position and channel overwrites.`;
 }
 
+function getRecommendedBotPermissions(includeAttachments = true) {
+    const permissions = [
+        PermissionsBitField.Flags.ViewChannel,
+        PermissionsBitField.Flags.SendMessages,
+        PermissionsBitField.Flags.EmbedLinks,
+        PermissionsBitField.Flags.ReadMessageHistory,
+        PermissionsBitField.Flags.UseApplicationCommands,
+        PermissionsBitField.Flags.ManageChannels,
+        PermissionsBitField.Flags.ManageRoles
+    ];
+    if (includeAttachments) permissions.push(PermissionsBitField.Flags.AttachFiles);
+    return permissions;
+}
+
+function formatBotPermissionGuide() {
+    const labels = getRecommendedBotPermissions(true).map(permission => PERMISSION_LABELS[permission] || String(permission));
+    return [
+        '**Recommended bot role permissions (Administrator is not required):**',
+        labels.map(label => `- ${label}`).join('\n'),
+        '',
+        '**Also check:**',
+        '- Drag the bot role **above** every support role it needs to add to tickets.',
+        '- Allow the same permissions on your **ticket category** (the bot can try to repair category overwrites if it has Manage Channels + Manage Roles).',
+        '- Panel channel needs at least **View Channels**, **Send Messages**, **Embed Links**, and **Read Message History**.'
+    ].join('\n');
+}
+
 module.exports = {
     PERMISSION_LABELS,
     missingPermissionNames,
     channelMissingPermissionNames,
-    describeChannelPermissionFailure
+    describeChannelPermissionFailure,
+    getRecommendedBotPermissions,
+    formatBotPermissionGuide
 };

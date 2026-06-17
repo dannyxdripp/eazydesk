@@ -20,6 +20,7 @@ const { touchTicket, updateTicketChannelMetadata } = require('../utils/ticket-me
 const { buildV2Notice } = require('../utils/components-v2-messages');
 const closeRequestCommand = require('../commands/closerequest');
 const { resolveParentCategoryId: resolveDefaultParentCategoryId } = require('../utils/guild-defaults');
+const { formatBotPermissionGuide } = require('../utils/permission-messages');
 
 const MANUAL_STATUSES = new Set(['available', 'increased_volume', 'reduced_assistance']);
 const INCREASED_THRESHOLD = 10;
@@ -295,7 +296,7 @@ function describeDiscordPermissionError(error, guild, parentInfo, ticketChannel 
     if (parentInfo?.channel) {
         lines.push(`Check the configured ticket category: **${parentInfo.channel.name}**.`);
     }
-    lines.push('Recommended fix: give the bot role the required permissions at server level and allow them on the ticket category, then make sure the bot role is above support roles it needs to add.');
+    lines.push(formatBotPermissionGuide());
     return lines.filter(Boolean).join('\n');
 }
 
@@ -988,26 +989,40 @@ module.exports = {
             ).trim();
             const header = `# <:questions:1477710100889079909> ${panelName}`;
 
-            const components = [
-                new ContainerBuilder()
-                    .setAccentColor(accentColor)
-                    .addTextDisplayComponents(
-                        new TextDisplayBuilder().setContent(`${header}\n\n${panelDescription}`)
-                    )
-                    .addSeparatorComponents(
-                        new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true)
-                    )
-                    .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(panelAdvisory)
-            )
-            ];
+            const panelContainer = new ContainerBuilder()
+                .setAccentColor(accentColor)
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`${header}\n\n${panelDescription}`)
+                )
+                .addSeparatorComponents(
+                    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true)
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(panelAdvisory)
+                );
+
+            if (displayStyle === 'select') {
+                const selectRows = buildTicketTypeSelectRows(interaction.guildId);
+                if (!selectRows.length) {
+                    return sendEphemeral(
+                        interaction,
+                        buildInfoMessage(
+                            'No Ticket Types',
+                            'No ticket types are configured yet. Add ticket types in the dashboard or `/setup`, then publish the panel again.',
+                            0xFEE75C
+                        )
+                    );
+                }
+                for (const row of selectRows) {
+                    panelContainer.addActionRowComponents(row);
+                }
+            } else {
+                panelContainer.addActionRowComponents(actionRow);
+            }
 
             await targetChannel.send({
                 flags: MessageFlags.IsComponentsV2,
-                components: [
-                    ...components,
-                    ...(displayStyle === 'select' ? buildTicketTypeSelectRows(interaction.guildId) : [actionRow])
-                ]
+                components: [panelContainer]
             });
             const notice = String(options?.notice || 'Ticket panel has been set up.').trim() || 'Ticket panel has been set up.';
             await sendEphemeral(interaction, buildInfoMessage('Panel Created', notice, 0x57F287));
@@ -1188,10 +1203,14 @@ module.exports = {
 
     async handleTicketSelection(interaction) {
         try {
-            const selectedType = interaction.values[0];
+            const selectedType = String(interaction.values?.[0] || '').trim();
+            if (!selectedType) {
+                return sendEphemeral(interaction, buildInfoMessage('Invalid Selection', 'Please choose a ticket type from the menu.', 0xED4245));
+            }
+
             const ticketConfig = ticketStore.findTicketTypeBySelectValue(selectedType, interaction.guildId);
             if (!ticketConfig) {
-                return sendEphemeral(interaction, buildInfoMessage('Invalid Ticket Type', 'The selected ticket type is not valid.', 0xED4245));
+                return sendEphemeral(interaction, buildInfoMessage('Invalid Ticket Type', 'The selected ticket type is not valid. Republish the panel after updating ticket types.', 0xED4245));
             }
 
             const requireReason = ticketConfig.requireReason !== false;
@@ -1199,10 +1218,14 @@ module.exports = {
                 return this.processTicketTypeSelection(interaction, selectedType, null);
             }
 
-            return this.showTicketReasonModal(interaction, selectedType, ticketConfig);
+            await this.showTicketReasonModal(interaction, selectedType, ticketConfig);
         } catch (error) {
             console.error('Error handling ticket selection:', error);
-            return sendEphemeral(interaction, buildInfoMessage('Error', 'There was an error processing your ticket request.', 0xED4245));
+            if (error?.code === 10062) return null;
+            const message = error?.code === 50013 || error?.status === 403
+                ? describeDiscordPermissionError(error, interaction.guild, null, interaction.channel)
+                : 'There was an error processing your ticket request.';
+            return sendEphemeral(interaction, buildInfoMessage('Error', message, 0xED4245));
         }
     },
 

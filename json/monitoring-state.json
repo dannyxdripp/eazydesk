@@ -1,17 +1,17 @@
 {
-    "lastRestoreAttemptAt": "2026-05-29T22:27:22.090Z",
+    "lastRestoreAttemptAt": "2026-06-17T17:54:45.356Z",
     "lastRestoreOk": false,
     "lastRestoreSkipped": true,
     "lastRestoreFiles": 0,
     "lastRestoreBytes": 0,
     "lastRestoreReason": "MEGA backup is not configured",
-    "lastBackupAttemptAt": "2026-05-29T22:27:22.094Z",
+    "lastBackupAttemptAt": "2026-06-17T17:54:45.358Z",
     "lastBackupReason": "shutdown-uncaughtException",
     "lastBackupOk": false,
     "lastBackupFiles": 0,
     "lastBackupBytes": 0,
-    "lastReportAt": "2026-05-29T22:27:22.099Z",
+    "lastReportAt": "2026-06-17T17:54:45.363Z",
     "lastReportReason": "uncaughtException",
     "lastWebhookSent": false,
-    "lastDataLossAt": "2026-05-29T22:27:22.099Z"
+    "lastDataLossAt": "2026-06-17T17:54:45.363Z"
 }
