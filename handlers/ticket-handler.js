@@ -37,13 +37,7 @@ const CHANNEL_CREATE_PERMISSIONS = [
 ];
 
 const BOT_TICKET_GUILD_PERMISSIONS = [
-    PermissionsBitField.Flags.ManageChannels,
-    PermissionsBitField.Flags.ManageRoles,
-    PermissionsBitField.Flags.ViewChannel,
-    PermissionsBitField.Flags.SendMessages,
-    PermissionsBitField.Flags.EmbedLinks,
-    PermissionsBitField.Flags.ReadMessageHistory,
-    PermissionsBitField.Flags.UseApplicationCommands
+    PermissionsBitField.Flags.ManageChannels
 ];
 
 const BOT_TICKET_CHANNEL_PERMISSIONS = [
@@ -51,8 +45,7 @@ const BOT_TICKET_CHANNEL_PERMISSIONS = [
     PermissionsBitField.Flags.SendMessages,
     PermissionsBitField.Flags.EmbedLinks,
     PermissionsBitField.Flags.ReadMessageHistory,
-    PermissionsBitField.Flags.ManageChannels,
-    PermissionsBitField.Flags.ManageRoles
+    PermissionsBitField.Flags.ManageChannels
 ];
 
 function getAutomaticAvailabilityStatus(count) {
@@ -261,10 +254,9 @@ function getMissingPermissionNames(permissions, required) {
         .map(permission => labels[permission] || String(permission));
 }
 
-function getRequiredTicketPermissions(allowAttachments = true) {
+function getRequiredTicketPermissions(/* allowAttachments = true */) {
     return [
-        ...BOT_TICKET_GUILD_PERMISSIONS,
-        ...(allowAttachments ? [PermissionsBitField.Flags.AttachFiles] : [])
+        ...BOT_TICKET_GUILD_PERMISSIONS
     ];
 }
 
@@ -365,20 +357,13 @@ async function ensureBotCategoryPermissions(guild, parentInfo, allowAttachments 
     if (!category || !me) return { ok: true, repaired: false };
 
     const required = [
-        PermissionsBitField.Flags.ManageChannels,
-        PermissionsBitField.Flags.ViewChannel,
-        PermissionsBitField.Flags.SendMessages,
-        PermissionsBitField.Flags.EmbedLinks,
-        PermissionsBitField.Flags.ReadMessageHistory,
-        PermissionsBitField.Flags.ManageRoles,
-        ...(allowAttachments ? [PermissionsBitField.Flags.AttachFiles] : [])
+        PermissionsBitField.Flags.ManageChannels
     ];
     const missing = getMissingPermissionNames(category.permissionsFor(me), required);
     if (!missing.length) return { ok: true, repaired: false };
 
     const repairMissing = getMissingPermissionNames(me.permissions, [
-        PermissionsBitField.Flags.ManageChannels,
-        PermissionsBitField.Flags.ManageRoles
+        PermissionsBitField.Flags.ManageChannels
     ]);
     if (repairMissing.length) {
         return {
@@ -395,8 +380,7 @@ async function ensureBotCategoryPermissions(guild, parentInfo, allowAttachments 
             EmbedLinks: true,
             AttachFiles: allowAttachments,
             ReadMessageHistory: true,
-            ManageChannels: true,
-            ManageRoles: true
+            ManageChannels: true
         }, { reason: 'Repair ticket category permissions for ticket creation' });
     } catch (error) {
         console.warn(`[Tickets] Failed to repair category permissions for ${category.id}:`, error?.message || error);
