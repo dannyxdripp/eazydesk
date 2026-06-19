@@ -949,23 +949,26 @@ client.on('guildCreate', async guild => {
     try {
         const setupUrl = `${getPublicBaseUrl()}/setup?guild=${encodeURIComponent(guild.id)}&page=1`;
         const dashboardUrl = `${getPublicBaseUrl()}/dashboard?guild=${encodeURIComponent(guild.id)}`;
-        const supportUrl = process.env.SUPPORT_SERVER_URL || process.env.DISCORD_SUPPORT_URL || 'https://discord.gg/JSUX9GQP6J';
+        const supportUrl = String(process.env.SUPPORT_SERVER_URL || process.env.DISCORD_SUPPORT_URL || '').trim();
         const owner = await guild.fetchOwner().catch(() => null);
         if (!owner?.user) return;
+        const buttons = [
+            new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Open Dashboard').setURL(dashboardUrl),
+            new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Web Setup').setURL(setupUrl)
+        ];
+        if (/^https?:\/\//i.test(supportUrl)) {
+            buttons.push(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Support Server').setURL(supportUrl));
+        }
         const message = {
             content: [
                 `Hey, thanks for adding **${client.user?.username || 'the support bot'}** to **${guild.name}**.`,
                 '',
                 'I can help you get tickets running in a couple of replies. Use `/setup` in your server for the quick Discord setup, or open the dashboard for the full control panel.',
                 '',
-                'If you get stuck, the support server is one click away.'
+                supportUrl ? 'If you get stuck, the support server is one click away.' : 'If you get stuck, open the dashboard documentation for the setup guide.'
             ].join('\n'),
             components: [
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Open Dashboard').setURL(dashboardUrl),
-                    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Web Setup').setURL(setupUrl),
-                    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Support Server').setURL(supportUrl)
-                )
+                new ActionRowBuilder().addComponents(...buttons)
             ]
         };
         const sent = await owner.user.send(message).then(() => true).catch(() => false);

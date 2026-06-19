@@ -36,13 +36,16 @@ function describeChannelPermissionFailure(channel, required = [], action = 'do t
 
 function getRecommendedBotPermissions(includeAttachments = true) {
     const permissions = [
+        PermissionsBitField.Flags.CreateInstantInvite,
         PermissionsBitField.Flags.ViewChannel,
         PermissionsBitField.Flags.SendMessages,
         PermissionsBitField.Flags.EmbedLinks,
         PermissionsBitField.Flags.ReadMessageHistory,
         PermissionsBitField.Flags.UseApplicationCommands,
         PermissionsBitField.Flags.ManageChannels,
-        PermissionsBitField.Flags.ManageRoles
+        PermissionsBitField.Flags.ManageRoles,
+        PermissionsBitField.Flags.CreatePublicThreads,
+        PermissionsBitField.Flags.SendMessagesInThreads
     ];
     if (includeAttachments) permissions.push(PermissionsBitField.Flags.AttachFiles);
     return permissions;
@@ -57,7 +60,8 @@ function formatBotPermissionGuide() {
         '**Also check:**',
         '- Drag the bot role **above** every support role it needs to add to tickets.',
         '- Allow the same permissions on your **ticket category** (the bot can try to repair category overwrites if it has Manage Channels + Manage Roles).',
-        '- Panel channel needs at least **View Channels**, **Send Messages**, **Embed Links**, and **Read Message History**.'
+        '- Panel channel needs at least **View Channels**, **Send Messages**, **Embed Links**, and **Read Message History**.',
+        '- Add **Manage Messages** only if you want moderation or cleanup actions.'
     ].join('\n');
 }
 

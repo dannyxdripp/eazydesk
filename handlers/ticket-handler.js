@@ -31,6 +31,7 @@ const AI_RESOLVED_BUTTON_ID = 'ai_prompt_resolved';
 const AI_SUPPORT_BUTTON_ID = 'ai_prompt_support';
 const TICKET_REASON_MODAL_PREFIX = 'ticket_reason_modal:';
 const TICKET_REASON_INPUT_ID = 'ticket_open_reason';
+const TICKET_QUESTION_INPUT_PREFIX = 'ticket_open_question_';
 const TICKET_FILE_UPLOAD_INPUT_ID = 'ticket_open_files';
 const CHANNEL_CREATE_PERMISSIONS = [
     PermissionsBitField.Flags.ManageChannels
@@ -176,6 +177,7 @@ function resolveOpenTicketEmbed(ticketConfig, ticketType, user, reason, ticketCh
         username: user.username || '',
         userId: user.id || '',
         reason: reason || 'No reason provided.',
+        answers: reason || 'No answers provided.',
         attachments: attachmentsText,
         attachmentsCount: attachmentUrls.length,
         timestamp: `<t:${unix}:F>`,
@@ -195,6 +197,58 @@ function resolveOpenTicketEmbed(ticketConfig, ticketType, user, reason, ticketCh
             return `${rendered}\n\nAttachments:\n${attachmentsText}`;
         })()
     };
+}
+
+function normalizeOpeningQuestions(ticketConfig, guildId, allowAttachments = true) {
+    const configured = Array.isArray(ticketConfig?.openQuestions)
+        ? ticketConfig.openQuestions
+        : (Array.isArray(ticketConfig?.openingQuestions) ? ticketConfig.openingQuestions : []);
+    const fallback = [{
+        label: 'Please describe why you are opening this ticket',
+        placeholder: 'Include what happened, what you tried, and what you need from us.',
+        style: 'paragraph',
+        required: true
+    }];
+    const activeStorage = ticketStore.getActiveStorage();
+    const access = ticketStore.getEffectiveGuildAiAccess(guildId, activeStorage);
+    const paid = Boolean(access?.hasAccess);
+    const maxModalInputs = allowAttachments ? 4 : 5;
+    const max = paid ? maxModalInputs : 1;
+    const source = configured.length ? configured : fallback;
+
+    return source
+        .map((question, index) => {
+            const raw = typeof question === 'string' ? { label: question } : (question && typeof question === 'object' ? question : {});
+            const label = String(raw.label || raw.question || raw.title || fallback[0].label).trim().slice(0, 45);
+            if (!label) return null;
+            const style = String(raw.style || raw.type || '').toLowerCase() === 'short'
+                ? TextInputStyle.Short
+                : TextInputStyle.Paragraph;
+            const maxLength = Math.max(50, Math.min(1024, Number(raw.maxLength || (style === TextInputStyle.Short ? 240 : 1024))));
+            return {
+                id: `${TICKET_QUESTION_INPUT_PREFIX}${index}`,
+                label,
+                placeholder: String(raw.placeholder || '').trim().slice(0, 100),
+                required: raw.required === undefined ? true : Boolean(raw.required),
+                style,
+                maxLength
+            };
+        })
+        .filter(Boolean)
+        .slice(0, max);
+}
+
+function formatQuestionAnswers(answers) {
+    const list = Array.isArray(answers) ? answers : [];
+    const lines = list
+        .map(item => {
+            const label = String(item?.label || 'Question').trim();
+            const answer = String(item?.answer || '').trim();
+            if (!answer) return null;
+            return `**${label}**\n${answer}`;
+        })
+        .filter(Boolean);
+    return lines.join('\n\n');
 }
 
 function buildOpenSupportRow(options = {}) {
@@ -949,6 +1003,7 @@ module.exports = {
                 createdAt,
                 lastActivityAt: createdAt,
                 openReason: options.reason || null,
+                openQuestionAnswers: Array.isArray(options.questionAnswers) ? options.questionAnswers : [],
                 openAttachments: Array.isArray(options.attachments) ? options.attachments : [],
                 pendingReason: false
             };
@@ -1252,16 +1307,19 @@ module.exports = {
             .setCustomId(`${TICKET_REASON_MODAL_PREFIX}${selectedType}`)
             .setTitle(`Open ${ticketConfig.name}`);
 
-        const reasonInput = new TextInputBuilder()
-            .setCustomId(TICKET_REASON_INPUT_ID)
-            .setLabel('Please provide your reason for this ticket')
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(true)
-            .setMaxLength(1024);
-
-        modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
-
         const allowAttachments = ticketConfig.allowAttachments !== false;
+        const questions = normalizeOpeningQuestions(ticketConfig, interaction.guildId, allowAttachments);
+        for (const question of questions) {
+            const input = new TextInputBuilder()
+                .setCustomId(question.id)
+                .setLabel(question.label)
+                .setStyle(question.style)
+                .setRequired(question.required)
+                .setMaxLength(question.maxLength);
+            if (question.placeholder) input.setPlaceholder(question.placeholder);
+            modal.addComponents(new ActionRowBuilder().addComponents(input));
+        }
+
         if (allowAttachments) {
             // Discord now supports file uploads inside modals via ComponentType.Label + ComponentType.FileUpload.
             // discord.js doesn't currently expose a builder for these, so we pass raw modal component data.
@@ -1288,7 +1346,21 @@ module.exports = {
         try {
             if (!interaction.customId.startsWith(TICKET_REASON_MODAL_PREFIX)) return;
             const selectedType = interaction.customId.replace(TICKET_REASON_MODAL_PREFIX, '');
-            const reason = interaction.fields.getTextInputValue(TICKET_REASON_INPUT_ID);
+            const ticketConfig = ticketStore.findTicketTypeBySelectValue(selectedType, interaction.guildId);
+            const allowAttachments = ticketConfig?.allowAttachments !== false;
+            const questions = normalizeOpeningQuestions(ticketConfig, interaction.guildId, allowAttachments);
+            const answers = questions.map(question => {
+                let answer = '';
+                try {
+                    answer = interaction.fields.getTextInputValue(question.id);
+                } catch {
+                    if (question.id !== TICKET_REASON_INPUT_ID) {
+                        try { answer = interaction.fields.getTextInputValue(TICKET_REASON_INPUT_ID); } catch {}
+                    }
+                }
+                return { label: question.label, answer: String(answer || '').trim() };
+            }).filter(item => item.answer);
+            const reason = formatQuestionAnswers(answers) || 'No reason provided.';
 
             let attachments = [];
             try {
@@ -1300,7 +1372,7 @@ module.exports = {
                 // Field missing (ticket type may have attachments disabled) or unsupported on older clients.
             }
 
-            return this.processTicketTypeSelection(interaction, selectedType, reason, { attachments });
+            return this.processTicketTypeSelection(interaction, selectedType, reason, { attachments, questionAnswers: answers });
         } catch (error) {
             console.error('Error handling ticket reason modal:', error);
             return sendEphemeral(interaction, buildInfoMessage('Error', 'There was an error processing your ticket reason.', 0xED4245));

@@ -539,7 +539,8 @@ function createHomeHtml(options = {}) {
     const protectedMode = Boolean(getDashboardToken());
     const botConfig = ticketStore.getBotConfig();
     const inviteUrl = getBotInviteUrl();
-    const supportUrl = String(process.env.SUPPORT_SERVER_URL || process.env.DISCORD_SUPPORT_URL || 'https://discord.gg/JSUX9GQP6J').trim();
+    const supportUrl = String(process.env.SUPPORT_SERVER_URL || process.env.DISCORD_SUPPORT_URL || '').trim();
+    const supportLink = /^https?:\/\//i.test(supportUrl) ? supportUrl : '';
     const homeImages = Array.isArray(botConfig.homeImages) ? botConfig.homeImages : [];
     const safeImages = homeImages
         .map(url => String(url || '').trim())
@@ -591,7 +592,7 @@ function createHomeHtml(options = {}) {
     </div>
     <nav class="nav">
       ${inviteUrl ? `<a class="nav-link" href="${inviteUrl}" target="_blank" rel="noreferrer">Invite Bot</a>` : ''}
-      <a class="nav-link" href="${supportUrl}" target="_blank" rel="noreferrer">Support</a>
+      ${supportLink ? `<a class="nav-link" href="${supportLink}" target="_blank" rel="noreferrer">Support</a>` : ''}
       <a class="nav-link" href="/pricing">Plans</a>
       <a class="nav-link" href="/documentation">Documentation</a>
       <a class="nav-link" href="/privacy">Privacy</a>
@@ -615,7 +616,7 @@ function createHomeHtml(options = {}) {
       </div>
       <div class="quick-access" aria-label="Quick access">
         ${inviteUrl ? `<a class="quick-card" href="${inviteUrl}" target="_blank" rel="noreferrer"><span>Invite</span><strong>Add eazyDesk to a server</strong></a>` : ''}
-        <a class="quick-card" href="${supportUrl}" target="_blank" rel="noreferrer"><span>Support</span><strong>Join our support server</strong></a>
+        ${supportLink ? `<a class="quick-card" href="${supportLink}" target="_blank" rel="noreferrer"><span>Support</span><strong>Join our support server</strong></a>` : ''}
         <a class="quick-card" href="/pricing"><span>Plans</span><strong>Upgrade plans</strong></a>
       </div>
       <div class="note">
@@ -894,14 +895,10 @@ function createControllerHtml(req = null) {
       const icons={open:${JSON.stringify(dashboardIcon('open'))},setup:${JSON.stringify(dashboardIcon('setup'))},tickets:${JSON.stringify(dashboardIcon('tickets'))},owner:${JSON.stringify(dashboardIcon('owner'))},restart:${JSON.stringify(dashboardIcon('restart'))},bot:${JSON.stringify(dashboardIcon('embed'))}};
       function iconMarkup(g){return g.iconURL?'<span class=\"controller-icon\"><img src=\"'+esc(g.iconURL)+'\" alt=\"\" /></span>':'<span class=\"controller-icon\">'+icons.bot+'</span>'}
       function customBotBlock(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};if(!ai.isCustom&&!bot.tokenConfigured)return '';const on=!!bot.enabled&&!!bot.tokenConfigured;const status=bot.runtimeStatus||(on?'starting':'paused');const sync=bot.lastCommandSyncAt?(' - '+esc(bot.lastCommandSyncCount||0)+' command(s) synced'):'';return '<div class=\"custom-bot-strip\"><div><strong>Custom branded bot</strong><div class=\"muted\">'+(bot.tokenConfigured?'Token saved':'No token saved')+sync+(bot.lastError?' - '+esc(bot.lastError):'')+'</div></div><div class=\"controller-actions\"><span class=\"pill\">'+esc(status)+'</span><button class=\"btn '+(on?'warning':'primary')+'\" '+(!bot.tokenConfigured?'disabled':'')+' data-custom-bot-toggle=\"'+esc(g.id)+'\" data-next=\"'+(on?'false':'true')+'\"><span class=\"btn-icon\">'+icons.bot+'</span><span>'+(on?'Turn Off':'Turn On')+'</span></button><button class=\"btn subtle\" '+(!bot.tokenConfigured?'disabled':'')+' data-custom-bot-sync=\"'+esc(g.id)+'\"><span>Sync Commands</span></button></div></div>'}
-      function item(g){const status=g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Setup step '+esc(g.setupStep||1)+'</span>';const plan=(g.aiAccess&&g.aiAccess.statusLabel)||'Free plan';return '<div class=\"card controller-card\">'+
+      function item(g){const status=g.customOnly?'<span class=\"pill\">Custom-only</span>':(g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Setup step '+esc(g.setupStep||1)+'</span>');const plan=(g.aiAccess&&g.aiAccess.statusLabel)||'Free plan';const publicActions=g.botInServer?('<a class=\"btn primary\" href=\"/overview?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.open+'</span><span>Dashboard</span></a><a class=\"btn subtle\" href=\"/setup?guild='+encodeURIComponent(g.id)+'&page=1\"><span class=\"btn-icon\">'+icons.setup+'</span><span>Setup</span></a><a class=\"btn subtle\" href=\"/tickets?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.tickets+'</span><span>Tickets</span></a><button class=\"btn warning\" data-restart=\"'+esc(g.id)+'\"><span class=\"btn-icon\">'+icons.restart+'</span><span>Restart Setup</span></button>'):'<span class=\"muted\">Public bot is not in this server. Manage its branded bot from Owner.</span>';return '<div class=\"card controller-card\">'+
         '<div class=\"controller-head\"><div class=\"controller-title\">'+iconMarkup(g)+'<div><div class=\"controller-name\">'+esc(g.name)+'</div><div class=\"muted\">'+esc(g.id)+'</div></div></div><div class=\"controller-meta\">'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+status+'<span class=\"pill\">'+esc(plan)+'</span></div></div>'+customBotBlock(g)+
-        '<div class=\"controller-actions\">'+
-          '<a class=\"btn primary\" href=\"/overview?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.open+'</span><span>Dashboard</span></a>'+
-          '<a class=\"btn subtle\" href=\"/setup?guild='+encodeURIComponent(g.id)+'&page=1\"><span class=\"btn-icon\">'+icons.setup+'</span><span>Setup</span></a>'+
-          '<a class=\"btn subtle\" href=\"/tickets?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.tickets+'</span><span>Tickets</span></a>'+
+        '<div class=\"controller-actions\">'+publicActions+
           '<a class=\"btn subtle\" href=\"/owner\"><span class=\"btn-icon\">'+icons.owner+'</span><span>Plans</span></a>'+
-          '<button class=\"btn warning\" data-restart=\"'+esc(g.id)+'\"><span class=\"btn-icon\">'+icons.restart+'</span><span>Restart Setup</span></button>'+
    '</div>'}
       async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class=\"card empty-state\"><strong>No guilds found</strong><div class=\"muted\">Bot may not be ready yet.</div></div>';for(const btn of document.querySelectorAll('[data-custom-bot-toggle]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-custom-bot-toggle'),action:'custom-bot-toggle',enabled:btn.getAttribute('data-next')==='true'})});await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-custom-bot-sync]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-custom-bot-sync'),action:'custom-bot-sync'})});await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-restart]')){btn.onclick=async()=>{try{btn.disabled=true;const original=btn.innerHTML;await api('/api/controller/setup/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-restart')})});btn.innerHTML='<span>Restarted</span>';setTimeout(()=>{btn.innerHTML=original;btn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
@@ -1031,6 +1028,7 @@ function createOwnerHtml(req = null) {
       function renderRows(title,items,mapper){return '<div class="card"><strong>'+esc(title)+'</strong><div class="list">'+(items.length?items.map(mapper).join(''):'<div class="muted">Nothing yet.</div>')+'</div></div>'}
       function renderMatrix(matrix){return '<div class="card"><strong>Staff dashboard role access</strong><div class="muted" style="margin-top:6px">Role IDs come from environment variables. Update STAFF_EXECUTIVE_ROLE_IDS, STAFF_SUPPORT_ROLE_IDS, STAFF_QA_ROLE_IDS, STAFF_COMMUNITY_ROLE_IDS, or SENIOR_STAFF_ROLE_IDS, then redeploy/restart.</div><div class="list" style="margin-top:10px">'+(matrix||[]).map(row=>'<details class="item" style="display:block"><summary><strong>'+esc(row.name)+'</strong> <span class="pill">'+esc((row.roleIds||[]).length)+' role(s)</span></summary><div class="muted" style="margin-top:8px;white-space:pre-wrap">'+esc((row.roleIds||[]).join('\\n')||'No roles configured')+'</div><div class="roles" style="margin-top:8px">'+Object.entries(row.permissions||{}).filter(x=>x[1]).map(x=>'<span class="pill">'+esc(x[0].replace(/^can/,''))+'</span>').join('')+'</div></details>').join('')+'</div></div>'}
       function renderContentTools(cfg,backupStatus){const imgs=Array.isArray(cfg.homeImages)?cfg.homeImages:[];const tutorials=Array.isArray(cfg.tutorials)?cfg.tutorials:[];const docs=Array.isArray(cfg.docsSections)?cfg.docsSections:[];const ann=cfg.siteAnnouncement||{};const backupText=backupStatus&&backupStatus.configured?'MEGA backup configured':'MEGA not configured; manual backup will save locally';return '<div class="card"><strong>Owner operations</strong><div class="muted" style="margin-top:6px">'+esc(backupText)+'</div><div class="row" style="margin-top:10px"><button id="ownerBackupNow" class="btn">Backup Data Now</button></div><label style="margin-top:14px">Maintenance message to all servers</label><textarea id="ownerMaintenanceText" style="min-height:110px" placeholder="Short maintenance notice..."></textarea><div class="row" style="margin-top:10px"><button id="ownerSendMaintenance" class="btn-danger">Send Maintenance Message</button></div></div>'+
+      '<div class="card"><strong>Add custom-only server</strong><div class="muted" style="margin-top:6px">Use this when a customer only invites their branded custom bot, not the public bot.</div><div class="grid" style="margin-top:10px"><div><label>Server ID</label><input id="manualCustomGuildId" placeholder="123456789012345678" /></div><div><label>Bot display name</label><input id="manualCustomBotName" placeholder="Customer Support" /></div><div><label>App ID</label><input id="manualCustomAppId" placeholder="Application/client ID" /></div><div><label>Public Key</label><input id="manualCustomPublicKey" placeholder="Interaction public key" /></div><div><label>Bot Token</label><input id="manualCustomToken" placeholder="Custom bot token" /></div><div><label>Status Text</label><input id="manualCustomStatus" placeholder="Handling support" /></div></div><div class="row" style="margin-top:10px"><button id="ownerAddCustomServer" class="btn">Save Custom Server</button></div></div>'+
       '<div class="card"><strong>Announcement panel</strong><div class="muted" style="margin-top:6px">Shown on the website and dashboard while enabled.</div><div class="row"><div><label>Enabled</label><select id="ownerAnnouncementEnabled"><option value="true" '+(ann.enabled?'selected':'')+'>On</option><option value="false" '+(!ann.enabled?'selected':'')+'>Off</option></select></div><div><label>Type</label><select id="ownerAnnouncementType"><option value="general" '+((ann.type||'general')==='general'?'selected':'')+'>General</option><option value="promotional" '+(ann.type==='promotional'?'selected':'')+'>Promotional</option><option value="warning" '+(ann.type==='warning'?'selected':'')+'>Warning</option></select></div></div><label>Message</label><textarea id="ownerAnnouncementText" style="min-height:110px" maxlength="240">'+esc(ann.text||'')+'</textarea><div class="row"><div><label>Button label</label><input id="ownerAnnouncementCta" value="'+esc(ann.ctaLabel||'')+'" maxlength="40" placeholder="Learn more" /></div><div><label>Button URL</label><input id="ownerAnnouncementUrl" value="'+esc(ann.linkUrl||'')+'" placeholder="https://..." /></div></div><div class="row" style="margin-top:10px"><button id="ownerSaveAnnouncement" class="btn">Save Announcement</button><button id="ownerClearAnnouncement" class="btn-soft">Clear</button></div></div>'+
       '<div class="card"><strong>Homepage rotating images</strong><div class="muted" style="margin-top:6px">Shown on the public homepage gallery. Use direct HTTPS image links.</div><label>Image 1</label><input id="ownerHomeImg1" value="'+esc(imgs[0]||'')+'" placeholder="https://..." /><label>Image 2</label><input id="ownerHomeImg2" value="'+esc(imgs[1]||'')+'" placeholder="https://..." /><label>Image 3</label><input id="ownerHomeImg3" value="'+esc(imgs[2]||'')+'" placeholder="https://..." /><div class="row" style="margin-top:10px"><button id="ownerSaveHomeImages" class="btn">Save Images</button><button id="ownerClearHomeImages" class="btn-soft">Clear</button></div></div>'+
       '<div class="card"><strong>Public tutorials</strong><div class="muted" style="margin-top:6px">Manage tutorial cards and walkthrough steps.</div><textarea id="ownerTutorialsJson" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(tutorials,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="ownerSaveTutorials" class="btn">Save Tutorials</button><button id="ownerFormatTutorials" class="btn-soft">Format</button></div></div>'+
@@ -1056,6 +1054,7 @@ function createOwnerHtml(req = null) {
         const ownerFormatDocs=document.getElementById('ownerFormatDocs');if(ownerFormatDocs)ownerFormatDocs.onclick=()=>formatJson('ownerDocsJson','Documentation');
         const ownerBackupNow=document.getElementById('ownerBackupNow');if(ownerBackupNow)ownerBackupNow.onclick=async()=>{try{ownerBackupNow.disabled=true;const data=await api('/api/owner/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:'owner-manual'})});const r=data.result||{};note('Backup complete: '+(r.files||0)+' file(s), '+(r.bytes||0)+' bytes'+(r.local?' saved locally.':' uploaded to MEGA.'));await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{ownerBackupNow.disabled=false}};
         const ownerSendMaintenance=document.getElementById('ownerSendMaintenance');if(ownerSendMaintenance)ownerSendMaintenance.onclick=async()=>{try{const msg=String(ownerMaintenanceText.value||'').trim();if(!msg)return err.textContent='Maintenance message is required.',err.style.display='block';if(!confirm('Send this maintenance message to every server the bot is in?'))return;ownerSendMaintenance.disabled=true;const data=await api('/api/owner/maintenance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});note('Maintenance message sent to '+(data.sent||0)+' server(s). Failed: '+(data.failed||0)+'.')}catch(e){err.style.display='block';err.textContent=e.message}finally{ownerSendMaintenance.disabled=false}};
+        const ownerAddCustomServer=document.getElementById('ownerAddCustomServer');if(ownerAddCustomServer)ownerAddCustomServer.onclick=async()=>{try{const guildId=String(manualCustomGuildId.value||'').trim();const customBot={botName:String(manualCustomBotName.value||'').trim(),appId:String(manualCustomAppId.value||'').trim(),publicKey:String(manualCustomPublicKey.value||'').trim(),token:String(manualCustomToken.value||'').trim(),statusText:String(manualCustomStatus.value||'').trim(),enabled:true};if(!/^\\d{17,20}$/.test(guildId))throw new Error('Enter a valid server ID.');if(!customBot.token)throw new Error('Bot token is required for a custom-only server.');ownerAddCustomServer.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action:'set-plan',plan:'custom',customBot})});note('Custom-only server saved. Invite only the branded bot to that server.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{ownerAddCustomServer.disabled=false}};
         const ownerSaveAnnouncement=document.getElementById('ownerSaveAnnouncement');if(ownerSaveAnnouncement)ownerSaveAnnouncement.onclick=async()=>{try{const siteAnnouncement={enabled:(ownerAnnouncementEnabled.value||'false')==='true',type:ownerAnnouncementType.value||'general',text:ownerAnnouncementText.value||'',ctaLabel:ownerAnnouncementCta.value||'',linkUrl:ownerAnnouncementUrl.value||''};await saveContent({siteAnnouncement});note('Announcement saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
         const ownerClearAnnouncement=document.getElementById('ownerClearAnnouncement');if(ownerClearAnnouncement)ownerClearAnnouncement.onclick=async()=>{try{await saveContent({siteAnnouncement:{enabled:false,type:'general',text:'',ctaLabel:'',linkUrl:''}});note('Announcement cleared.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
         const ownerSaveHomeImages=document.getElementById('ownerSaveHomeImages');if(ownerSaveHomeImages)ownerSaveHomeImages.onclick=async()=>{try{const homeImages=[ownerHomeImg1.value,ownerHomeImg2.value,ownerHomeImg3.value].map(x=>String(x||'').trim()).filter(Boolean);await saveContent({homeImages});note('Home images saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
@@ -2028,6 +2027,28 @@ function sanitizeUrlList(input, max = 6) {
     return list.slice(0, Math.max(0, Number(max) || 0));
 }
 
+function normalizeOpeningQuestionsInput(input, max = 5) {
+    const rawList = Array.isArray(input)
+        ? input
+        : String(input || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    return rawList
+        .map((entry) => {
+            const raw = typeof entry === 'string' ? { label: entry } : (entry && typeof entry === 'object' ? entry : {});
+            const label = String(raw.label || raw.question || raw.title || '').trim().slice(0, 45);
+            if (!label) return null;
+            const style = String(raw.style || raw.type || '').trim().toLowerCase() === 'short' ? 'short' : 'paragraph';
+            return {
+                label,
+                placeholder: String(raw.placeholder || '').trim().slice(0, 100),
+                required: raw.required === undefined ? true : Boolean(raw.required),
+                style,
+                maxLength: Math.max(50, Math.min(1024, Number(raw.maxLength || (style === 'short' ? 240 : 1024))))
+            };
+        })
+        .filter(Boolean)
+        .slice(0, Math.max(1, Math.min(5, Number(max) || 5)));
+}
+
 function getDashboardGuild(client, req = null) {
     const cookies = parseCookies(req?.headers?.cookie);
     const cookieGuildId = String(cookies.dashboard_guild || '').trim();
@@ -2904,21 +2925,44 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             return true;
         }
 
-        const guilds = client?.guilds?.cache
+        const activeStorage = ticketStore.getActiveStorage();
+        const seenGuildIds = new Set();
+        const guilds = [
+            ...(client?.guilds?.cache
             ? [...client.guilds.cache.values()].map(g => {
-                const activeStorage = ticketStore.getActiveStorage();
+                seenGuildIds.add(String(g.id));
                 const cfg = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(g.id, activeStorage) : {};
                 return {
                     id: g.id,
                     name: g.name,
                     memberCount: g.memberCount ?? null,
                     iconURL: typeof g.iconURL === 'function' ? g.iconURL({ extension: 'png', size: 64 }) : null,
+                    botInServer: true,
+                    customOnly: false,
                     setupCompleted: Boolean(cfg?.setup?.completed),
                     setupStep: Number(cfg?.setup?.step || 1),
                     aiAccess: getGuildAiUiState(g.id, activeStorage)
                 };
-            }).sort((a, b) => String(a.name).localeCompare(String(b.name)))
-            : [];
+            })
+            : []),
+            ...Object.keys(activeStorage.aiGuildAccess || {})
+                .filter(id => /^\d{17,20}$/.test(id) && !seenGuildIds.has(id))
+                .map(id => {
+                    const cfg = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(id, activeStorage) : {};
+                    const ai = getGuildAiUiState(id, activeStorage);
+                    return {
+                        id,
+                        name: ai.customBot?.botName || `Custom server ${id}`,
+                        memberCount: null,
+                        iconURL: null,
+                        botInServer: false,
+                        customOnly: true,
+                        setupCompleted: Boolean(cfg?.setup?.completed),
+                        setupStep: Number(cfg?.setup?.step || 1),
+                        aiAccess: ai
+                    };
+                })
+        ].sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
         sendJson(res, 200, { guilds, ownerId: getBotOwnerId() });
         return true;
@@ -2951,13 +2995,35 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         }
         const activeStorage = ticketStore.getActiveStorage();
         const staffAudit = getStaffAuditLog(activeStorage).slice(-100).reverse();
-        const guilds = [...(client?.guilds?.cache?.values?.() || [])].map(guild => ({
-            id: guild.id,
-            name: guild.name,
-            memberCount: guild.memberCount ?? null,
-            iconURL: typeof guild.iconURL === 'function' ? guild.iconURL({ extension: 'png', size: 64 }) : null,
-            aiAccess: getGuildAiUiState(guild.id, activeStorage)
-        })).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+        const seenGuildIds = new Set();
+        const guilds = [
+            ...[...(client?.guilds?.cache?.values?.() || [])].map(guild => {
+                seenGuildIds.add(String(guild.id));
+                return {
+                    id: guild.id,
+                    name: guild.name,
+                    memberCount: guild.memberCount ?? null,
+                    iconURL: typeof guild.iconURL === 'function' ? guild.iconURL({ extension: 'png', size: 64 }) : null,
+                    botInServer: true,
+                    customOnly: false,
+                    aiAccess: getGuildAiUiState(guild.id, activeStorage)
+                };
+            }),
+            ...Object.keys(activeStorage.aiGuildAccess || {})
+                .filter(id => /^\d{17,20}$/.test(id) && !seenGuildIds.has(id))
+                .map(id => {
+                    const ai = getGuildAiUiState(id, activeStorage);
+                    return {
+                        id,
+                        name: ai.customBot?.botName || `Custom server ${id}`,
+                        memberCount: null,
+                        iconURL: null,
+                        botInServer: false,
+                        customOnly: true,
+                        aiAccess: ai
+                    };
+                })
+        ].sort((a, b) => String(a.name).localeCompare(String(b.name)));
         sendJson(res, 200, {
             guilds,
             staffGuildId: STAFF_COMMUNITY_GUILD_ID,
@@ -3684,12 +3750,12 @@ async function handleApi(req, res, url, client, customBotManager = null) {
                 : 'plus';
             const customBot = body.customBot && typeof body.customBot === 'object' ? {
                 enabled: body.customBot.enabled === undefined ? current.customBot?.enabled !== false : body.customBot.enabled !== false,
-                botName: String(current.customBot?.botName || '').trim().slice(0, 80),
+                botName: String(body.customBot.botName || current.customBot?.botName || '').trim().slice(0, 80),
                 avatarUrl: String(current.customBot?.avatarUrl || '').trim().slice(0, 500),
                 appId: String(body.customBot.appId || '').trim().slice(0, 30),
                 publicKey: String(body.customBot.publicKey || '').trim().slice(0, 120),
                 token: String(body.customBot.token || '').trim() || String(current.customBot?.token || '').trim(),
-                statusText: String(current.customBot?.statusText || '').trim().slice(0, 120)
+                statusText: String(body.customBot.statusText || current.customBot?.statusText || '').trim().slice(0, 120)
             } : current.customBot;
             nextPatch = {
                 plan,
@@ -3753,6 +3819,23 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         }
 
         const updated = ticketStore.setGuildAiAccess(guildId, nextPatch, activeStorage);
+        if ((action === 'set-premium' || action === 'set-plan') && ['custom', 'custom_trial'].includes(String(updated?.plan || ''))) {
+            const cfg = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(guildId, activeStorage) : {};
+            if (!cfg || !Object.keys(cfg).length) {
+                ticketStore.setGuildConfig(guildId, {
+                    setup: {
+                        completed: false,
+                        createdAt: new Date().toISOString(),
+                        source: 'owner-custom-only'
+                    },
+                    ticketTypes: [],
+                    supportTeams: [],
+                    tags: [],
+                    panels: {},
+                    channelTicketTypeRestrictions: {}
+                }, activeStorage);
+            }
+        }
         if (customBotManager && typeof customBotManager.syncGuild === 'function') {
             customBotManager.syncGuild(guildId).catch(error => {
                 console.error('[Custom Bot] Failed to sync branded bot after dashboard change:', error);
@@ -3837,6 +3920,10 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             }
         }
         const roleIds = sanitizeRoleIds(body.roleIds);
+        const plan = getGuildAiUiState(guildId, ticketStore.getActiveStorage());
+        const allowAttachments = body.allowAttachments !== false;
+        const questionLimit = plan.hasAccess ? (allowAttachments ? 4 : 5) : 1;
+        const openQuestions = normalizeOpeningQuestionsInput(body.openQuestions, questionLimit);
         const nextType = {
             name,
             format: String(body.format || `#${ticketStore.toTicketSelectValue(name)}-{username}`).trim(),
@@ -3845,7 +3932,8 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             embedColor: String(body.embedColor || '#5865F2').trim(),
             emoji: String(body.emoji || '').trim(),
             requireReason: body.requireReason !== false,
-            allowAttachments: body.allowAttachments !== false
+            allowAttachments,
+            openQuestions
         };
         if (categoryId) nextType.categoryId = categoryId;
         const openTitle = String(body.openTitle || '').trim();
@@ -5337,8 +5425,9 @@ function renderExclusionList(){
 function availabilityLabel(status){if(status==='reduced_assistance')return 'Reduced Assistance';if(status==='increased_volume')return 'Increased Volume';return 'Available'}
 function availabilityBadge(info){const s=info.status||'available';const cls=s==='reduced_assistance'?'danger':(s==='increased_volume'?'warn':'ok');const src=info.source==='manual'?'Manual':'Auto';return '<span class="pill '+cls+'">'+availabilityLabel(s)+'</span> <span class="muted">'+src+' - '+(info.count||0)+' active</span>'}
 function renderAvailability(){const types=(state.ticketTypes||[]);const byKey=new Map((state.availability||[]).map(v=>[v.key,v]));const opts='<option value=\"auto\">Automatic</option><option value=\"available\">Available</option><option value=\"increased_volume\">Increased Volume</option><option value=\"reduced_assistance\">Reduced Assistance</option>';const rows=types.map(t=>{const key=String(t.name||'').trim().toLowerCase();const info=byKey.get(key)||{status:'available',count:0,source:'automatic'};const manual=info.manualStatus||'auto';return '<div class=\"item\"><div class=\"item-top\"><strong>'+esc(t.name)+'</strong><span>'+availabilityBadge(info)+'</span></div><div class="row" style="margin-top:8px"><div><label>Override</label><select class="availSelect" data-name="'+esc(t.name)+'\">'+opts.replace('value=\"'+esc(manual)+'\"','value=\"'+esc(manual)+'\" selected')+'</select></div><div><label>Automatic</label><div class="muted">'+availabilityLabel(info.automaticStatus||'available')+'</div></div></div></div>'}).join('');return '<div class="grid"><div class="card"><h3>Ticket Availability</h3><p class="muted">Overrides apply per ticket type. Automatic mode uses active ticket thresholds.</p></div><div class="card"><h3>Per Ticket Type</h3><div class="list\">'+(rows||'<span class="muted">No ticket types configured yet.</span>')+'</div></div></div>'}
- function renderTypes(){
-  const types=Array.isArray(state.ticketTypes)?state.ticketTypes:[];
+  function renderTypes(){
+   const types=Array.isArray(state.ticketTypes)?state.ticketTypes:[];
+   const questionLimit=(state.aiAccess&&state.aiAccess.hasAccess)?5:1;
   const selectedName=(ui&&ui.selectedType)?String(ui.selectedType):'';
   const selectedType=types.find(t=>t&&t.name===selectedName)||null;
   const list=types
@@ -5393,14 +5482,14 @@ function renderAvailability(){const types=(state.ticketTypes||[]);const byKey=ne
         '<div>'+
           '<label>Channel Name Format</label>'+
           '<input id="ttFormat" placeholder="#support-{username}" />'+
-          '<div class="help">Use presets or placeholders: <code>{number}</code>, <code>{userId}</code>, <code>{username}</code>, <code>{priority}</code>, <code>{type}</code>, <code>{suffix}</code>.</div>'+
+          '<div class="help">Channel tokens: <code>{number}</code>, <code>{userId}</code>, <code>{username}</code>, <code>{priority}</code>, <code>{type}</code>, <code>{suffix}</code>.</div>'+
         '</div>'+
       '</div>'+
 
-      '<label>Format Presets</label>'+
+      '<label>Common Channel Formats</label>'+
       '<select id="ttFormatPreset">'+
-        '<option value="">Choose a preset...</option>'+
-        '<option value="ticket-{number}">ticket-1, ticket-2</option>'+
+        '<option value="">Choose a format...</option>'+
+        '<option value="ticket-{number}">ticket-1, ticket-2 (ticket IDs)</option>'+
         '<option value="ticket-{userId}">ticket-(userid)</option>'+
         '<option value="{priority}-ticket-{number}">(priority)-ticket-(number)</option>'+
         '<option value="{type}-{number}">(type)-(number)</option>'+
@@ -5414,6 +5503,10 @@ function renderAvailability(){const types=(state.ticketTypes||[]);const byKey=ne
       '<label>Aliases</label>'+
       '<textarea id="ttAliases" placeholder="support, gs, general"></textarea>'+
       '<div class="help">Comma or newline separated.</div>'+
+
+      '<label>Opening Questions</label>'+
+      '<textarea id="ttOpenQuestions" placeholder="Describe your issue and what you need from us."></textarea>'+
+      '<div class="help">One question per line. Free servers can use 1 question; paid servers can use up to '+questionLimit+' questions. If file uploads are enabled, Discord leaves room for up to 4 questions.</div>'+
 
       '<label>Support Team Roles</label>'+
       roleSelect([],'ttRoles')+
@@ -5718,7 +5811,7 @@ function placeDropdown(wrap){if(!wrap)return;wrap.classList.remove('drop-up');re
 function wireRoleMultiSelect(id){const wrap=document.querySelector('[data-role-ms="'+id+'"]');if(!wrap)return;const trigger=wrap.querySelector('[data-ms-trigger="'+id+'"]');const search=wrap.querySelector('[data-ms-search="'+id+'"]');const allBtn=wrap.querySelector('.select-all[data-select="'+id+'"]');const clearBtn=wrap.querySelector('.clear-all[data-select="'+id+'"]');if(trigger)trigger.onclick=(e)=>{e.stopPropagation();const next=!wrap.classList.contains('open');closePickers();if(next){wrap.classList.add('open');placeDropdown(wrap);if(search)search.focus();}};if(search)search.oninput=()=>{const q=search.value.trim().toLowerCase();wrap.querySelectorAll('[data-ms-item="'+id+'"]').forEach(item=>{item.style.display=!q||String(item.getAttribute('data-name')||'').includes(q)?'flex':'none'});placeDropdown(wrap)};if(allBtn)allBtn.onclick=()=>{wrap.querySelectorAll('input[data-ms-check="'+id+'"]').forEach(el=>{el.checked=true});updateRoleSelectionUi(id)};if(clearBtn)clearBtn.onclick=()=>{wrap.querySelectorAll('input[data-ms-check="'+id+'"]').forEach(el=>{el.checked=false});updateRoleSelectionUi(id)};wrap.querySelectorAll('input[data-ms-check="'+id+'"]').forEach(el=>{el.onchange=()=>updateRoleSelectionUi(id)});updateRoleSelectionUi(id)}
 function wireChannelSelect(id,placeholder){const wrap=document.querySelector('[data-cs="'+id+'"]');if(!wrap)return;const trigger=wrap.querySelector('[data-cs-trigger="'+id+'"]');const hidden=document.getElementById(id);const label=document.getElementById(id+'Label');const search=wrap.querySelector('[data-cs-search="'+id+'"]');const opts=Array.from(wrap.querySelectorAll('[data-cs-opt="'+id+'"]'));if(trigger)trigger.onclick=(e)=>{e.stopPropagation();const next=!wrap.classList.contains('open');closePickers();if(next){wrap.classList.add('open');placeDropdown(wrap);if(search)search.focus();}};if(search)search.oninput=()=>{const q=search.value.trim().toLowerCase();opts.forEach(btn=>{btn.style.display=!q||btn.textContent.toLowerCase().includes(q)?'flex':'none'});placeDropdown(wrap)};opts.forEach(btn=>{btn.onclick=()=>{const v=btn.getAttribute('data-value')||'';if(hidden)hidden.value=v;if(label)label.textContent=channelLabel(v,placeholder);opts.forEach(o=>o.classList.toggle('active',o===btn));wrap.classList.remove('open')}})}
 function wireCategorySelect(id,placeholder){const wrap=document.querySelector('[data-cs="'+id+'"]');if(!wrap)return;const trigger=wrap.querySelector('[data-cs-trigger="'+id+'"]');const hidden=document.getElementById(id);const label=document.getElementById(id+'Label');const search=wrap.querySelector('[data-cs-search="'+id+'"]');const opts=Array.from(wrap.querySelectorAll('[data-cs-opt="'+id+'"]'));if(trigger)trigger.onclick=(e)=>{e.stopPropagation();const next=!wrap.classList.contains('open');closePickers();if(next){wrap.classList.add('open');placeDropdown(wrap);if(search)search.focus();}};if(search)search.oninput=()=>{const q=search.value.trim().toLowerCase();opts.forEach(btn=>{btn.style.display=!q||btn.textContent.toLowerCase().includes(q)?'flex':'none'});placeDropdown(wrap)};opts.forEach(btn=>{btn.onclick=()=>{const v=btn.getAttribute('data-value')||'';if(hidden)hidden.value=v;if(label)label.textContent=categoryLabel(v,placeholder);opts.forEach(o=>o.classList.toggle('active',o===btn));wrap.classList.remove('open')}})}
-function fillType(name){const t=state.ticketTypes.find(x=>x.name===name);if(!t)return;ttName.value=t.name||'';ttEmoji.value=t.emoji||'';ttColor.value=t.embedColor||'#5865F2';ttFormat.value=t.format||'';const catEl=document.getElementById('ttCategory');if(catEl)catEl.value=t.categoryId||'';const catLabel=document.getElementById('ttCategoryLabel');if(catLabel)catLabel.textContent=categoryLabel((catEl&&catEl.value)||'', 'Use default ticket category');ttAliases.value=(t.aliases||[]).join(', ');ttOpenTitle.value=(t.openEmbed&&t.openEmbed.title)||'';ttOpenDescription.value=(t.openEmbed&&t.openEmbed.description)||'';ttRequireReason.checked=t.requireReason!==false;ttAllowFiles.checked=t.allowAttachments!==false;setRoleSelection('ttRoles',t.roleIds||[])}
+function fillType(name){const t=state.ticketTypes.find(x=>x.name===name);if(!t)return;ttName.value=t.name||'';ttEmoji.value=t.emoji||'';ttColor.value=t.embedColor||'#5865F2';ttFormat.value=t.format||'';const catEl=document.getElementById('ttCategory');if(catEl)catEl.value=t.categoryId||'';const catLabel=document.getElementById('ttCategoryLabel');if(catLabel)catLabel.textContent=categoryLabel((catEl&&catEl.value)||'', 'Use default ticket category');ttAliases.value=(t.aliases||[]).join(', ');const qEl=document.getElementById('ttOpenQuestions');if(qEl)qEl.value=(Array.isArray(t.openQuestions)?t.openQuestions:[]).map(q=>String((q&&q.label)||q||'').trim()).filter(Boolean).join('\\n');ttOpenTitle.value=(t.openEmbed&&t.openEmbed.title)||'';ttOpenDescription.value=(t.openEmbed&&t.openEmbed.description)||'';ttRequireReason.checked=t.requireReason!==false;ttAllowFiles.checked=t.allowAttachments!==false;setRoleSelection('ttRoles',t.roleIds||[])}
 function fillTag(name){const t=state.tags.find(x=>x.name===name);if(!t)return;tagName.value=t.name||'';tagKind.value=t.kind||'suggestion';tagTitle.value=t.title||'';tagDesc.value=t.description||'';tagKeys.value=(t.keywords||[]).join(', ')}
 function fillTeam(name){const t=state.supportTeams.find(x=>x.name===name);if(!t)return;stName.value=t.name||'';stEmoji.value=t.emoji||'';setRoleSelection('stRoles',(t.roleIds||(t.roleId?[t.roleId]:[]))||[])}
 function getBrandingTemplates(){const box=document.getElementById('brandingTemplates');if(!box)return {};try{const parsed=JSON.parse(box.value);return parsed&&typeof parsed==='object'?parsed:{};}catch{return {}}}
@@ -5882,9 +5975,9 @@ function wire(){
  const transcriptSearch=document.getElementById('transcriptSearch');if(transcriptSearch)transcriptSearch.oninput=()=>{const q=(transcriptSearch.value||'').toLowerCase().trim();document.querySelectorAll('.transcriptItem').forEach(it=>{const hay=String(it.getAttribute('data-hay')||'');const show=!q||hay.includes(q);it.style.display=show?'':'none'})};
   const saveTeam=document.getElementById('saveTeam');if(saveTeam)saveTeam.onclick=async()=>{try{await api('/api/support-team/upsert',{method:'POST',body:JSON.stringify({guildId:state.guildId,name:stName.value.trim(),emoji:stEmoji.value.trim(),roleIds:selectedRoles('stRoles')})});ui.selectedTeam=stName.value.trim();saveUi();note('Support team saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
 const resetTeam=document.getElementById('resetTeam');if(resetTeam)resetTeam.onclick=()=>{stName.value='';stEmoji.value='';setRoleSelection('stRoles',[])};
-  const saveType=document.getElementById('saveType');if(saveType)saveType.onclick=async()=>{try{await api('/api/ticket-type/upsert',{method:'POST',body:JSON.stringify({guildId:state.guildId,name:ttName.value.trim(),emoji:ttEmoji.value.trim(),embedColor:ttColor.value.trim(),format:ttFormat.value.trim(),categoryId:(document.getElementById('ttCategory')?.value||'').trim(),aliases:ttAliases.value,roleIds:selectedRoles('ttRoles'),openTitle:ttOpenTitle.value.trim(),openDescription:ttOpenDescription.value,requireReason:ttRequireReason.checked,allowAttachments:ttAllowFiles.checked})});ui.selectedType=ttName.value.trim();saveUi();note('Ticket type saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+  const saveType=document.getElementById('saveType');if(saveType)saveType.onclick=async()=>{try{await api('/api/ticket-type/upsert',{method:'POST',body:JSON.stringify({guildId:state.guildId,name:ttName.value.trim(),emoji:ttEmoji.value.trim(),embedColor:ttColor.value.trim(),format:ttFormat.value.trim(),categoryId:(document.getElementById('ttCategory')?.value||'').trim(),aliases:ttAliases.value,roleIds:selectedRoles('ttRoles'),openQuestions:(document.getElementById('ttOpenQuestions')?.value||''),openTitle:ttOpenTitle.value.trim(),openDescription:ttOpenDescription.value,requireReason:ttRequireReason.checked,allowAttachments:ttAllowFiles.checked})});ui.selectedType=ttName.value.trim();saveUi();note('Ticket type saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
   const ttFormatPreset=document.getElementById('ttFormatPreset');if(ttFormatPreset)ttFormatPreset.onchange=()=>{const v=ttFormatPreset.value||'';if(v&&document.getElementById('ttFormat'))document.getElementById('ttFormat').value=v};
-  const resetType=document.getElementById('resetType');if(resetType)resetType.onclick=()=>{['ttName','ttEmoji','ttFormat','ttAliases','ttOpenTitle','ttOpenDescription'].forEach(id=>document.getElementById(id).value='');const catEl=document.getElementById('ttCategory');if(catEl)catEl.value='';const catLabel=document.getElementById('ttCategoryLabel');if(catLabel)catLabel.textContent=categoryLabel('', 'Use default ticket category');ttColor.value='#5865F2';ttRequireReason.checked=true;ttAllowFiles.checked=true;setRoleSelection('ttRoles',[])};
+  const resetType=document.getElementById('resetType');if(resetType)resetType.onclick=()=>{['ttName','ttEmoji','ttFormat','ttAliases','ttOpenQuestions','ttOpenTitle','ttOpenDescription'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});const catEl=document.getElementById('ttCategory');if(catEl)catEl.value='';const catLabel=document.getElementById('ttCategoryLabel');if(catLabel)catLabel.textContent=categoryLabel('', 'Use default ticket category');ttColor.value='#5865F2';ttRequireReason.checked=true;ttAllowFiles.checked=true;setRoleSelection('ttRoles',[])};
 const saveBranding=document.getElementById('saveBranding');if(saveBranding)saveBranding.onclick=async()=>{try{const parsed=getBrandingTemplates();await api('/api/config/embeds',{method:'POST',body:JSON.stringify({embedTemplates:parsed})});note('Branding templates saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
 const saveServerBranding=document.getElementById('saveServerBranding');if(saveServerBranding)saveServerBranding.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,branding:{botName:(document.getElementById('serverBrandName')?.value||'').trim(),avatarUrl:(document.getElementById('serverBrandAvatar')?.value||'').trim(),accentColor:(document.getElementById('serverBrandAccent')?.value||'').trim(),footerText:(document.getElementById('serverBrandFooter')?.value||'').trim()},setup:{step:4}})});note('Server branding saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
 const applyBrandingTemplate=document.getElementById('applyBrandingTemplate');if(applyBrandingTemplate)applyBrandingTemplate.onclick=()=>applyBrandingFormToTemplate();
@@ -6293,11 +6386,13 @@ function startDashboard(client, customBotManager = null) {
                     showStaffLink: false
                 });
             }            function createUpgradePage(req = null) {
+                const supportUrl = String(process.env.SUPPORT_SERVER_URL || process.env.DISCORD_SUPPORT_URL || '').trim();
+                const supportLink = /^https?:\/\//i.test(supportUrl) ? supportUrl : '';
                 return baseDashboardPage({
                     title: 'Upgrade',
                     body: '<section class="card upgrade-reward">' +
                         '<div class="upgrade-word w1">FREE</div><div class="upgrade-word w2">PLUS</div><div class="upgrade-word w3">PRO</div><div class="upgrade-word w4">ENTERPRISE</div>' +
-                        '<div style="position:relative;z-index:1;max-width:900px"><div class="pricing-kicker">Upgrade options</div><h1 style="font-size:clamp(38px,6vw,72px);line-height:1;margin:0 0 14px">Choose your next support tier.</h1><p class="muted" style="font-size:16px">Free keeps tickets running. Plus adds visibility. Pro adds automation. Enterprise adds the custom branded bot runtime and guided setup.</p><div class="pricing-grid" style="margin-top:24px;text-align:left"><div class="pricing-card"><div class="plan-name">Free</div><div class="plan-price">&pound;0</div><div class="plan-note">Tickets, panels, logs, and transcripts.</div></div><div class="pricing-card featured"><div class="plan-name">Plus</div><div class="plan-price">' + planPriceHtml('plus') + '</div><div class="plan-note">Statistics, staff activity, and priority support.</div></div><div class="pricing-card"><div class="plan-name">Pro</div><div class="plan-price">' + planPriceHtml('pro') + '</div><div class="plan-note">AI moderation and advanced automation.</div></div><div class="pricing-card"><div class="plan-name">Enterprise</div><div class="plan-price">Custom</div><div class="plan-note">Custom branded bot runtime and monitoring.</div></div></div><div class="row" style="justify-content:center;margin-top:24px"><a class="btn primary" href="https://discord.gg/JSUX9GQP6J" target="_blank" rel="noreferrer">Contact us in support</a><a class="btn-soft" href="/pricing">Compare plans</a></div></div>' +
+                        '<div style="position:relative;z-index:1;max-width:900px"><div class="pricing-kicker">Upgrade options</div><h1 style="font-size:clamp(38px,6vw,72px);line-height:1;margin:0 0 14px">Choose your next support tier.</h1><p class="muted" style="font-size:16px">Free keeps tickets running. Plus adds visibility. Pro adds automation. Enterprise adds the custom branded bot runtime and guided setup.</p><div class="pricing-grid" style="margin-top:24px;text-align:left"><div class="pricing-card"><div class="plan-name">Free</div><div class="plan-price">&pound;0</div><div class="plan-note">Tickets, panels, logs, and transcripts.</div></div><div class="pricing-card featured"><div class="plan-name">Plus</div><div class="plan-price">' + planPriceHtml('plus') + '</div><div class="plan-note">Statistics, staff activity, and priority support.</div></div><div class="pricing-card"><div class="plan-name">Pro</div><div class="plan-price">' + planPriceHtml('pro') + '</div><div class="plan-note">AI moderation and advanced automation.</div></div><div class="pricing-card"><div class="plan-name">Enterprise</div><div class="plan-price">Custom</div><div class="plan-note">Custom branded bot runtime and monitoring.</div></div></div><div class="row" style="justify-content:center;margin-top:24px">' + (supportLink ? '<a class="btn primary" href="' + escapeHtml(supportLink) + '" target="_blank" rel="noreferrer">Contact us in support</a>' : '<a class="btn primary" href="/dashboard">Open dashboard</a>') + '<a class="btn-soft" href="/pricing">Compare plans</a></div></div>' +
                     '</section>',
                     ownerView: false,
                     showStaffLink: false

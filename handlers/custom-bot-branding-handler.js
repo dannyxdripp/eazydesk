@@ -19,21 +19,6 @@ function getIntervalMs() {
     return Math.max(15000, Number(process.env.CUSTOM_BOT_SYNC_INTERVAL_MS || 30000));
 }
 
-function getOfficialBotInviteUrl(guildId = '') {
-    const clientId = String(process.env.APP_ID || process.env.APPLICATION_ID || process.env.DISCORD_CLIENT_ID || '').trim();
-    if (!/^\d{17,20}$/.test(clientId)) return 'https://discord.com/developers/applications';
-    const url = new URL('https://discord.com/oauth2/authorize');
-    url.searchParams.set('client_id', clientId);
-    url.searchParams.set('scope', 'bot applications.commands');
-    url.searchParams.set('permissions', String(process.env.BOT_INVITE_PERMISSIONS || '311653682193'));
-    const id = String(guildId || '').trim();
-    if (/^\d{17,20}$/.test(id)) {
-        url.searchParams.set('guild_id', id);
-        url.searchParams.set('disable_guild_select', 'true');
-    }
-    return url.toString();
-}
-
 function isEligible(access) {
     const customBot = access?.customBot && typeof access.customBot === 'object' ? access.customBot : {};
     return ['custom', 'custom_trial'].includes(String(access?.plan || '')) &&
@@ -110,12 +95,11 @@ async function announceStartup(guildId, customBot, runtimeClient) {
 }
 
 async function notifyAndLeaveUnauthorizedGuild(runtimeClient, guild, targetGuildId) {
-    const officialInvite = getOfficialBotInviteUrl(guild?.id);
     const content = [
         `**${runtimeClient.user?.username || 'This custom support bot'} is not enabled for this server.**`,
         `This custom bot is locked to server ID \`${targetGuildId}\`.`,
         '',
-        `Install the official bot here: ${officialInvite}`
+        'Ask the bot owner to add this server as a Custom server if this is intentional.'
     ].join('\n');
 
     try {
@@ -131,8 +115,7 @@ async function notifyAndLeaveUnauthorizedGuild(runtimeClient, guild, targetGuild
     storageMonitor.reportCustomBotEvent('unauthorized_guild', {
         guildId: targetGuildId,
         unauthorizedGuildId: guild?.id,
-        unauthorizedGuildName: guild?.name,
-        officialInvite
+        unauthorizedGuildName: guild?.name
     }).catch(() => null);
 
     try {
@@ -155,9 +138,8 @@ function attachRuntimeHandlers(runtimeClient, targetGuildId) {
     if (typeof handleInteraction === 'function') {
         runtimeClient.on('interactionCreate', async interaction => {
             if (interaction.guildId && String(interaction.guildId) !== String(targetGuildId)) {
-                const officialInvite = getOfficialBotInviteUrl(interaction.guildId);
                 const payload = {
-                    content: `This custom bot is not enabled for this server. Please install the official bot: ${officialInvite}`,
+                    content: 'This custom bot is not enabled for this server. Ask the bot owner to add this server as a Custom server if this is intentional.',
                     ephemeral: true
                 };
                 if (interaction.isRepliable?.()) {
