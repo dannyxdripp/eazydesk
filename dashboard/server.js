@@ -895,7 +895,7 @@ function createControllerHtml(req = null) {
       const icons={open:${JSON.stringify(dashboardIcon('open'))},setup:${JSON.stringify(dashboardIcon('setup'))},tickets:${JSON.stringify(dashboardIcon('tickets'))},owner:${JSON.stringify(dashboardIcon('owner'))},restart:${JSON.stringify(dashboardIcon('restart'))},bot:${JSON.stringify(dashboardIcon('embed'))}};
       function iconMarkup(g){return g.iconURL?'<span class=\"controller-icon\"><img src=\"'+esc(g.iconURL)+'\" alt=\"\" /></span>':'<span class=\"controller-icon\">'+icons.bot+'</span>'}
       function customBotBlock(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};if(!ai.isCustom&&!bot.tokenConfigured)return '';const on=!!bot.enabled&&!!bot.tokenConfigured;const status=bot.runtimeStatus||(on?'starting':'paused');const sync=bot.lastCommandSyncAt?(' - '+esc(bot.lastCommandSyncCount||0)+' command(s) synced'):'';return '<div class=\"custom-bot-strip\"><div><strong>Custom branded bot</strong><div class=\"muted\">'+(bot.tokenConfigured?'Token saved':'No token saved')+sync+(bot.lastError?' - '+esc(bot.lastError):'')+'</div></div><div class=\"controller-actions\"><span class=\"pill\">'+esc(status)+'</span><button class=\"btn '+(on?'warning':'primary')+'\" '+(!bot.tokenConfigured?'disabled':'')+' data-custom-bot-toggle=\"'+esc(g.id)+'\" data-next=\"'+(on?'false':'true')+'\"><span class=\"btn-icon\">'+icons.bot+'</span><span>'+(on?'Turn Off':'Turn On')+'</span></button><button class=\"btn subtle\" '+(!bot.tokenConfigured?'disabled':'')+' data-custom-bot-sync=\"'+esc(g.id)+'\"><span>Sync Commands</span></button></div></div>'}
-      function item(g){const status=g.customOnly?'<span class=\"pill\">Custom-only</span>':(g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Setup step '+esc(g.setupStep||1)+'</span>');const plan=(g.aiAccess&&g.aiAccess.statusLabel)||'Free plan';const publicActions=g.botInServer?('<a class=\"btn primary\" href=\"/overview?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.open+'</span><span>Dashboard</span></a><a class=\"btn subtle\" href=\"/setup?guild='+encodeURIComponent(g.id)+'&page=1\"><span class=\"btn-icon\">'+icons.setup+'</span><span>Setup</span></a><a class=\"btn subtle\" href=\"/tickets?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.tickets+'</span><span>Tickets</span></a><button class=\"btn warning\" data-restart=\"'+esc(g.id)+'\"><span class=\"btn-icon\">'+icons.restart+'</span><span>Restart Setup</span></button>'):'<span class=\"muted\">Public bot is not in this server. Manage its branded bot from Owner.</span>';return '<div class=\"card controller-card\">'+
+      function item(g){const status=g.customOnly?'<span class=\"pill\">Custom-only</span>':(g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Setup step '+esc(g.setupStep||1)+'</span>');const plan=(g.aiAccess&&g.aiAccess.statusLabel)||'Free plan';const publicActions=(g.botInServer||g.customOnly)?('<a class=\"btn primary\" href=\"/overview?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.open+'</span><span>Dashboard</span></a><a class=\"btn subtle\" href=\"/setup?guild='+encodeURIComponent(g.id)+'&page=1\"><span class=\"btn-icon\">'+icons.setup+'</span><span>Setup</span></a><a class=\"btn subtle\" href=\"/tickets?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.tickets+'</span><span>Tickets</span></a>'+(!g.customOnly?'<button class=\"btn warning\" data-restart=\"'+esc(g.id)+'\"><span class=\"btn-icon\">'+icons.restart+'</span><span>Restart Setup</span></button>':'')):'<span class=\"muted\">No bot runtime is connected for this server yet.</span>';return '<div class=\"card controller-card\">'+
         '<div class=\"controller-head\"><div class=\"controller-title\">'+iconMarkup(g)+'<div><div class=\"controller-name\">'+esc(g.name)+'</div><div class=\"muted\">'+esc(g.id)+'</div></div></div><div class=\"controller-meta\">'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+status+'<span class=\"pill\">'+esc(plan)+'</span></div></div>'+customBotBlock(g)+
         '<div class=\"controller-actions\">'+publicActions+
           '<a class=\"btn subtle\" href=\"/owner\"><span class=\"btn-icon\">'+icons.owner+'</span><span>Plans</span></a>'+
@@ -926,8 +926,8 @@ function createServerPickerHtml(options = {}) {
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
       const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
-      function renderPerms(g){const tags=[];tags.push(g.botInServer?'<span class="pill">Bot in server</span>':'<span class="pill">Bot not in server</span>');tags.push(g.isOwner?'<span class="pill">Owner</span>':'');tags.push(g.isAdmin?'<span class="pill">Administrator</span>':'');tags.push(!g.isAdmin&&g.canManageGuild?'<span class="pill">Manage Server</span>':'');tags.push(!g.isAdmin&&!g.canManageGuild&&g.canManageChannels?'<span class="pill">Manage Channels</span>':'');return tags.filter(Boolean).join('')}
-      function renderAction(g){if(g.botInServer&&g.canAccessDashboard)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a><a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1">Setup</a>';if(g.botInServer)return '<span class="muted">No dashboard permissions</span>';if(g.inviteUrl)return '<a class="btn primary" href="'+esc(g.inviteUrl)+'">Add Bot</a>';return '<span class="muted">Bot is not in this server</span>'}
+      function renderPerms(g){const tags=[];tags.push(g.customOnly?'<span class="pill">Custom-only bot</span>':(g.botInServer?'<span class="pill">Bot in server</span>':'<span class="pill">Bot not in server</span>'));tags.push(g.isOwner?'<span class="pill">Owner</span>':'');tags.push(g.isAdmin?'<span class="pill">Administrator</span>':'');tags.push(!g.isAdmin&&g.canManageGuild?'<span class="pill">Manage Server</span>':'');tags.push(!g.isAdmin&&!g.canManageGuild&&g.canManageChannels?'<span class="pill">Manage Channels</span>':'');return tags.filter(Boolean).join('')}
+      function renderAction(g){if((g.botInServer||g.customOnly)&&g.canAccessDashboard)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a><a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1">Setup</a>';if(g.botInServer||g.customOnly)return '<span class="muted">No dashboard permissions</span>';if(g.inviteUrl)return '<a class="btn primary" href="'+esc(g.inviteUrl)+'">Add Bot</a>';return '<span class="muted">Bot is not in this server</span>'}
       function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=Array.isArray(g.permissionSummary)&&g.permissionSummary.length?g.permissionSummary.map(esc).join(' - '):'No elevated permissions';const cls='item server-card'+(g.canAccessDashboard?' can-manage':'');return '<div class="'+cls+'">'+
         '<div style="display:grid;gap:8px;min-width:0">'+
           '<div class="row" style="gap:10px">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class="pill">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
@@ -980,7 +980,7 @@ function createStaffHtml(options = {}) {
       ];summary.innerHTML=cards.map(card=>'<div class="card"><strong>'+esc(card.title)+'</strong><div class="muted" style="margin-top:6px">'+esc(card.desc)+'</div><div class="row" style="margin-top:10px">'+(card.enabled?pill('Enabled for you'):pill('Read only / unavailable'))+'</div></div>').join('')+'<div class="card"><strong>Your active role families</strong><div class="muted" style="margin-top:6px">'+esc(groups.length?groups.join(' - '):'No senior role families detected')+'</div><div class="row" style="margin-top:10px">'+(groups.length?groups.map(pill).join(''):pill('No access'))+'</div></div>'}
       function renderPerms(g){const tags=[];if(g.setupCompleted)tags.push(pill('Setup complete'));if(g.canAccessDashboard)tags.push(pill('Dashboard access'));if(g.sharedWithUser)tags.push(pill('User is in server'));if(g.userPermissionSummary)tags.push(pill(g.userPermissionSummary));if(g.health&&g.health.missingPermissions&&g.health.missingPermissions.length)tags.push(pill('Missing bot perms'));return tags.join('')}
       function renderInfoList(title, values){const safe=Array.isArray(values)?values.filter(Boolean):[];return '<div class="card" style="padding:10px 12px"><div><strong>'+esc(title)+'</strong></div><div class="muted" style="margin-top:6px">'+(safe.length?safe.map(esc).join(' - '):'None detected')+'</div></div>'}
-      function actionButtons(g){const caps=g.staffCapabilities||{};const buttons=[];if(g.canAccessDashboard&&caps.canViewConfiguration)buttons.push('<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('open'))}+'</span><span>Open Dashboard</span></a>');if(g.canManageSetup&&!g.setupCompleted&&caps.canViewConfiguration)buttons.push('<a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('setup'))}+'</span><span>Open Setup</span></a>');if(caps.canCreateInvite)buttons.push('<button class="btn" type="button" data-invite="'+esc(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('invite'))}+'</span><span>Create Invite</span></button>');if(caps.canRestartSystems)buttons.push('<button class="btn" type="button" data-restart-setup="'+esc(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('restart'))}+'</span><span>Restart Setup</span></button>');if(caps.canSyncPermissions)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="sync-permissions"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('repair'))}+'</span><span>Sync Permissions</span></button>');if(caps.canRepairChannels)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="repair-channels"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('repair'))}+'</span><span>Repair Channels</span></button>');if(caps.canRunDiagnostics)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="diagnostics"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('diagnostics'))}+'</span><span>Run Diagnostics</span></button>');if(caps.canRemoveBot)buttons.push('<button class="btn" type="button" data-leave="'+esc(g.id)+'" data-guild-name="'+esc(g.name)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('remove'))}+'</span><span>Remove Bot</span></button>');return buttons.join('')}
+      function actionButtons(g){const caps=g.staffCapabilities||{};const buttons=[];const live=!g.customOnly;if(g.canAccessDashboard&&caps.canViewConfiguration)buttons.push('<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('open'))}+'</span><span>Open Dashboard</span></a>');if(g.canManageSetup&&!g.setupCompleted&&caps.canViewConfiguration)buttons.push('<a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('setup'))}+'</span><span>Open Setup</span></a>');if(live&&caps.canCreateInvite)buttons.push('<button class="btn" type="button" data-invite="'+esc(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('invite'))}+'</span><span>Create Invite</span></button>');if(live&&caps.canRestartSystems)buttons.push('<button class="btn" type="button" data-restart-setup="'+esc(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('restart'))}+'</span><span>Restart Setup</span></button>');if(live&&caps.canSyncPermissions)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="sync-permissions"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('repair'))}+'</span><span>Sync Permissions</span></button>');if(live&&caps.canRepairChannels)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="repair-channels"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('repair'))}+'</span><span>Repair Channels</span></button>');if(live&&caps.canRunDiagnostics)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="diagnostics"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('diagnostics'))}+'</span><span>Run Diagnostics</span></button>');if(live&&caps.canRemoveBot)buttons.push('<button class="btn" type="button" data-leave="'+esc(g.id)+'" data-guild-name="'+esc(g.name)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('remove'))}+'</span><span>Remove Bot</span></button>');if(!live)buttons.push('<span class="muted">Live repair actions use the branded custom bot runtime.</span>');return buttons.join('')}
       function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=(Array.isArray(g.highlights)&&g.highlights.length?g.highlights:['Bot is active in this server']).map(esc).join(' - ');const inviteUrl=inviteMap[g.id]||g.inviteUrl||'';const health=g.health||{};const runtime=g.runtime||{};const basic=g.basicInfo||{};const audits=Array.isArray(g.recentAuditLog)?g.recentAuditLog.slice(0,4):[];return '<div class="item server-card can-manage">'+
         '<div style="display:grid;gap:8px;min-width:0">'+
           '<div class="row" style="gap:10px">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class="pill">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
@@ -999,7 +999,7 @@ function createStaffHtml(options = {}) {
       '</div>'}
       async function postRepair(guildId,action){const data=await api('/api/staff/guild-repair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action})});return data}
       async function bindActions(){for(const btn of document.querySelectorAll('[data-invite]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-invite');const data=await api('/api/staff/guild-invite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});inviteMap[guildId]=data.inviteUrl||'';note('Invite ready for '+(data.guildName||'that server')+'.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-restart-setup]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-restart-setup');await api('/api/staff/guild-restart-setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});note('Setup restart prepared for that server.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-repair]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-repair');const action=btn.getAttribute('data-repair-action');const data=await postRepair(guildId,action);note((data&&data.result&&data.result.message)||'Repair finished.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-leave]')){btn.onclick=async()=>{const guildId=btn.getAttribute('data-leave');const guildName=btn.getAttribute('data-guild-name')||'this server';if(!confirm('Remove the bot from '+guildName+'?'))return;try{err.style.display='none';ok.style.display='none';btn.disabled=true;await api('/api/staff/guild-leave',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});delete inviteMap[guildId];note('The bot has been removed from '+guildName+'.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}}
-      async function load(){try{const data=await api('/api/staff/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];renderSummaryCards(data.capabilities||{});summary.insertAdjacentHTML('beforeend',renderPermissionMatrix(data.permissionMatrix||[])+renderLiveOps(data));list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="muted">No bot-connected servers found.</div>';await bindActions()}catch(e){err.style.display='block';err.textContent=e.message}}load();
+      async function load(){try{const data=await api('/api/staff/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];renderSummaryCards(data.capabilities||{});summary.insertAdjacentHTML('beforeend',renderPermissionMatrix(data.permissionMatrix||[])+renderLiveOps(data));list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="muted">No servers found.</div>';await bindActions()}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
 
     return baseDashboardPage({ title: 'Staff', body, script, ownerView, staffView: true, showStaffLink: true });
@@ -1862,6 +1862,55 @@ function getDashboardOauthPermissionSummary(req, guildId) {
     return summarizeOauthGuildPermissions(entry);
 }
 
+function getCustomOnlyGuildIds(storage = null) {
+    const activeStorage = storage || ticketStore.getActiveStorage();
+    const configured = activeStorage?.aiGuildAccess && typeof activeStorage.aiGuildAccess === 'object'
+        ? activeStorage.aiGuildAccess
+        : {};
+    return Object.keys(configured)
+        .filter(id => /^\d{17,20}$/.test(id))
+        .filter(id => !ticketStore.isTestGuild?.(id))
+        .filter(id => {
+            const access = ticketStore.getEffectiveGuildAiAccess(id, activeStorage);
+            const customBot = access?.customBot && typeof access.customBot === 'object' ? access.customBot : {};
+            return ['custom', 'custom_trial'].includes(access?.plan) || Boolean(String(customBot.token || '').trim());
+        });
+}
+
+function getKnownDashboardGuildIds(client, storage = null) {
+    return [...new Set([
+        ...(client?.guilds?.cache?.keys ? [...client.guilds.cache.keys()] : []),
+        ...getCustomOnlyGuildIds(storage)
+    ])];
+}
+
+function getDashboardGuildLabel(client, guildId, storage = null) {
+    const id = String(guildId || '').trim();
+    const sharedGuild = client?.guilds?.cache?.get?.(id) || null;
+    if (sharedGuild) {
+        return {
+            id,
+            name: sharedGuild.name || `Server ${id}`,
+            memberCount: sharedGuild.memberCount ?? null,
+            iconURL: typeof sharedGuild.iconURL === 'function' ? sharedGuild.iconURL({ extension: 'png', size: 64 }) : null,
+            botInServer: true,
+            customOnly: false
+        };
+    }
+    const activeStorage = storage || ticketStore.getActiveStorage();
+    const access = ticketStore.getEffectiveGuildAiAccess(id, activeStorage);
+    const customBot = access?.customBot && typeof access.customBot === 'object' ? access.customBot : {};
+    const cfg = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(id, activeStorage) : {};
+    return {
+        id,
+        name: customBot.botName || cfg?.branding?.botName || `Custom server ${id}`,
+        memberCount: null,
+        iconURL: customBot.avatarUrl || cfg?.branding?.avatarUrl || null,
+        botInServer: false,
+        customOnly: true
+    };
+}
+
 function getGuildSupportRoleIds(guildId, storage = null) {
     const teams = ticketStore.getSupportTeamsForGuild(guildId, storage);
     const ids = [];
@@ -1873,6 +1922,8 @@ function getGuildSupportRoleIds(guildId, storage = null) {
 
 async function getDashboardAccess(client, req, guildId = null) {
     const id = String(guildId || getDashboardGuild(client, req)?.id || '').trim();
+    const storage = ticketStore.getActiveStorage();
+    const knownGuildIds = getKnownDashboardGuildIds(client, storage);
     const ownerView = isStrictOwnerViewer(req);
     if (ownerView) {
         return {
@@ -1894,7 +1945,7 @@ async function getDashboardAccess(client, req, guildId = null) {
     }
 
     const userId = getDashboardSessionUserId(req);
-    if (!userId || !id || !client?.guilds?.cache?.has?.(id)) {
+    if (!userId || !id || !knownGuildIds.includes(id)) {
         return {
             guildId: id || null,
             level: 'none',
@@ -1914,9 +1965,47 @@ async function getDashboardAccess(client, req, guildId = null) {
     }
 
     const guild = client.guilds.cache.get(id);
+    const oauthPerms = getDashboardOauthPermissionSummary(req, id);
+    if (!guild) {
+        if (oauthPerms?.canAccessDashboard || getDashboardSessionGuildIds(req).includes(id)) {
+            return {
+                guildId: id,
+                level: oauthPerms?.isOwner ? 'guild-owner' : 'manager',
+                isOwner: Boolean(oauthPerms?.isOwner),
+                isManager: true,
+                isStaff: true,
+                canFullDashboard: Boolean(oauthPerms?.isOwner),
+                canManageSettings: true,
+                canManageAvailability: true,
+                canManageTicketTypes: true,
+                canManageEscalations: true,
+                canViewTickets: true,
+                canEditNotes: true,
+                canViewTranscripts: true,
+                canCloseTickets: true
+            };
+        }
+
+        return {
+            guildId: id,
+            level: 'none',
+            isOwner: false,
+            isManager: false,
+            isStaff: false,
+            canFullDashboard: false,
+            canManageSettings: false,
+            canManageAvailability: false,
+            canManageTicketTypes: false,
+            canManageEscalations: false,
+            canViewTickets: false,
+            canEditNotes: false,
+            canViewTranscripts: false,
+            canCloseTickets: false
+        };
+    }
+
     const member = guild?.members?.cache?.get(userId) || await guild?.members?.fetch?.(userId).catch(() => null);
     if (!member) {
-        const oauthPerms = getDashboardOauthPermissionSummary(req, id);
         if (oauthPerms?.canAccessDashboard) {
             return {
                 guildId: id,
@@ -1954,7 +2043,6 @@ async function getDashboardAccess(client, req, guildId = null) {
         };
     }
 
-    const storage = ticketStore.getActiveStorage();
     const guildConfig = ticketStore.getGuildConfig(id, storage);
     const managerRoleId = String(guildConfig?.managerRoleId || '').trim();
     const supportRoleIds = getGuildSupportRoleIds(id, storage);
@@ -2054,19 +2142,21 @@ function getDashboardGuild(client, req = null) {
     const cookieGuildId = String(cookies.dashboard_guild || '').trim();
     const userId = getDashboardSessionUserId(req);
     const ownerId = getBotOwnerId();
+    const storage = ticketStore.getActiveStorage();
+    const knownGuildIds = getKnownDashboardGuildIds(client, storage);
 
     let allowedGuildIds = null; // null = all guilds
     if (userId && client?.guilds?.cache) {
         if (ownerId && userId === ownerId) {
-            allowedGuildIds = [...client.guilds.cache.keys()];
+            allowedGuildIds = knownGuildIds;
         } else {
-            allowedGuildIds = getDashboardSessionGuildIds(req).filter(id => client.guilds.cache.has(id));
+            allowedGuildIds = getDashboardSessionGuildIds(req).filter(id => knownGuildIds.includes(id));
         }
     }
 
-    if (cookieGuildId && client.guilds.cache.has(cookieGuildId)) {
+    if (cookieGuildId && knownGuildIds.includes(cookieGuildId)) {
         if (!Array.isArray(allowedGuildIds) || allowedGuildIds.includes(cookieGuildId)) {
-            return client.guilds.cache.get(cookieGuildId);
+            return getDashboardGuildLabel(client, cookieGuildId, storage);
         }
     }
 
@@ -2075,16 +2165,23 @@ function getDashboardGuild(client, req = null) {
             .filter(entry => allowedGuildIds.includes(String(entry?.id || '')))
             .find(entry => summarizeOauthGuildPermissions(entry).canAccessDashboard);
         const fallbackId = String(oauthAccess?.id || allowedGuildIds[0] || '').trim();
-        return client.guilds.cache.get(fallbackId) || null;
+        return fallbackId ? getDashboardGuildLabel(client, fallbackId, storage) : null;
     }
 
-    return client.guilds.cache.first() || null;
+    const firstId = knownGuildIds[0] || null;
+    return firstId ? getDashboardGuildLabel(client, firstId, storage) : null;
+}
+
+function getDashboardDiscordGuild(client, req = null) {
+    const id = String(getDashboardGuild(client, req)?.id || '').trim();
+    return id ? (client?.guilds?.cache?.get?.(id) || null) : null;
 }
 
 function canManageGuild(client, req, guildId) {
     const id = String(guildId || '').trim();
     if (!/^\d{17,20}$/.test(id)) return false;
-    if (!client?.guilds?.cache?.has?.(id)) return false;
+    const storage = ticketStore.getActiveStorage();
+    if (!getKnownDashboardGuildIds(client, storage).includes(id)) return false;
 
     // Token-based dashboard auth (DASHBOARD_TOKEN / DASHBOARD_OWNER_TOKEN) is treated as global admin.
     const headers = req?.headers || {};
@@ -2327,7 +2424,7 @@ function getGuildRuntimeDiagnostics(client, guild, config = {}, storage = null) 
 }
 
 async function getRoleCatalog(client, req = null) {
-    const guild = getDashboardGuild(client, req);
+    const guild = getDashboardDiscordGuild(client, req);
     if (!guild) return [];
     return getCachedGuildCatalog(guild, 'roles', async () => {
         await guild.roles.fetch();
@@ -2339,7 +2436,7 @@ async function getRoleCatalog(client, req = null) {
 }
 
 async function getTextChannelCatalog(client, req = null) {
-    const guild = getDashboardGuild(client, req);
+    const guild = getDashboardDiscordGuild(client, req);
     if (!guild) return [];
     return getCachedGuildCatalog(guild, 'channels', async () => {
         await guild.channels.fetch();
@@ -2356,7 +2453,7 @@ async function getTextChannelCatalog(client, req = null) {
 }
 
 async function getCategoryCatalog(client, req = null) {
-    const guild = getDashboardGuild(client, req);
+    const guild = getDashboardDiscordGuild(client, req);
     if (!guild) return [];
     return getCachedGuildCatalog(guild, 'categories', async () => {
         await guild.channels.fetch();
@@ -2414,8 +2511,9 @@ async function getDashboardState(client, req = null) {
     const botConfig = ticketStore.getBotConfig(activeStorage);
     const ownerView = isStrictOwnerViewer(req);
     const guild = getDashboardGuild(client, req);
+    const discordGuild = guild?.id ? (client?.guilds?.cache?.get?.(guild.id) || null) : null;
     const access = await getDashboardAccess(client, req, guild?.id || null);
-    if (guild) ticketStore.cleanupMissingTicketChannels(guild, activeStorage);
+    if (discordGuild) ticketStore.cleanupMissingTicketChannels(discordGuild, activeStorage);
     const [roleCatalog, channelCatalog, categoryCatalog] = await Promise.all([
         getRoleCatalog(client, req),
         getTextChannelCatalog(client, req),
@@ -2430,13 +2528,13 @@ async function getDashboardState(client, req = null) {
         ? ticketPool.filter(t => {
             if (!t || !t.channelId) return false;
             if (String(t.guildId || '') === String(guildId)) return true;
-            return !t.guildId && guild?.channels?.cache?.has?.(String(t.channelId));
+            return !t.guildId && discordGuild?.channels?.cache?.has?.(String(t.channelId));
         })
         : [])
         .slice(0, 250)
         .map(t => ({
             channelId: String(t.channelId || ''),
-            channelName: guild?.channels?.cache?.get(t.channelId)?.name || null,
+            channelName: discordGuild?.channels?.cache?.get(t.channelId)?.name || null,
             ticketType: t.ticketType || null,
             createdBy: t.createdBy || null,
             claimedBy: t.claimedBy || null,
@@ -2527,21 +2625,25 @@ async function getDashboardState(client, req = null) {
 }
 
 function summarizeSharedUserGuild(client, req, guild) {
-    const oauthGuild = getDashboardSessionOauthGuilds(req).find(entry => String(entry?.id || '') === String(guild?.id || ''));
+    const guildId = String(guild?.id || '').trim();
+    const customOnly = Boolean(guild?.customOnly);
+    const oauthGuild = getDashboardSessionOauthGuilds(req).find(entry => String(entry?.id || '') === guildId);
     const perms = oauthGuild ? summarizeOauthGuildPermissions(oauthGuild) : null;
     return {
         sharedWithUser: Boolean(oauthGuild),
         userPermissionSummary: perms?.permissionSummary?.join(', ') || '',
-        canAccessDashboard: Boolean(guild) && Boolean(perms?.canAccessDashboard),
-        canManageSetup: Boolean(guild) && Boolean(perms?.canAccessDashboard)
+        canAccessDashboard: Boolean(guild) && Boolean(perms?.canAccessDashboard) && (customOnly || client?.guilds?.cache?.has?.(guildId)),
+        canManageSetup: Boolean(guild) && Boolean(perms?.canAccessDashboard) && (customOnly || client?.guilds?.cache?.has?.(guildId))
     };
 }
 
 async function buildStaffGuildList(client, req) {
     const activeStorage = ticketStore.getActiveStorage();
     const staffAccess = await getSeniorStaffAccess(client, req);
-    const guilds = [...(client?.guilds?.cache?.values?.() || [])]
+    const seenGuildIds = new Set();
+    const publicGuilds = [...(client?.guilds?.cache?.values?.() || [])]
         .map(guild => {
+            seenGuildIds.add(String(guild.id));
             const cfg = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(guild.id, activeStorage) : {};
             const shared = summarizeSharedUserGuild(client, req, guild);
             const health = inspectGuildSystemHealth(guild, cfg, activeStorage);
@@ -2573,7 +2675,76 @@ async function buildStaffGuildList(client, req) {
                 runtime,
                 recentAuditLog: runtime.auditLog
             };
-        })
+        });
+    const customGuilds = getCustomOnlyGuildIds(activeStorage)
+        .filter(id => !seenGuildIds.has(id))
+        .map(id => {
+            const label = getDashboardGuildLabel(client, id, activeStorage);
+            const cfg = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(id, activeStorage) : {};
+            const shared = summarizeSharedUserGuild(client, req, label);
+            const ai = getGuildAiUiState(id, activeStorage);
+            const auditLog = getStaffAuditLog(activeStorage).filter(item => String(item?.guildId || '') === String(id)).slice(-12).reverse();
+            const enabledModules = getGuildEnabledModules(cfg, id, activeStorage);
+            const highlights = ['Custom-only bot'];
+            if (shared.sharedWithUser && shared.userPermissionSummary) highlights.push(shared.userPermissionSummary);
+            if (cfg?.transcriptsChannelId) highlights.push('Transcript archive configured');
+            return {
+                id,
+                name: label.name,
+                memberCount: null,
+                iconURL: label.iconURL || null,
+                botInServer: false,
+                customOnly: true,
+                setupCompleted: Boolean(cfg?.setup?.completed),
+                setupStep: Number(cfg?.setup?.step || 1),
+                ...shared,
+                highlights,
+                staffCapabilities: staffAccess.capabilities || {},
+                basicInfo: {
+                    guildId: id,
+                    ownerId: null,
+                    botJoinDate: ai.customBot?.lastStartedAt || null,
+                    shardAssignment: 'Custom bot runtime',
+                    subscriptionPlan: ai.statusLabel || 'Custom',
+                    enabledModules
+                },
+                health: {
+                    activeTickets: (Array.isArray(activeStorage.tickets) ? activeStorage.tickets : []).filter(t => String(t?.guildId || '') === String(id)).length,
+                    archivedTranscripts: (Array.isArray(activeStorage.transcriptArchives) ? activeStorage.transcriptArchives : []).filter(t => String(t?.guildId || '') === String(id)).length,
+                    panelCount: cfg?.panels && typeof cfg.panels === 'object' ? Object.keys(cfg.panels).length : 0,
+                    ticketPanelStatus: 'Managed by custom bot',
+                    transcriptStatus: cfg?.transcriptsChannelId ? 'Configured' : 'Not configured',
+                    feedbackStatus: cfg?.appealsChannelId ? 'Configured' : 'Not configured',
+                    categoryStatus: cfg?.parentCategoryId ? 'Configured' : 'Not configured',
+                    brokenChannels: [],
+                    brokenPanels: [],
+                    missingPermissions: [],
+                    hierarchyConflict: false,
+                    webhookValidity: 'Custom bot',
+                    buttonIntegrity: 'Custom bot panel state',
+                    failedAutomations: [],
+                    brokenOverwrites: []
+                },
+                runtime: {
+                    guildId: id,
+                    ownerId: null,
+                    botJoinDate: ai.customBot?.lastStartedAt || null,
+                    shardAssignment: 'Custom bot runtime',
+                    subscriptionPlan: ai.statusLabel || 'Custom',
+                    enabledModules,
+                    apiLatencyMs: Number(client?.ws?.ping || 0),
+                    databaseLatencyMs: null,
+                    redisLatencyMs: null,
+                    commandFailures: auditLog.filter(item => item.status === 'error').length,
+                    cacheHealth: { channels: 0, roles: 0, membersCached: 0 },
+                    workerStatus: ai.customBot?.runtimeStatus || 'Custom bot configured',
+                    lastErrors: auditLog.filter(item => item.status === 'error').slice(0, 12),
+                    auditLog
+                },
+                recentAuditLog: auditLog
+            };
+        });
+    const guilds = [...publicGuilds, ...customGuilds]
         .sort((a, b) => {
             if (a.canAccessDashboard !== b.canAccessDashboard) return a.canAccessDashboard ? -1 : 1;
             if (a.setupCompleted !== b.setupCompleted) return a.setupCompleted ? -1 : 1;
@@ -2842,19 +3013,23 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         }
 
         const ownerId = getBotOwnerId();
+        const activeStorage = ticketStore.getActiveStorage();
+        const knownGuildIds = getKnownDashboardGuildIds(client, activeStorage);
         const allowedGuildIds = ownerId && userId === ownerId
-            ? [...client.guilds.cache.keys()]
+            ? knownGuildIds
             : getDashboardSessionGuildIds(req);
 
         const guilds = allowedGuildIds
-            .filter(id => client?.guilds?.cache?.has?.(id))
-            .map(id => client.guilds.cache.get(id))
+            .filter(id => knownGuildIds.includes(id))
+            .map(id => getDashboardGuildLabel(client, id, activeStorage))
             .filter(Boolean)
             .map(g => ({
                 id: g.id,
                 name: g.name,
                 memberCount: g.memberCount ?? null,
-                iconURL: typeof g.iconURL === 'function' ? g.iconURL({ extension: 'png', size: 64 }) : null
+                iconURL: g.iconURL || null,
+                botInServer: Boolean(g.botInServer),
+                customOnly: Boolean(g.customOnly)
             }))
             .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
@@ -2871,16 +3046,20 @@ async function handleApi(req, res, url, client, customBotManager = null) {
 
         const ownerId = getBotOwnerId();
         const isOwner = Boolean(ownerId && userId === ownerId);
+        const activeStorage = ticketStore.getActiveStorage();
+        const knownGuildIds = getKnownDashboardGuildIds(client, activeStorage);
         let guilds = [];
 
         if (isOwner) {
-            guilds = [...(client?.guilds?.cache?.values?.() || [])]
+            guilds = knownGuildIds
+                .map(id => getDashboardGuildLabel(client, id, activeStorage))
                 .map(g => ({
                     id: g.id,
                     name: g.name,
                     memberCount: g.memberCount ?? null,
-                    iconURL: typeof g.iconURL === 'function' ? g.iconURL({ extension: 'png', size: 64 }) : null,
-                    botInServer: true,
+                    iconURL: g.iconURL || null,
+                    botInServer: Boolean(g.botInServer),
+                    customOnly: Boolean(g.customOnly),
                     isOwner: true,
                     isAdmin: true,
                     canManageGuild: true,
@@ -2894,18 +3073,20 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             guilds = getDashboardSessionOauthGuilds(req)
                 .map(entry => {
                     const sharedGuild = client?.guilds?.cache?.get(entry.id) || null;
+                    const customOnly = !sharedGuild && getCustomOnlyGuildIds(activeStorage).includes(String(entry.id));
                     const perms = summarizeOauthGuildPermissions(entry);
                     return {
                         id: entry.id,
-                        name: entry.name || sharedGuild?.name || 'Unknown Server',
+                        name: entry.name || sharedGuild?.name || getDashboardGuildLabel(client, entry.id, activeStorage).name || 'Unknown Server',
                         memberCount: sharedGuild?.memberCount ?? null,
                         iconURL: entry.icon
                             ? `https://cdn.discordapp.com/icons/${entry.id}/${entry.icon}.png?size=64`
-                            : (typeof sharedGuild?.iconURL === 'function' ? sharedGuild.iconURL({ extension: 'png', size: 64 }) : null),
+                            : (typeof sharedGuild?.iconURL === 'function' ? sharedGuild.iconURL({ extension: 'png', size: 64 }) : getDashboardGuildLabel(client, entry.id, activeStorage).iconURL),
                         botInServer: Boolean(sharedGuild),
+                        customOnly,
                         ...perms,
-                        canAccessDashboard: Boolean(sharedGuild) && perms.canAccessDashboard,
-                        inviteUrl: !sharedGuild && perms.canAccessDashboard ? getBotInviteUrl(entry.id) : ''
+                        canAccessDashboard: Boolean(sharedGuild || customOnly) && perms.canAccessDashboard,
+                        inviteUrl: !sharedGuild && !customOnly && perms.canAccessDashboard ? getBotInviteUrl(entry.id) : ''
                     };
                 })
                 .sort((a, b) => {
@@ -3902,21 +4083,23 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         }
         if (categoryId && guildId) {
             const guild = client?.guilds?.cache?.get(guildId) || await client?.guilds?.fetch?.(guildId).catch(() => null);
-            const category = guild ? (guild.channels.cache.get(categoryId) || await guild.channels.fetch(categoryId).catch(() => null)) : null;
-            if (!category || category.type !== ChannelType.GuildCategory) {
-                sendJson(res, 400, { error: 'Selected ticket category was not found in this server.' });
-                return true;
-            }
-            const botMemberId = guild.members.me?.id || client?.user?.id || null;
-            if (botMemberId) {
-                await category.permissionOverwrites.edit(botMemberId, {
-                    ViewChannel: true,
-                    SendMessages: true,
-                    EmbedLinks: true,
-                    AttachFiles: true,
-                    ReadMessageHistory: true,
-                    ManageChannels: true
-                }, { reason: 'Repair ticket category permissions after ticket type save' }).catch(() => null);
+            if (guild) {
+                const category = guild.channels.cache.get(categoryId) || await guild.channels.fetch(categoryId).catch(() => null);
+                if (!category || category.type !== ChannelType.GuildCategory) {
+                    sendJson(res, 400, { error: 'Selected ticket category was not found in this server.' });
+                    return true;
+                }
+                const botMemberId = guild.members.me?.id || client?.user?.id || null;
+                if (botMemberId) {
+                    await category.permissionOverwrites.edit(botMemberId, {
+                        ViewChannel: true,
+                        SendMessages: true,
+                        EmbedLinks: true,
+                        AttachFiles: true,
+                        ReadMessageHistory: true,
+                        ManageChannels: true
+                    }, { reason: 'Repair ticket category permissions after ticket type save' }).catch(() => null);
+                }
             }
         }
         const roleIds = sanitizeRoleIds(body.roleIds);
@@ -4120,18 +4303,19 @@ async function handleApi(req, res, url, client, customBotManager = null) {
 
         const activeStorage = ticketStore.getActiveStorage();
         const guild = getDashboardGuild(client, req);
+        const discordGuild = guild?.id ? (client?.guilds?.cache?.get?.(guild.id) || null) : null;
         if (!(await ensureDashboardPermission(client, req, guild?.id || null, 'canCloseTickets'))) {
             sendJson(res, 403, { error: 'Forbidden' });
             return true;
         }
-        if (guild) ticketStore.cleanupMissingTicketChannels(guild, activeStorage);
+        if (discordGuild) ticketStore.cleanupMissingTicketChannels(discordGuild, activeStorage);
 
         const tickets = (Array.isArray(activeStorage.tickets) ? activeStorage.tickets : [])
             .filter(t => {
                 if (!t || !t.channelId) return false;
                 if (guild) {
                     if (t.guildId && String(t.guildId || '') !== String(guild.id)) return false;
-                    if (!t.guildId && !guild?.channels?.cache?.has?.(String(t.channelId))) return false;
+                    if (!t.guildId && discordGuild && !discordGuild?.channels?.cache?.has?.(String(t.channelId))) return false;
                 }
                 if (filterKey && ticketStore.normalizeType(t.ticketType) !== filterKey) return false;
                 return true;
@@ -6510,10 +6694,11 @@ function startDashboard(client, customBotManager = null) {
                     const ownerId = getBotOwnerId();
                     let manageableGuildIds = [];
                     let oauthGuilds = [];
+                    const knownGuildIds = getKnownDashboardGuildIds(client, ticketStore.getActiveStorage());
 
                     // Owner gets global access automatically.
                     if (ownerId && userId === ownerId) {
-                        manageableGuildIds = [...client.guilds.cache.keys()];
+                        manageableGuildIds = knownGuildIds;
                     } else {
                         const guildsRes = await fetch('https://discord.com/api/users/@me/guilds', {
                             headers: { Authorization: `Bearer ${accessToken}` }
@@ -6533,7 +6718,8 @@ function startDashboard(client, customBotManager = null) {
                                 owner: Boolean(g?.owner),
                                 permissions: String(g?.permissions || '0').trim() || '0'
                             });
-                            if (!client.guilds.cache.has(id)) continue; // only guilds this bot is in
+                            if (!knownGuildIds.includes(id)) continue;
+                            if (!summarizeOauthGuildPermissions(g).canAccessDashboard) continue;
                             manageableGuildIds.push(id);
                         }
                         manageableGuildIds = [...new Set(manageableGuildIds)];
