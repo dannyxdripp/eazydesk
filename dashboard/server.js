@@ -60,7 +60,7 @@ function parseRoleIdList(value) {
         .map(roleId => roleId.trim())
         .filter(roleId => /^\d{17,20}$/.test(roleId));
 }
-const GUILD_CATALOG_CACHE_TTL_MS = 20 * 1000;
+const GUILD_CATALOG_CACHE_TTL_MS = 60 * 1000;
 const guildCatalogCache = new Map();
 const staffActionRateLimits = new Map();
 
@@ -526,7 +526,8 @@ function safeDashboardNextPath(value) {
         '/terms',
         '/upgrade',
         '/setup',
-        '/controller'
+        '/controller',
+        '/custom-bots'
     ]);
 
     if (allowed.has(basePath)) return next;
@@ -541,11 +542,7 @@ function createHomeHtml(options = {}) {
     const inviteUrl = getBotInviteUrl();
     const supportUrl = String(process.env.SUPPORT_SERVER_URL || process.env.DISCORD_SUPPORT_URL || '').trim();
     const supportLink = /^https?:\/\//i.test(supportUrl) ? supportUrl : '';
-    const homeImages = Array.isArray(botConfig.homeImages) ? botConfig.homeImages : [];
-    const safeImages = homeImages
-        .map(url => String(url || '').trim())
-        .filter(url => /^https?:\/\//i.test(url))
-        .slice(0, 6);
+    const homeSlides = normalizeHomeSlides(botConfig.homeImages, 6);
     const securityNote = protectedMode
         ? 'Dashboard access requires a token.'
         : 'Dashboard is running without a token (local-only by default).';
@@ -555,12 +552,16 @@ function createHomeHtml(options = {}) {
         ? `<section class="hero-card announcement-${siteAnnouncement.type}" style="margin-bottom:14px;padding:18px 22px"><div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div><div class="kicker">${escapeHtml(announcementLabel)}</div><p style="margin-top:10px">${escapeHtml(siteAnnouncement.text)}</p></div>${siteAnnouncement.ctaLabel && siteAnnouncement.linkUrl ? `<a class="btn primary" href="${escapeHtml(siteAnnouncement.linkUrl)}" target="_blank" rel="noreferrer">${escapeHtml(siteAnnouncement.ctaLabel)}</a>` : ''}</div></section>`
         : '';
 
-    const gallery = safeImages.length
+    const gallery = homeSlides.length
         ? `<section class="gallery">
-      <h2>Highlights</h2>
-      <a class="shot featured-shot" href="${safeImages[0]}" target="_blank" rel="noreferrer"><img id="homeRotatingImage" src="${safeImages[0]}" alt="Preview" loading="eager" /></a>
+      <div class="gallery-copy">
+        <div class="kicker">Highlights</div>
+        <h2 id="homeSlideTitle">${escapeHtml(homeSlides[0].title || 'Support that feels organized')}</h2>
+        <p id="homeSlideBody">${escapeHtml(homeSlides[0].body || 'Showcase dashboard screens, customer examples, or custom bot branding with short supporting copy.')}</p>
+      </div>
+      <a class="shot featured-shot" href="${homeSlides[0].url}" target="_blank" rel="noreferrer"><img id="homeRotatingImage" src="${homeSlides[0].url}" alt="${escapeHtml(homeSlides[0].title || 'Preview')}" loading="eager" /></a>
       <div class="gallery-grid">
-        ${safeImages.map((url, index) => `<button type="button" class="shot home-shot-pick${index === 0 ? ' active' : ''}" data-url="${url}"><img src="${url}" alt="Preview" loading="lazy" /></button>`).join('')}
+        ${homeSlides.map((slide, index) => `<button type="button" class="shot home-shot-pick${index === 0 ? ' active' : ''}" data-index="${index}"><img src="${slide.url}" alt="${escapeHtml(slide.title || 'Preview')}" loading="lazy" /><span>${escapeHtml(slide.title || `Highlight ${index + 1}`)}</span></button>`).join('')}
       </div>
     </section>`
         : '';
@@ -644,8 +645,16 @@ function createHomeHtml(options = {}) {
 
   <footer class="footer">
       <div class="footer-inner">
-        <div class="muted">&copy; ${year} ${COPYRIGHT_NAME}</div>
-        <div class="muted">eazyDesk, a product under Sync Development - <a href="/privacy">Privacy</a> - <a href="/terms">Terms</a></div>
+        <div>
+          <strong>eazyDesk</strong>
+          <div class="muted">&copy; ${year} ${COPYRIGHT_NAME}. A product under Sync Development.</div>
+        </div>
+        <div class="footer-links">
+          <a href="/dashboard">Dashboard</a>
+          <a href="/documentation">Documentation</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+        </div>
       </div>
   </footer>
   <script>
@@ -660,19 +669,25 @@ function createHomeHtml(options = {}) {
       }
     })();
     (function(){
-      var urls=${JSON.stringify(safeImages)};
+      var slides=${JSON.stringify(homeSlides)};
       var img=document.getElementById('homeRotatingImage');
+      var title=document.getElementById('homeSlideTitle');
+      var body=document.getElementById('homeSlideBody');
       var picks=Array.prototype.slice.call(document.querySelectorAll('.home-shot-pick'));
-      if(!img||!urls.length)return;
+      if(!img||!slides.length)return;
       var idx=0;
       function show(next){
-        idx=(next+urls.length)%urls.length;
-        img.src=urls[idx];
-        if(img.parentElement) img.parentElement.href=urls[idx];
+        idx=(next+slides.length)%slides.length;
+        var slide=slides[idx]||{};
+        img.src=slide.url||'';
+        img.alt=slide.title||'Preview';
+        if(title) title.textContent=slide.title||'Highlight';
+        if(body) body.textContent=slide.body||'';
+        if(img.parentElement) img.parentElement.href=slide.url||'#';
         picks.forEach(function(btn,i){btn.classList.toggle('active',i===idx)});
       }
       picks.forEach(function(btn,i){btn.onclick=function(){show(i)}});
-      if(urls.length>1)setInterval(function(){show(idx+1)},5000);
+      if(slides.length>1)setInterval(function(){show(idx+1)},5000);
     })();
   </script>
 </body>
@@ -774,8 +789,8 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     .controller-shell{display:grid;gap:16px}
     .controller-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;padding:20px}
     .controller-hero h2{margin:0 0 6px;font-size:26px;letter-spacing:-.02em}
-    .controller-grid{display:grid;gap:14px}
-    .controller-card{display:grid;gap:14px;align-items:start}
+    .controller-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start}
+    .controller-card{display:grid;gap:14px;align-items:start;overflow:hidden}
     .controller-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
     .controller-title{display:flex;align-items:center;gap:12px;min-width:0}
     .controller-icon{width:44px;height:44px;border-radius:14px;border:1px solid var(--bd);background:color-mix(in srgb,var(--acc) 13%, transparent);display:inline-flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 0 22px color-mix(in srgb,var(--acc) 14%, transparent)}
@@ -785,6 +800,9 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     .controller-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     .controller-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     .controller-actions .btn{min-height:40px;padding:9px 11px;border-radius:12px}
+    .server-toolbar{display:flex;gap:12px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;padding:12px 14px}
+    .server-toolbar label{margin:0 0 6px}
+    .server-toolbar input{min-width:min(520px,100%)}
     .btn.subtle{background:color-mix(in srgb,var(--panel) 80%, rgba(255,255,255,.03));border-color:var(--bd)}
     .btn.warning{background:color-mix(in srgb,#fee75c 14%, transparent);border-color:rgba(254,231,92,.32)}
     .custom-bot-strip{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px;border-radius:14px;border:1px solid color-mix(in srgb,var(--acc) 26%, transparent);background:color-mix(in srgb,var(--acc) 8%, transparent)}
@@ -799,6 +817,7 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     .owner-console .server-card .grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
     .owner-console .btn,.owner-console .btn-soft,.owner-console .btn-danger{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .owner-console input{min-width:0}
+    body[data-view="owner"] .wrap{max-width:1280px}
     .empty-state{padding:22px;text-align:center}
     .upgrade-reward{position:relative;overflow:hidden;min-height:70vh;display:grid;place-items:center;text-align:center;padding:56px 28px}
     .upgrade-word{position:absolute;color:color-mix(in srgb,var(--acc) 70%, white);opacity:.16;font-weight:900;font-size:clamp(24px,5vw,72px);animation:floatReward 7s ease-in-out infinite}
@@ -829,6 +848,7 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
       ${ownerView ? `<a class="btn" href="/owner"><span class="btn-icon">${dashboardIcon('owner')}</span><span>Owner</span></a>` : ''}
       ${ownerView ? `<a class="btn" href="/overview"><span class="btn-icon">${dashboardIcon('dashboard')}</span><span>Dashboard</span></a>` : ''}
       ${ownerView ? `<a class="btn" href="/setup"><span class="btn-icon">${dashboardIcon('setup')}</span><span>Setup</span></a>` : ''}
+      ${ownerView ? `<a class="btn" href="/custom-bots"><span class="btn-icon">${dashboardIcon('embed')}</span><span>Custom Bots</span></a>` : ''}
       <div id="themeNav" class="theme-nav">
         <button id="themeBtn" class="btn" type="button"><span class="btn-icon">${dashboardIcon('diagnostics')}</span><span>Theme</span></button>
         <div class="theme-menu">
@@ -878,9 +898,17 @@ function createControllerHtml(req = null) {
         </div>
         <div class="controller-actions">
           <a class="btn primary" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Servers</span></a>
+          <a class="btn subtle" href="/custom-bots"><span class="btn-icon">${dashboardIcon('embed')}</span><span>Custom Bot Setup</span></a>
           <a class="btn subtle" href="/owner"><span class="btn-icon">${dashboardIcon('owner')}</span><span>Owner Console</span></a>
         </div>
       </div>
+        <div class="card server-toolbar">
+          <div>
+            <label for="controllerSearch">Search servers</label>
+            <input id="controllerSearch" placeholder="Search by server name or ID" />
+          </div>
+          <span id="controllerCount" class="pill">Loading</span>
+        </div>
         <div id="ctrlError" class="err" style="display:none;margin-top:12px"></div>
         <div id="guildList" class="controller-grid"></div>
       </div>
@@ -889,21 +917,89 @@ function createControllerHtml(req = null) {
     const script = `
       const list=document.getElementById('guildList');
       const err=document.getElementById('ctrlError');
+      const search=document.getElementById('controllerSearch');
+      const count=document.getElementById('controllerCount');
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
       const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       const icons={open:${JSON.stringify(dashboardIcon('open'))},setup:${JSON.stringify(dashboardIcon('setup'))},tickets:${JSON.stringify(dashboardIcon('tickets'))},owner:${JSON.stringify(dashboardIcon('owner'))},restart:${JSON.stringify(dashboardIcon('restart'))},bot:${JSON.stringify(dashboardIcon('embed'))}};
       function iconMarkup(g){return g.iconURL?'<span class=\"controller-icon\"><img src=\"'+esc(g.iconURL)+'\" alt=\"\" /></span>':'<span class=\"controller-icon\">'+icons.bot+'</span>'}
       function customBotBlock(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};if(!ai.isCustom&&!bot.tokenConfigured)return '';const on=!!bot.enabled&&!!bot.tokenConfigured;const status=bot.runtimeStatus||(on?'starting':'paused');const sync=bot.lastCommandSyncAt?(' - '+esc(bot.lastCommandSyncCount||0)+' command(s) synced'):'';return '<div class=\"custom-bot-strip\"><div><strong>Custom branded bot</strong><div class=\"muted\">'+(bot.tokenConfigured?'Token saved':'No token saved')+sync+(bot.lastError?' - '+esc(bot.lastError):'')+'</div></div><div class=\"controller-actions\"><span class=\"pill\">'+esc(status)+'</span><button class=\"btn '+(on?'warning':'primary')+'\" '+(!bot.tokenConfigured?'disabled':'')+' data-custom-bot-toggle=\"'+esc(g.id)+'\" data-next=\"'+(on?'false':'true')+'\"><span class=\"btn-icon\">'+icons.bot+'</span><span>'+(on?'Turn Off':'Turn On')+'</span></button><button class=\"btn subtle\" '+(!bot.tokenConfigured?'disabled':'')+' data-custom-bot-sync=\"'+esc(g.id)+'\"><span>Sync Commands</span></button></div></div>'}
-      function item(g){const status=g.customOnly?'<span class=\"pill\">Custom-only</span>':(g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Setup step '+esc(g.setupStep||1)+'</span>');const plan=(g.aiAccess&&g.aiAccess.statusLabel)||'Free plan';const publicActions=(g.botInServer||g.customOnly)?('<a class=\"btn primary\" href=\"/overview?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.open+'</span><span>Dashboard</span></a><a class=\"btn subtle\" href=\"/setup?guild='+encodeURIComponent(g.id)+'&page=1\"><span class=\"btn-icon\">'+icons.setup+'</span><span>Setup</span></a><a class=\"btn subtle\" href=\"/tickets?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.tickets+'</span><span>Tickets</span></a>'+(!g.customOnly?'<button class=\"btn warning\" data-restart=\"'+esc(g.id)+'\"><span class=\"btn-icon\">'+icons.restart+'</span><span>Restart Setup</span></button>':'')):'<span class=\"muted\">No bot runtime is connected for this server yet.</span>';return '<div class=\"card controller-card\">'+
-        '<div class=\"controller-head\"><div class=\"controller-title\">'+iconMarkup(g)+'<div><div class=\"controller-name\">'+esc(g.name)+'</div><div class=\"muted\">'+esc(g.id)+'</div></div></div><div class=\"controller-meta\">'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+status+'<span class=\"pill\">'+esc(plan)+'</span></div></div>'+customBotBlock(g)+
-        '<div class=\"controller-actions\">'+publicActions+
-          '<a class=\"btn subtle\" href=\"/owner\"><span class=\"btn-icon\">'+icons.owner+'</span><span>Plans</span></a>'+
-   '</div>'}
-      async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class=\"card empty-state\"><strong>No guilds found</strong><div class=\"muted\">Bot may not be ready yet.</div></div>';for(const btn of document.querySelectorAll('[data-custom-bot-toggle]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-custom-bot-toggle'),action:'custom-bot-toggle',enabled:btn.getAttribute('data-next')==='true'})});await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-custom-bot-sync]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-custom-bot-sync'),action:'custom-bot-sync'})});await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-restart]')){btn.onclick=async()=>{try{btn.disabled=true;const original=btn.innerHTML;await api('/api/controller/setup/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-restart')})});btn.innerHTML='<span>Restarted</span>';setTimeout(()=>{btn.innerHTML=original;btn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}}catch(e){err.style.display='block';err.textContent=e.message}}load();
+      function filterCards(){const q=String(search&&search.value||'').trim().toLowerCase();let shown=0;for(const card of document.querySelectorAll('[data-server-card]')){const match=!q||String(card.getAttribute('data-hay')||'').includes(q);card.style.display=match?'':'none';if(match)shown+=1}if(count)count.textContent=shown+' shown'}
+      if(search)search.oninput=filterCards;
+      function item(g){const status=g.customOnly?'<span class=\"pill\">Custom-only</span>':(g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Setup step '+esc(g.setupStep||1)+'</span>');const plan=(g.aiAccess&&g.aiAccess.statusLabel)||'Free plan';const hay=esc([g.name,g.id,plan,g.customOnly?'custom-only':'public-bot'].join(' ').toLowerCase());const actions=[];if(g.botInServer||g.customOnly){actions.push('<a class=\"btn primary\" href=\"/overview?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.open+'</span><span>Dashboard</span></a>');if(!g.setupCompleted)actions.push('<a class=\"btn subtle\" href=\"/setup?guild='+encodeURIComponent(g.id)+'&page=1\"><span class=\"btn-icon\">'+icons.setup+'</span><span>Setup</span></a>');actions.push('<a class=\"btn subtle\" href=\"/tickets?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.tickets+'</span><span>Tickets</span></a>');if(!g.customOnly)actions.push('<button class=\"btn warning\" data-restart=\"'+esc(g.id)+'\"><span class=\"btn-icon\">'+icons.restart+'</span><span>Restart Setup</span></button>')}else{actions.push('<span class=\"muted\">No bot runtime is connected for this server yet.</span>')}actions.push('<a class=\"btn subtle\" href=\"/owner\"><span class=\"btn-icon\">'+icons.owner+'</span><span>Plans</span></a>');return ['<div class=\"card controller-card\" data-server-card=\"1\" data-hay=\"'+hay+'\">','<div class=\"controller-head\"><div class=\"controller-title\">'+iconMarkup(g)+'<div><div class=\"controller-name\">'+esc(g.name)+'</div><div class=\"muted\">'+esc(g.id)+'</div></div></div><div class=\"controller-meta\">'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+status+'<span class=\"pill\">'+esc(plan)+'</span></div></div>',customBotBlock(g),'<div class=\"controller-actions\">'+actions.join('')+'</div>','</div>'].join('')}
+      async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class=\"card empty-state\"><strong>No guilds found</strong><div class=\"muted\">Bot may not be ready yet.</div></div>';filterCards();for(const btn of document.querySelectorAll('[data-custom-bot-toggle]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-custom-bot-toggle'),action:'custom-bot-toggle',enabled:btn.getAttribute('data-next')==='true'})});await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-custom-bot-sync]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-custom-bot-sync'),action:'custom-bot-sync'})});await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-restart]')){btn.onclick=async()=>{try{btn.disabled=true;const original=btn.innerHTML;await api('/api/controller/setup/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-restart')})});btn.innerHTML='<span>Restarted</span>';setTimeout(()=>{btn.innerHTML=original;btn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
 
     return baseDashboardPage({ title: 'Controller', body, script, ownerView: true, showStaffLink: true });
+}
+
+function createCustomBotsHtml(req = null) {
+    const body = `
+      <div class="controller-shell">
+        <div class="card controller-hero">
+          <div>
+            <div class="pricing-kicker">Custom Bots</div>
+            <h2>Branded bot setup</h2>
+            <div class="muted">Add custom-only servers, save branded bot tokens, and sync commands without needing the public bot in that server.</div>
+          </div>
+          <div class="controller-actions">
+            <a class="btn subtle" href="/controller"><span class="btn-icon">${dashboardIcon('diagnostics')}</span><span>Controller</span></a>
+            <a class="btn subtle" href="/owner"><span class="btn-icon">${dashboardIcon('owner')}</span><span>Owner Console</span></a>
+          </div>
+        </div>
+        <div id="customBotError" class="err" style="display:none"></div>
+        <div id="customBotSuccess" class="card" style="display:none;padding:12px 14px"></div>
+        <div class="grid" style="grid-template-columns:minmax(320px,.78fr) minmax(0,1.22fr);align-items:start">
+          <div class="card">
+            <strong>Add or update a custom server</strong>
+            <div class="muted" style="margin-top:6px">Use this when a server should run only the branded custom bot. The public bot is not required for dashboard visibility.</div>
+            <label>Server ID</label>
+            <input id="customGuildId" placeholder="123456789012345678" />
+            <label>Bot display name</label>
+            <input id="customBotName" placeholder="Customer Support" />
+            <label>Bot token</label>
+            <input id="customToken" placeholder="Paste token, or leave blank when updating metadata" />
+            <label>Status text</label>
+            <input id="customStatus" placeholder="Handling support" />
+            <label>App ID</label>
+            <input id="customAppId" placeholder="Optional application/client ID" />
+            <label>Public key</label>
+            <input id="customPublicKey" placeholder="Optional interaction public key" />
+            <div class="row" style="margin-top:12px">
+              <button id="saveCustomBot" class="btn primary" type="button">Save Custom Bot</button>
+              <a class="btn subtle" href="/dashboard">Public Bot Setup</a>
+            </div>
+          </div>
+          <div class="card">
+            <div class="server-toolbar" style="padding:0;margin-bottom:12px">
+              <div>
+                <label for="customBotSearch">Search custom servers</label>
+                <input id="customBotSearch" placeholder="Search by server name or ID" />
+              </div>
+              <span id="customBotCount" class="pill">Loading</span>
+            </div>
+            <div id="customBotList" class="list"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const script = `
+      const err=document.getElementById('customBotError'),ok=document.getElementById('customBotSuccess'),list=document.getElementById('customBotList'),search=document.getElementById('customBotSearch'),count=document.getElementById('customBotCount'),saveBtn=document.getElementById('saveCustomBot'),guildInput=document.getElementById('customGuildId'),nameInput=document.getElementById('customBotName'),tokenInput=document.getElementById('customToken'),statusInput=document.getElementById('customStatus'),appInput=document.getElementById('customAppId'),keyInput=document.getElementById('customPublicKey');
+      const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
+      function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
+      async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+      function note(message){ok.style.display='block';ok.innerHTML='<strong>Updated</strong><div class="muted">'+esc(message)+'</div>'}
+      function filterCards(){const q=String(search&&search.value||'').trim().toLowerCase();let shown=0;for(const card of document.querySelectorAll('[data-custom-server]')){const match=!q||String(card.getAttribute('data-hay')||'').includes(q);card.style.display=match?'':'none';if(match)shown+=1}if(count)count.textContent=shown+' shown'}
+      if(search)search.oninput=filterCards;
+      function customCard(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};const isRelevant=ai.isCustom||bot.tokenConfigured||g.customOnly;if(!isRelevant)return '';const on=!!bot.enabled&&!!bot.tokenConfigured;const status=bot.runtimeStatus||(on?'starting':'paused');const hay=esc([g.name,g.id,ai.statusLabel,status,g.customOnly?'custom-only':'public-bot'].join(' ').toLowerCase());return '<div class="item server-card can-manage" data-custom-server="1" data-hay="'+hay+'"><div style="display:grid;gap:8px;width:100%"><div class="row"><strong>'+esc(g.name)+'</strong><span class="pill">'+esc(ai.statusLabel||'Custom')+'</span><span class="pill">'+esc(status)+'</span></div><div class="muted">'+esc(g.id)+'</div><div class="muted">'+(bot.tokenConfigured?'Token saved':'No token saved')+(bot.lastCommandSyncAt?' - '+esc(bot.lastCommandSyncCount||0)+' command(s) synced':'')+(bot.lastError?' - '+esc(bot.lastError):'')+'</div><div class="row"><a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Dashboard</a><button class="btn '+(on?'warning':'primary')+'" '+(!bot.tokenConfigured?'disabled':'')+' data-toggle="'+esc(g.id)+'" data-next="'+(on?'false':'true')+'">'+(on?'Turn Off':'Turn On')+'</button><button class="btn subtle" '+(!bot.tokenConfigured?'disabled':'')+' data-sync="'+esc(g.id)+'">Sync Commands</button><button class="btn subtle" data-fill="'+esc(g.id)+'" data-name="'+esc(g.name)+'">Edit</button></div></div></div>'}
+      async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];const html=guilds.map(customCard).filter(Boolean).join('');list.innerHTML=html||'<div class="muted">No custom bot servers found yet.</div>';filterCards();for(const btn of document.querySelectorAll('[data-toggle]'))btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-toggle'),action:'custom-bot-toggle',enabled:btn.getAttribute('data-next')==='true'})});note('Custom bot runtime updated.');await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}};for(const btn of document.querySelectorAll('[data-sync]'))btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-sync'),action:'custom-bot-sync'})});note('Command sync requested.');await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}};for(const btn of document.querySelectorAll('[data-fill]'))btn.onclick=()=>{guildInput.value=btn.getAttribute('data-fill')||'';nameInput.value=btn.getAttribute('data-name')||'';tokenInput.value='';guildInput.focus()}}catch(e){err.style.display='block';err.textContent=e.message}}
+      saveBtn.onclick=async()=>{try{err.style.display='none';const guildId=String(guildInput.value||'').trim();if(!/^\\d{17,20}$/.test(guildId))throw new Error('Enter a valid server ID.');const customBot={botName:String(nameInput.value||'').trim(),appId:String(appInput.value||'').trim(),publicKey:String(keyInput.value||'').trim(),token:String(tokenInput.value||'').trim(),statusText:String(statusInput.value||'').trim(),enabled:true};saveBtn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action:'set-plan',plan:'custom',customBot})});note('Custom bot saved. Invite only the branded bot to that server.');tokenInput.value='';await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{saveBtn.disabled=false}};
+      load();
+    `;
+
+    return baseDashboardPage({ title: 'Custom Bots', body, script, ownerView: true, showStaffLink: true });
 }
 
 function createServerPickerHtml(options = {}) {
@@ -927,7 +1023,7 @@ function createServerPickerHtml(options = {}) {
       const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function renderPerms(g){const tags=[];tags.push(g.customOnly?'<span class="pill">Custom-only bot</span>':(g.botInServer?'<span class="pill">Bot in server</span>':'<span class="pill">Bot not in server</span>'));tags.push(g.isOwner?'<span class="pill">Owner</span>':'');tags.push(g.isAdmin?'<span class="pill">Administrator</span>':'');tags.push(!g.isAdmin&&g.canManageGuild?'<span class="pill">Manage Server</span>':'');tags.push(!g.isAdmin&&!g.canManageGuild&&g.canManageChannels?'<span class="pill">Manage Channels</span>':'');return tags.filter(Boolean).join('')}
-      function renderAction(g){if((g.botInServer||g.customOnly)&&g.canAccessDashboard)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a><a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1">Setup</a>';if(g.botInServer||g.customOnly)return '<span class="muted">No dashboard permissions</span>';if(g.inviteUrl)return '<a class="btn primary" href="'+esc(g.inviteUrl)+'">Add Bot</a>';return '<span class="muted">Bot is not in this server</span>'}
+      function renderAction(g){if((g.botInServer||g.customOnly)&&g.canAccessDashboard)return '<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Open Dashboard</a>'+(g.setupCompleted?'':'<a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1">Setup</a>');if(g.botInServer||g.customOnly)return '<span class="muted">No dashboard permissions</span>';if(g.inviteUrl)return '<a class="btn primary" href="'+esc(g.inviteUrl)+'">Add Bot</a>';return '<span class="muted">Bot is not in this server</span>'}
       function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=Array.isArray(g.permissionSummary)&&g.permissionSummary.length?g.permissionSummary.map(esc).join(' - '):'No elevated permissions';const cls='item server-card'+(g.canAccessDashboard?' can-manage':'');return '<div class="'+cls+'">'+
         '<div style="display:grid;gap:8px;min-width:0">'+
           '<div class="row" style="gap:10px">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class="pill">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
@@ -952,6 +1048,13 @@ function createStaffHtml(options = {}) {
         <div id="staffError" class="err" style="display:none;margin-top:12px"></div>
         <div id="staffSuccess" class="card" style="display:none;margin-top:12px;padding:12px 14px"></div>
         <div id="staffSummary" class="grid" style="margin-top:12px"></div>
+        <div class="card server-toolbar" style="margin-top:12px">
+          <div>
+            <label for="staffSearch">Search servers</label>
+            <input id="staffSearch" placeholder="Search by server name or ID" />
+          </div>
+          <span id="staffCount" class="pill">Loading</span>
+        </div>
         <div id="staffList" class="list server-grid"></div>
       </div>
     `;
@@ -962,6 +1065,8 @@ function createStaffHtml(options = {}) {
       const err=document.getElementById('staffError');
       const ok=document.getElementById('staffSuccess');
       const summary=document.getElementById('staffSummary');
+      const staffSearch=document.getElementById('staffSearch');
+      const staffCount=document.getElementById('staffCount');
       const inviteMap={};
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
       const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
@@ -979,9 +1084,11 @@ function createStaffHtml(options = {}) {
         {title:'Community Management',desc:'Owner-facing health visibility, onboarding/help flows, invite handoffs.',enabled:!!cap.canContactOwners}
       ];summary.innerHTML=cards.map(card=>'<div class="card"><strong>'+esc(card.title)+'</strong><div class="muted" style="margin-top:6px">'+esc(card.desc)+'</div><div class="row" style="margin-top:10px">'+(card.enabled?pill('Enabled for you'):pill('Read only / unavailable'))+'</div></div>').join('')+'<div class="card"><strong>Your active role families</strong><div class="muted" style="margin-top:6px">'+esc(groups.length?groups.join(' - '):'No senior role families detected')+'</div><div class="row" style="margin-top:10px">'+(groups.length?groups.map(pill).join(''):pill('No access'))+'</div></div>'}
       function renderPerms(g){const tags=[];if(g.setupCompleted)tags.push(pill('Setup complete'));if(g.canAccessDashboard)tags.push(pill('Dashboard access'));if(g.sharedWithUser)tags.push(pill('User is in server'));if(g.userPermissionSummary)tags.push(pill(g.userPermissionSummary));if(g.health&&g.health.missingPermissions&&g.health.missingPermissions.length)tags.push(pill('Missing bot perms'));return tags.join('')}
+      function filterStaffCards(){const q=String(staffSearch&&staffSearch.value||'').trim().toLowerCase();let shown=0;for(const card of document.querySelectorAll('[data-staff-server]')){const match=!q||String(card.getAttribute('data-hay')||'').includes(q);card.style.display=match?'':'none';if(match)shown+=1}if(staffCount)staffCount.textContent=shown+' shown'}
+      if(staffSearch)staffSearch.oninput=filterStaffCards;
       function renderInfoList(title, values){const safe=Array.isArray(values)?values.filter(Boolean):[];return '<div class="card" style="padding:10px 12px"><div><strong>'+esc(title)+'</strong></div><div class="muted" style="margin-top:6px">'+(safe.length?safe.map(esc).join(' - '):'None detected')+'</div></div>'}
       function actionButtons(g){const caps=g.staffCapabilities||{};const buttons=[];const live=!g.customOnly;if(g.canAccessDashboard&&caps.canViewConfiguration)buttons.push('<a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('open'))}+'</span><span>Open Dashboard</span></a>');if(g.canManageSetup&&!g.setupCompleted&&caps.canViewConfiguration)buttons.push('<a class="btn" href="/setup?guild='+encodeURIComponent(g.id)+'&page=1"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('setup'))}+'</span><span>Open Setup</span></a>');if(live&&caps.canCreateInvite)buttons.push('<button class="btn" type="button" data-invite="'+esc(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('invite'))}+'</span><span>Create Invite</span></button>');if(live&&caps.canRestartSystems)buttons.push('<button class="btn" type="button" data-restart-setup="'+esc(g.id)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('restart'))}+'</span><span>Restart Setup</span></button>');if(live&&caps.canSyncPermissions)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="sync-permissions"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('repair'))}+'</span><span>Sync Permissions</span></button>');if(live&&caps.canRepairChannels)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="repair-channels"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('repair'))}+'</span><span>Repair Channels</span></button>');if(live&&caps.canRunDiagnostics)buttons.push('<button class="btn" type="button" data-repair="'+esc(g.id)+'" data-repair-action="diagnostics"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('diagnostics'))}+'</span><span>Run Diagnostics</span></button>');if(live&&caps.canRemoveBot)buttons.push('<button class="btn" type="button" data-leave="'+esc(g.id)+'" data-guild-name="'+esc(g.name)+'"><span class="btn-icon">'+${JSON.stringify(dashboardIcon('remove'))}+'</span><span>Remove Bot</span></button>');if(!live)buttons.push('<span class="muted">Live repair actions use the branded custom bot runtime.</span>');return buttons.join('')}
-      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=(Array.isArray(g.highlights)&&g.highlights.length?g.highlights:['Bot is active in this server']).map(esc).join(' - ');const inviteUrl=inviteMap[g.id]||g.inviteUrl||'';const health=g.health||{};const runtime=g.runtime||{};const basic=g.basicInfo||{};const audits=Array.isArray(g.recentAuditLog)?g.recentAuditLog.slice(0,4):[];return '<div class="item server-card can-manage">'+
+      function item(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px;box-shadow:0 0 22px rgba(0,0,0,.22)" />':'';const detail=(Array.isArray(g.highlights)&&g.highlights.length?g.highlights:['Bot is active in this server']).map(esc).join(' - ');const inviteUrl=inviteMap[g.id]||g.inviteUrl||'';const health=g.health||{};const runtime=g.runtime||{};const basic=g.basicInfo||{};const audits=Array.isArray(g.recentAuditLog)?g.recentAuditLog.slice(0,4):[];const hay=esc([g.name,g.id,detail,basic.subscriptionPlan,g.customOnly?'custom-only':'public-bot'].join(' ').toLowerCase());return '<div class="item server-card can-manage" data-staff-server="1" data-hay="'+hay+'">'+
         '<div style="display:grid;gap:8px;min-width:0">'+
           '<div class="row" style="gap:10px">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+(g.memberCount?('<span class="pill">'+esc(g.memberCount)+' members</span>'):'')+'</div>'+
           '<div class="row">'+renderPerms(g)+'</div>'+
@@ -999,7 +1106,7 @@ function createStaffHtml(options = {}) {
       '</div>'}
       async function postRepair(guildId,action){const data=await api('/api/staff/guild-repair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action})});return data}
       async function bindActions(){for(const btn of document.querySelectorAll('[data-invite]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-invite');const data=await api('/api/staff/guild-invite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});inviteMap[guildId]=data.inviteUrl||'';note('Invite ready for '+(data.guildName||'that server')+'.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-restart-setup]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-restart-setup');await api('/api/staff/guild-restart-setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});note('Setup restart prepared for that server.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-repair]')){btn.onclick=async()=>{try{err.style.display='none';ok.style.display='none';btn.disabled=true;const guildId=btn.getAttribute('data-repair');const action=btn.getAttribute('data-repair-action');const data=await postRepair(guildId,action);note((data&&data.result&&data.result.message)||'Repair finished.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-leave]')){btn.onclick=async()=>{const guildId=btn.getAttribute('data-leave');const guildName=btn.getAttribute('data-guild-name')||'this server';if(!confirm('Remove the bot from '+guildName+'?'))return;try{err.style.display='none';ok.style.display='none';btn.disabled=true;await api('/api/staff/guild-leave',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId})});delete inviteMap[guildId];note('The bot has been removed from '+guildName+'.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{btn.disabled=false}}}}
-      async function load(){try{const data=await api('/api/staff/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];renderSummaryCards(data.capabilities||{});summary.insertAdjacentHTML('beforeend',renderPermissionMatrix(data.permissionMatrix||[])+renderLiveOps(data));list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="muted">No servers found.</div>';await bindActions()}catch(e){err.style.display='block';err.textContent=e.message}}load();
+      async function load(){try{const data=await api('/api/staff/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];renderSummaryCards(data.capabilities||{});summary.insertAdjacentHTML('beforeend',renderPermissionMatrix(data.permissionMatrix||[])+renderLiveOps(data));list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="muted">No servers found.</div>';filterStaffCards();await bindActions()}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
 
     return baseDashboardPage({ title: 'Staff', body, script, ownerView, staffView: true, showStaffLink: true });
@@ -1014,12 +1121,19 @@ function createOwnerHtml(req = null) {
         <div id="ownerSuccess" class="card" style="display:none;margin-top:12px;padding:12px 14px"></div>
         <div id="ownerContent" class="owner-summary" style="margin-top:12px"></div>
         <div id="ownerSummary" class="owner-summary" style="margin-top:12px"></div>
+        <div class="card server-toolbar">
+          <div>
+            <label for="ownerSearch">Search servers</label>
+            <input id="ownerSearch" placeholder="Search by server name or ID" />
+          </div>
+          <span id="ownerCount" class="pill">Loading</span>
+        </div>
         <div id="ownerGuilds" class="owner-guilds"></div>
       </div>
     `;
 
     const script = `
-      const err=document.getElementById('ownerError'),ok=document.getElementById('ownerSuccess'),content=document.getElementById('ownerContent'),summary=document.getElementById('ownerSummary'),guildList=document.getElementById('ownerGuilds');
+      const err=document.getElementById('ownerError'),ok=document.getElementById('ownerSuccess'),content=document.getElementById('ownerContent'),summary=document.getElementById('ownerSummary'),guildList=document.getElementById('ownerGuilds'),ownerSearch=document.getElementById('ownerSearch'),ownerCount=document.getElementById('ownerCount');
       const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
@@ -1027,15 +1141,17 @@ function createOwnerHtml(req = null) {
       function pill(t){return '<span class="pill">'+esc(t)+'</span>'}
       function renderRows(title,items,mapper){return '<div class="card"><strong>'+esc(title)+'</strong><div class="list">'+(items.length?items.map(mapper).join(''):'<div class="muted">Nothing yet.</div>')+'</div></div>'}
       function renderMatrix(matrix){return '<div class="card"><strong>Staff dashboard role access</strong><div class="muted" style="margin-top:6px">Role IDs come from environment variables. Update STAFF_EXECUTIVE_ROLE_IDS, STAFF_SUPPORT_ROLE_IDS, STAFF_QA_ROLE_IDS, STAFF_COMMUNITY_ROLE_IDS, or SENIOR_STAFF_ROLE_IDS, then redeploy/restart.</div><div class="list" style="margin-top:10px">'+(matrix||[]).map(row=>'<details class="item" style="display:block"><summary><strong>'+esc(row.name)+'</strong> <span class="pill">'+esc((row.roleIds||[]).length)+' role(s)</span></summary><div class="muted" style="margin-top:8px;white-space:pre-wrap">'+esc((row.roleIds||[]).join('\\n')||'No roles configured')+'</div><div class="roles" style="margin-top:8px">'+Object.entries(row.permissions||{}).filter(x=>x[1]).map(x=>'<span class="pill">'+esc(x[0].replace(/^can/,''))+'</span>').join('')+'</div></details>').join('')+'</div></div>'}
-      function renderContentTools(cfg,backupStatus){const imgs=Array.isArray(cfg.homeImages)?cfg.homeImages:[];const tutorials=Array.isArray(cfg.tutorials)?cfg.tutorials:[];const docs=Array.isArray(cfg.docsSections)?cfg.docsSections:[];const ann=cfg.siteAnnouncement||{};const backupText=backupStatus&&backupStatus.configured?'MEGA backup configured':'MEGA not configured; manual backup will save locally';return '<div class="card"><strong>Owner operations</strong><div class="muted" style="margin-top:6px">'+esc(backupText)+'</div><div class="row" style="margin-top:10px"><button id="ownerBackupNow" class="btn">Backup Data Now</button></div><label style="margin-top:14px">Maintenance message to all servers</label><textarea id="ownerMaintenanceText" style="min-height:110px" placeholder="Short maintenance notice..."></textarea><div class="row" style="margin-top:10px"><button id="ownerSendMaintenance" class="btn-danger">Send Maintenance Message</button></div></div>'+
-      '<div class="card"><strong>Add custom-only server</strong><div class="muted" style="margin-top:6px">Use this when a customer only invites their branded custom bot, not the public bot.</div><div class="grid" style="margin-top:10px"><div><label>Server ID</label><input id="manualCustomGuildId" placeholder="123456789012345678" /></div><div><label>Bot display name</label><input id="manualCustomBotName" placeholder="Customer Support" /></div><div><label>App ID</label><input id="manualCustomAppId" placeholder="Application/client ID" /></div><div><label>Public Key</label><input id="manualCustomPublicKey" placeholder="Interaction public key" /></div><div><label>Bot Token</label><input id="manualCustomToken" placeholder="Custom bot token" /></div><div><label>Status Text</label><input id="manualCustomStatus" placeholder="Handling support" /></div></div><div class="row" style="margin-top:10px"><button id="ownerAddCustomServer" class="btn">Save Custom Server</button></div></div>'+
+      function renderContentTools(cfg,backupStatus){const imgs=Array.isArray(cfg.homeImages)?cfg.homeImages:[];const slide=i=>{const raw=imgs[i];return typeof raw==='string'?{url:raw,title:'',body:''}:(raw&&typeof raw==='object'?raw:{})};const tutorials=Array.isArray(cfg.tutorials)?cfg.tutorials:[];const docs=Array.isArray(cfg.docsSections)?cfg.docsSections:[];const ann=cfg.siteAnnouncement||{};const backupText=backupStatus&&backupStatus.configured?'MEGA backup configured':'MEGA not configured; manual backup will save locally';return '<div class="card"><strong>Owner operations</strong><div class="muted" style="margin-top:6px">'+esc(backupText)+'</div><div class="row" style="margin-top:10px"><button id="ownerBackupNow" class="btn">Backup Data Now</button></div><label style="margin-top:14px">Maintenance message to all servers</label><textarea id="ownerMaintenanceText" style="min-height:110px" placeholder="Short maintenance notice..."></textarea><div class="row" style="margin-top:10px"><button id="ownerSendMaintenance" class="btn-danger">Send Maintenance Message</button></div></div>'+
+      '<div class="card"><strong>Bot setup</strong><div class="muted" style="margin-top:6px">Add a server once, then choose public bot, custom bot, or custom-only operation from one place.</div><div class="grid" style="margin-top:10px"><div><label>Server ID</label><input id="manualCustomGuildId" placeholder="123456789012345678" /></div><div><label>Bot display name</label><input id="manualCustomBotName" placeholder="Customer Support" /></div><div><label>Bot Token</label><input id="manualCustomToken" placeholder="Custom bot token" /></div><div><label>Status Text</label><input id="manualCustomStatus" placeholder="Handling support" /></div><div><label>App ID</label><input id="manualCustomAppId" placeholder="Optional application/client ID" /></div><div><label>Public Key</label><input id="manualCustomPublicKey" placeholder="Optional interaction public key" /></div></div><div class="row" style="margin-top:10px"><button id="ownerAddCustomServer" class="btn">Save Custom Server</button><a class="btn-soft" href="/dashboard">Add public bot</a></div></div>'+
       '<div class="card"><strong>Announcement panel</strong><div class="muted" style="margin-top:6px">Shown on the website and dashboard while enabled.</div><div class="row"><div><label>Enabled</label><select id="ownerAnnouncementEnabled"><option value="true" '+(ann.enabled?'selected':'')+'>On</option><option value="false" '+(!ann.enabled?'selected':'')+'>Off</option></select></div><div><label>Type</label><select id="ownerAnnouncementType"><option value="general" '+((ann.type||'general')==='general'?'selected':'')+'>General</option><option value="promotional" '+(ann.type==='promotional'?'selected':'')+'>Promotional</option><option value="warning" '+(ann.type==='warning'?'selected':'')+'>Warning</option></select></div></div><label>Message</label><textarea id="ownerAnnouncementText" style="min-height:110px" maxlength="240">'+esc(ann.text||'')+'</textarea><div class="row"><div><label>Button label</label><input id="ownerAnnouncementCta" value="'+esc(ann.ctaLabel||'')+'" maxlength="40" placeholder="Learn more" /></div><div><label>Button URL</label><input id="ownerAnnouncementUrl" value="'+esc(ann.linkUrl||'')+'" placeholder="https://..." /></div></div><div class="row" style="margin-top:10px"><button id="ownerSaveAnnouncement" class="btn">Save Announcement</button><button id="ownerClearAnnouncement" class="btn-soft">Clear</button></div></div>'+
-      '<div class="card"><strong>Homepage rotating images</strong><div class="muted" style="margin-top:6px">Shown on the public homepage gallery. Use direct HTTPS image links.</div><label>Image 1</label><input id="ownerHomeImg1" value="'+esc(imgs[0]||'')+'" placeholder="https://..." /><label>Image 2</label><input id="ownerHomeImg2" value="'+esc(imgs[1]||'')+'" placeholder="https://..." /><label>Image 3</label><input id="ownerHomeImg3" value="'+esc(imgs[2]||'')+'" placeholder="https://..." /><div class="row" style="margin-top:10px"><button id="ownerSaveHomeImages" class="btn">Save Images</button><button id="ownerClearHomeImages" class="btn-soft">Clear</button></div></div>'+
+      '<div class="card"><strong>Homepage highlights</strong><div class="muted" style="margin-top:6px">Each highlight has an image and short text beside it on the homepage.</div>'+[0,1,2].map(i=>{const s=slide(i);return '<div class="item" style="display:block;margin-top:10px"><strong>Highlight '+(i+1)+'</strong><label>Image URL</label><input id="ownerHomeImg'+(i+1)+'" value="'+esc(s.url||'')+'" placeholder="https://..." /><label>Title</label><input id="ownerHomeTitle'+(i+1)+'" value="'+esc(s.title||'')+'" placeholder="Dashboard that stays organized" /><label>Text</label><textarea id="ownerHomeBody'+(i+1)+'" placeholder="Short supporting copy...">'+esc(s.body||s.description||'')+'</textarea></div>'}).join('')+'<div class="row" style="margin-top:10px"><button id="ownerSaveHomeImages" class="btn">Save Highlights</button><button id="ownerClearHomeImages" class="btn-soft">Clear</button></div></div>'+
       '<div class="card"><strong>Public tutorials</strong><div class="muted" style="margin-top:6px">Manage tutorial cards and walkthrough steps.</div><textarea id="ownerTutorialsJson" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(tutorials,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="ownerSaveTutorials" class="btn">Save Tutorials</button><button id="ownerFormatTutorials" class="btn-soft">Format</button></div></div>'+
       '<div class="card"><strong>Documentation sections</strong><div class="muted" style="margin-top:6px">Manage the public documentation guide sections.</div><textarea id="ownerDocsJson" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(docs,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="ownerSaveDocs" class="btn">Save Docs</button><button id="ownerFormatDocs" class="btn-soft">Format</button></div></div>'}
       function grantButtons(g){return '<div class="row"><button class="btn" data-plan="plus" data-guild="'+esc(g.id)+'">Grant Plus</button><button class="btn" data-plan="pro" data-guild="'+esc(g.id)+'">Grant Pro</button><button class="btn" data-custom="'+esc(g.id)+'">Grant Custom</button><button class="btn-soft" data-trial="plus_trial" data-guild="'+esc(g.id)+'">Plus Trial</button><button class="btn-soft" data-trial="pro_trial" data-guild="'+esc(g.id)+'">Pro Trial</button><button class="btn-danger" data-clear="'+esc(g.id)+'">Clear</button></div>'}
       function customFields(g){const bot=(g.aiAccess&&g.aiAccess.customBot)||{};return '<details class="card" style="padding:10px 12px"><summary><strong>Custom branded bot</strong> <span class="muted">'+(bot.tokenConfigured?'Token saved':'No token')+'</span></summary><div class="grid" style="margin-top:10px"><div><label>App ID</label><input data-cb-app="'+esc(g.id)+'" value="'+esc(bot.appId||'')+'" /></div><div><label>Public Key</label><input data-cb-key="'+esc(g.id)+'" value="'+esc(bot.publicKey||'')+'" /></div><div><label>Bot Token</label><input data-cb-token="'+esc(g.id)+'" placeholder="'+(bot.tokenConfigured?'Leave blank to keep saved token':'Paste token')+'" /></div></div><div class="muted" style="margin-top:10px">Name, avatar, and profile settings are configured in the Discord Developer Portal.</div></details>'}
-      function guildCard(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px" />':'';const ai=g.aiAccess||{};return '<div class="item server-card can-manage"><div style="display:grid;gap:8px;width:100%"><div class="row">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+pill(ai.statusLabel||'Free plan')+'</div><div class="muted">'+esc(g.memberCount||0)+' members - '+esc(ai.planLabel||'Free')+'</div>'+customFields(g)+grantButtons(g)+'</div></div>'}
+      function filterOwnerCards(){const q=String(ownerSearch&&ownerSearch.value||'').trim().toLowerCase();let shown=0;for(const card of document.querySelectorAll('[data-owner-server]')){const match=!q||String(card.getAttribute('data-hay')||'').includes(q);card.style.display=match?'':'none';if(match)shown+=1}if(ownerCount)ownerCount.textContent=shown+' shown'}
+      if(ownerSearch)ownerSearch.oninput=filterOwnerCards;
+      function guildCard(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px" />':'';const ai=g.aiAccess||{};const hay=esc([g.name,g.id,ai.statusLabel,ai.planLabel,g.customOnly?'custom-only':'public-bot'].join(' ').toLowerCase());return '<div class="item server-card can-manage" data-owner-server="1" data-hay="'+hay+'"><div style="display:grid;gap:8px;width:100%"><div class="row">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+pill(ai.statusLabel||'Free plan')+'</div><div class="muted">'+esc(g.memberCount||0)+' members - '+esc(ai.planLabel||'Free')+'</div>'+customFields(g)+grantButtons(g)+'</div></div>'}
       function readCustomBot(guildId){return{appId:(document.querySelector('[data-cb-app="'+guildId+'"]')||{}).value||'',publicKey:(document.querySelector('[data-cb-key="'+guildId+'"]')||{}).value||'',token:(document.querySelector('[data-cb-token="'+guildId+'"]')||{}).value||''}}
       async function grant(guildId,action,plan,customBot){await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action,plan,days:14,customBot})})}
       async function saveContent(patch){const cfg=(lastData&&lastData.botConfig)||{};await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({appealsChannelId:'',homeImages:Array.isArray(cfg.homeImages)?cfg.homeImages:[],tutorials:Array.isArray(cfg.tutorials)?cfg.tutorials:[],docsSections:Array.isArray(cfg.docsSections)?cfg.docsSections:[],siteAnnouncement:cfg.siteAnnouncement||{},...patch})})}
@@ -1045,6 +1161,7 @@ function createOwnerHtml(req = null) {
         renderRows('Live API requests',reqs.slice(0,12),r=>'<div class="item"><div><strong>'+esc(r.method+' '+r.path)+'</strong><div class="muted">'+esc(r.status)+' - '+esc(r.durationMs)+'ms - '+esc(r.userId||'anonymous')+'</div></div></div>')+
         renderRows('Staff audit',audit.slice(0,12),a=>'<div class="item"><div><strong>'+esc(a.action||'action')+'</strong><div class="muted">'+esc(a.status||'unknown')+' - '+esc(a.guildId||'global')+' - '+esc(String(a.createdAt||'').replace('T',' ').slice(0,19))+'</div></div></div>');
         guildList.innerHTML=(data.guilds||[]).map(guildCard).join('')||'<div class="muted">No guilds found.</div>';
+        filterOwnerCards();
         document.querySelectorAll('[data-plan]').forEach(b=>b.onclick=async()=>{try{await grant(b.dataset.guild,'set-plan',b.dataset.plan);note('Plan granted.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
         document.querySelectorAll('[data-custom]').forEach(b=>b.onclick=async()=>{try{const guildId=b.dataset.custom;await grant(guildId,'set-plan','custom',readCustomBot(guildId));note('Custom plan and branded bot details saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
         document.querySelectorAll('[data-trial]').forEach(b=>b.onclick=async()=>{try{await grant(b.dataset.guild,'start-trial',b.dataset.trial);note('Trial started.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
@@ -1057,7 +1174,7 @@ function createOwnerHtml(req = null) {
         const ownerAddCustomServer=document.getElementById('ownerAddCustomServer');if(ownerAddCustomServer)ownerAddCustomServer.onclick=async()=>{try{const guildId=String(manualCustomGuildId.value||'').trim();const customBot={botName:String(manualCustomBotName.value||'').trim(),appId:String(manualCustomAppId.value||'').trim(),publicKey:String(manualCustomPublicKey.value||'').trim(),token:String(manualCustomToken.value||'').trim(),statusText:String(manualCustomStatus.value||'').trim(),enabled:true};if(!/^\\d{17,20}$/.test(guildId))throw new Error('Enter a valid server ID.');if(!customBot.token)throw new Error('Bot token is required for a custom-only server.');ownerAddCustomServer.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action:'set-plan',plan:'custom',customBot})});note('Custom-only server saved. Invite only the branded bot to that server.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{ownerAddCustomServer.disabled=false}};
         const ownerSaveAnnouncement=document.getElementById('ownerSaveAnnouncement');if(ownerSaveAnnouncement)ownerSaveAnnouncement.onclick=async()=>{try{const siteAnnouncement={enabled:(ownerAnnouncementEnabled.value||'false')==='true',type:ownerAnnouncementType.value||'general',text:ownerAnnouncementText.value||'',ctaLabel:ownerAnnouncementCta.value||'',linkUrl:ownerAnnouncementUrl.value||''};await saveContent({siteAnnouncement});note('Announcement saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
         const ownerClearAnnouncement=document.getElementById('ownerClearAnnouncement');if(ownerClearAnnouncement)ownerClearAnnouncement.onclick=async()=>{try{await saveContent({siteAnnouncement:{enabled:false,type:'general',text:'',ctaLabel:'',linkUrl:''}});note('Announcement cleared.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
-        const ownerSaveHomeImages=document.getElementById('ownerSaveHomeImages');if(ownerSaveHomeImages)ownerSaveHomeImages.onclick=async()=>{try{const homeImages=[ownerHomeImg1.value,ownerHomeImg2.value,ownerHomeImg3.value].map(x=>String(x||'').trim()).filter(Boolean);await saveContent({homeImages});note('Home images saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
+        const ownerSaveHomeImages=document.getElementById('ownerSaveHomeImages');if(ownerSaveHomeImages)ownerSaveHomeImages.onclick=async()=>{try{const homeImages=[1,2,3].map(i=>({url:String((document.getElementById('ownerHomeImg'+i)||{}).value||'').trim(),title:String((document.getElementById('ownerHomeTitle'+i)||{}).value||'').trim(),body:String((document.getElementById('ownerHomeBody'+i)||{}).value||'').trim()})).filter(s=>s.url);await saveContent({homeImages});note('Home highlights saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
         const ownerClearHomeImages=document.getElementById('ownerClearHomeImages');if(ownerClearHomeImages)ownerClearHomeImages.onclick=async()=>{try{await saveContent({homeImages:[]});note('Home images cleared.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
         const ownerSaveTutorials=document.getElementById('ownerSaveTutorials');if(ownerSaveTutorials)ownerSaveTutorials.onclick=async()=>{try{await saveContent({tutorials:JSON.parse(ownerTutorialsJson.value||'[]')});note('Tutorials saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
         const ownerSaveDocs=document.getElementById('ownerSaveDocs');if(ownerSaveDocs)ownerSaveDocs.onclick=async()=>{try{await saveContent({docsSections:JSON.parse(ownerDocsJson.value||'[]')});note('Documentation saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
@@ -2115,6 +2232,23 @@ function sanitizeUrlList(input, max = 6) {
     return list.slice(0, Math.max(0, Number(max) || 0));
 }
 
+function normalizeHomeSlides(input, max = 6) {
+    const list = Array.isArray(input) ? input : [];
+    return list
+        .map((entry, index) => {
+            const raw = typeof entry === 'string' ? { url: entry } : (entry && typeof entry === 'object' ? entry : {});
+            const url = String(raw.url || raw.imageUrl || raw.src || '').trim();
+            if (!/^https?:\/\//i.test(url)) return null;
+            return {
+                url,
+                title: String(raw.title || raw.heading || `Highlight ${index + 1}`).trim().slice(0, 90),
+                body: String(raw.body || raw.text || raw.description || '').trim().slice(0, 260)
+            };
+        })
+        .filter(Boolean)
+        .slice(0, Math.max(0, Number(max) || 0));
+}
+
 function normalizeOpeningQuestionsInput(input, max = 5) {
     const rawList = Array.isArray(input)
         ? input
@@ -2295,6 +2429,7 @@ function enforceStaffRateLimit(req, actionKey, max = 8, windowMs = 60_000) {
 function describeGuildPermissionScan(guild) {
     const member = getBotGuildMember(guild);
     const permissions = member?.permissions;
+    if (permissions?.has?.(PermissionsBitField.Flags.Administrator)) return [];
     const missing = [];
     const required = [
         ['Manage Channels', PermissionsBitField.Flags.ManageChannels],
@@ -2337,6 +2472,7 @@ function getTicketCategoryPermissionProblems(guild, categoryIds = []) {
         const category = guild?.channels?.cache?.get?.(categoryId);
         if (!category || category.type !== ChannelType.GuildCategory) continue;
         const perms = category.permissionsFor(botMember);
+        if (perms?.has?.(PermissionsBitField.Flags.Administrator)) continue;
         const missing = required.filter(([, flag]) => !perms?.has?.(flag)).map(([label]) => label);
         if (missing.length) problems.push(`${category.name}: missing ${missing.join(', ')}`);
     }
@@ -2610,7 +2746,7 @@ async function getDashboardState(client, req = null) {
         })),
         botConfig: {
             appealsChannelId: guildConfig?.appealsChannelId || null,
-            homeImages: ownerView && Array.isArray(botConfig.homeImages) ? botConfig.homeImages : [],
+            homeImages: ownerView ? normalizeHomeSlides(botConfig.homeImages, 6) : [],
             tutorials: normalizeTutorials(botConfig.tutorials),
             docsSections: normalizeDocSections(botConfig.docsSections),
             siteAnnouncement: normalizeSiteAnnouncement(botConfig.siteAnnouncement),
@@ -2975,7 +3111,9 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             sendJson(res, 400, { error: 'Invalid guildId' });
             return true;
         }
-        if (!client?.guilds?.cache?.has?.(guildId)) {
+        const activeStorage = ticketStore.getActiveStorage();
+        const knownGuildIds = getKnownDashboardGuildIds(client, activeStorage);
+        if (!knownGuildIds.includes(guildId)) {
             sendJson(res, 404, { error: 'Guild not found' });
             return true;
         }
@@ -3135,7 +3273,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
                         id,
                         name: ai.customBot?.botName || `Custom server ${id}`,
                         memberCount: null,
-                        iconURL: null,
+                        iconURL: ai.customBot?.avatarUrl || null,
                         botInServer: false,
                         customOnly: true,
                         setupCompleted: Boolean(cfg?.setup?.completed),
@@ -3198,7 +3336,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
                         id,
                         name: ai.customBot?.botName || `Custom server ${id}`,
                         memberCount: null,
-                        iconURL: null,
+                        iconURL: ai.customBot?.avatarUrl || null,
                         botInServer: false,
                         customOnly: true,
                         aiAccess: ai
@@ -3211,7 +3349,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             permissionMatrix: getStaffPermissionMatrix(),
             backupStatus: megaBackup.getBackupStatus(),
             botConfig: {
-                homeImages: Array.isArray(activeStorage.botConfig?.homeImages) ? activeStorage.botConfig.homeImages : [],
+                homeImages: normalizeHomeSlides(activeStorage.botConfig?.homeImages, 6),
                 tutorials: normalizeTutorials(activeStorage.botConfig?.tutorials),
                 docsSections: normalizeDocSections(activeStorage.botConfig?.docsSections),
                 siteAnnouncement: normalizeSiteAnnouncement(activeStorage.botConfig?.siteAnnouncement)
@@ -3840,7 +3978,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         const ownerView = isStrictOwnerViewer(req);
         sendJson(res, 200, {
             appealsChannelId: botConfig.appealsChannelId || getDefaultAppealsChannelId(),
-            homeImages: ownerView && Array.isArray(botConfig.homeImages) ? botConfig.homeImages : [],
+            homeImages: ownerView ? normalizeHomeSlides(botConfig.homeImages, 6) : [],
             tutorials: ownerView ? normalizeTutorials(botConfig.tutorials) : [],
             docsSections: ownerView ? normalizeDocSections(botConfig.docsSections) : [],
             siteAnnouncement: ownerView ? normalizeSiteAnnouncement(botConfig.siteAnnouncement) : normalizeSiteAnnouncement({}),
@@ -3863,10 +4001,10 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             return true;
         }
 
-        const homeImages = sanitizeUrlList(body.homeImages, 6);
+        const homeImages = normalizeHomeSlides(body.homeImages, 6);
         const next = { appealsChannelId: appealsChannelId || getDefaultAppealsChannelId() };
         if (homeImages.length) next.homeImages = homeImages;
-        else if (body.homeImages) next.homeImages = [];
+        else if (Object.prototype.hasOwnProperty.call(body, 'homeImages')) next.homeImages = [];
         if (Object.prototype.hasOwnProperty.call(body, 'tutorials')) next.tutorials = normalizeTutorials(body.tutorials);
         if (Object.prototype.hasOwnProperty.call(body, 'docsSections')) next.docsSections = normalizeDocSections(body.docsSections);
         if (Object.prototype.hasOwnProperty.call(body, 'siteAnnouncement')) next.siteAnnouncement = normalizeSiteAnnouncement(body.siteAnnouncement);
@@ -4605,7 +4743,7 @@ function getAllowedDashboardPages(access = {}) {
     pages.add('/pricing');
     pages.add('/upgrade');
     if (access?.canFullDashboard || access?.isOwner) {
-        ['/overview', '/settings', '/availability', '/commands/ticket-types', '/panels', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/tutorials', '/pricing', '/upgrade', '/setup', '/controller', '/privacy', '/terms'].forEach(page => pages.add(page));
+        ['/overview', '/settings', '/availability', '/commands/ticket-types', '/panels', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/tutorials', '/pricing', '/upgrade', '/setup', '/controller', '/custom-bots', '/privacy', '/terms'].forEach(page => pages.add(page));
         return pages;
     }
     if (access?.canManageSettings) pages.add('/setup');
@@ -4907,6 +5045,22 @@ details.acc .acc-body{padding:12px 12px;border-top:1px solid rgba(255,255,255,.1
 .ms-chip{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;background:rgba(99,102,241,.24);border:1px solid rgba(129,140,248,.4);font-size:12px}
 .card{background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:14px;box-shadow:0 18px 50px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.12);backdrop-filter:blur(18px)}
 .preview-shell{border:1px solid rgba(255,255,255,.16);border-radius:14px;background:linear-gradient(180deg,rgba(20,23,33,.90),rgba(14,17,25,.86));padding:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.10)}
+.ai-panel{position:relative;overflow:hidden;border-color:color-mix(in srgb,var(--ac) 26%, rgba(255,255,255,.12))}
+.ai-panel:before{content:"";position:absolute;inset:-1px;background:radial-gradient(520px 220px at 8% 0%,color-mix(in srgb,var(--ac) 22%, transparent),transparent 62%);pointer-events:none;opacity:.9}
+.ai-panel > *{position:relative}
+.ai-status-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.ai-option{display:flex;align-items:flex-start;gap:12px;padding:14px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.025));box-shadow:inset 0 1px 0 rgba(255,255,255,.08);transition:border-color .18s ease,background .18s ease,transform .18s ease}
+.ai-option:hover{border-color:color-mix(in srgb,var(--ac) 34%, rgba(255,255,255,.12));background:linear-gradient(180deg,color-mix(in srgb,var(--ac) 10%, rgba(255,255,255,.04)),rgba(255,255,255,.025))}
+.ai-option input{width:auto;margin-top:4px;accent-color:var(--ac)}
+.ai-option strong{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ai-option .muted{margin-top:4px;line-height:1.45}
+.question-builder{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,.72fr);gap:12px;margin-top:8px}
+.question-list{display:grid;gap:8px}
+.question-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.question-preview{min-height:100%;border:1px solid rgba(255,255,255,.12);border-radius:14px;background:rgba(255,255,255,.035);padding:12px}
+.question-preview .preview-q{display:grid;gap:6px;margin-top:10px}
+.question-preview .preview-input{height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.18)}
+.question-limit{margin-top:8px}
 .main{padding:24px 26px}
 .topbar{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,rgba(7,7,10,.72),rgba(7,7,10,.30));backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.10);border-radius:18px;padding:14px 16px;margin-bottom:22px}
 .title{margin:0;font-size:26px;letter-spacing:.2px}
@@ -5457,7 +5611,7 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
   .item-top > strong,.item-top > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .muted,.help{overflow-wrap:anywhere}
   @media(max-width:1100px){.split{grid-template-columns:1fr}}
-  @media(max-width:900px){.main{padding:18px}.topbar{align-items:flex-start}.row{grid-template-columns:1fr}.split,#app > .split{grid-template-columns:1fr}.owner-summary{grid-template-columns:1fr}.topbar-right{width:100%;justify-content:stretch}.topbar-right > *{flex:1 1 180px}.pricing-card{min-height:0}}
+  @media(max-width:900px){.main{padding:18px}.topbar{align-items:flex-start}.row{grid-template-columns:1fr}.split,#app > .split,.question-builder{grid-template-columns:1fr}.owner-summary{grid-template-columns:1fr}.topbar-right{width:100%;justify-content:stretch}.topbar-right > *{flex:1 1 180px}.pricing-card{min-height:0}}
   @media(max-width:560px){.main{padding:12px}.card{padding:14px}.item-top{align-items:flex-start}.controller-actions,.row{display:grid;grid-template-columns:1fr;width:100%}.btn,.btn-soft,.btn-danger{width:100%}.topnav-menu{left:0;right:auto;min-width:min(320px,calc(100vw - 28px))}}
  </style></head>
 <body>
@@ -5545,17 +5699,17 @@ function renderExclusionList(){
     '</div>'+
    '</div>'+
 
-    '<div class="card">'+
+    '<div class="card ai-panel">'+
      '<h3>AI Features</h3>'+
-     '<div class="pill '+(ai.premiumActive?'ok':ai.trialActive?'warn':ai.expiredTrial?'danger':'')+'">'+esc(ai.statusLabel||'Free plan')+'</div>'+
+     '<div class="ai-status-row"><div class="pill '+(ai.premiumActive?'ok':ai.trialActive?'warn':ai.expiredTrial?'danger':'')+'">'+esc(ai.statusLabel||'Free plan')+'</div><span class="pill">'+esc(ai.planLabel||'Free')+'</span></div>'+
      '<p class="muted" style="margin-top:10px">'+(ai.hasAccess
         ? 'Control exactly how AI participates in this server. Changes apply to new ticket activity immediately.'
         : 'This server does not currently own AI features. Upgrade or ask the bot owner for access.')+'</p>'+
      '<div class="list" style="margin-top:12px">'+
-       '<label class="setup-toggle"><input id="aiFeatureEnabled" type="checkbox" '+(aiSettings.enabled?'checked':'')+' '+(!ai.hasAccess?'disabled':'')+' /><div><strong>AI enabled</strong><div class="muted">Master switch for every AI action in this server.</div></div></label>'+
-       '<label class="setup-toggle"><input id="aiAutoResolution" type="checkbox" '+(aiSettings.autoResolution?'checked':'')+' '+(aiResolutionDisabled?'disabled':'')+' /><div><strong>Auto-resolution</strong><span class="pill warn" style="margin-left:8px">Pro+</span><div class="muted">Searches Roblox Developer Forum results and uses them to suggest likely fixes.</div></div></label>'+
-       '<label class="setup-toggle"><input id="aiAutoLearn" type="checkbox" '+(aiSettings.autoLearn?'checked':'')+' '+(aiSubToggleDisabled?'disabled':'')+' /><div><strong>Auto-learn</strong><div class="muted">Uses your tags and model knowledge to offer a concise first response when a ticket opens.</div></div></label>'+
-       '<label class="setup-toggle"><input id="aiConversation" type="checkbox" '+(aiSettings.conversation?'checked':'')+' '+(aiConversationDisabled?'disabled':'')+' /><div><strong>AI Conversation</strong><span class="pill warn" style="margin-left:8px">Custom</span><div class="muted">The AI asks follow-up questions, keeps short text context, and stores image summaries instead of images.</div></div></label>'+
+       '<label class="ai-option"><input id="aiFeatureEnabled" type="checkbox" '+(aiSettings.enabled?'checked':'')+' '+(!ai.hasAccess?'disabled':'')+' /><div><strong>AI enabled</strong><div class="muted">Master switch for every AI action in this server.</div></div></label>'+
+       '<label class="ai-option"><input id="aiAutoResolution" type="checkbox" '+(aiSettings.autoResolution?'checked':'')+' '+(aiResolutionDisabled?'disabled':'')+' /><div><strong>Auto-resolution <span class="pill warn">Pro+</span></strong><div class="muted">Searches Roblox Developer Forum results and uses them to suggest likely fixes.</div></div></label>'+
+       '<label class="ai-option"><input id="aiAutoLearn" type="checkbox" '+(aiSettings.autoLearn?'checked':'')+' '+(aiSubToggleDisabled?'disabled':'')+' /><div><strong>Auto-learn</strong><div class="muted">Uses your tags and model knowledge to offer a concise first response when a ticket opens.</div></div></label>'+
+       '<label class="ai-option"><input id="aiConversation" type="checkbox" '+(aiSettings.conversation?'checked':'')+' '+(aiConversationDisabled?'disabled':'')+' /><div><strong>AI Conversation <span class="pill warn">Custom</span></strong><div class="muted">The AI asks follow-up questions, keeps short text context, and stores image summaries instead of images.</div></div></label>'+
      '</div>'+
      '<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">'+
        (ai.hasAccess?'<button id="saveAiSettings" class="btn" type="button" style="width:auto">Save AI Settings</button>':'<button id="aiUpsell" class="btn-soft" type="button">Learn About AI Access</button>')+
@@ -5689,8 +5843,15 @@ function renderAvailability(){const types=(state.ticketTypes||[]);const byKey=ne
       '<div class="help">Comma or newline separated.</div>'+
 
       '<label>Opening Questions</label>'+
-      '<textarea id="ttOpenQuestions" placeholder="Describe your issue and what you need from us."></textarea>'+
-      '<div class="help">One question per line. Free servers can use 1 question; paid servers can use up to '+questionLimit+' questions. If file uploads are enabled, Discord leaves room for up to 4 questions.</div>'+
+      '<textarea id="ttOpenQuestions" style="display:none"></textarea>'+
+      '<div class="question-builder">'+
+        '<div>'+
+          '<div id="ttQuestionList" class="question-list"></div>'+
+          '<div class="row" style="margin-top:10px"><button id="addOpenQuestion" type="button" class="btn-soft" style="width:auto">+ Add question</button></div>'+
+          '<div id="ttQuestionLimit" class="help question-limit">Free servers can use 1 question; paid servers can use up to '+questionLimit+' questions. File uploads leave room for up to 4 questions.</div>'+
+        '</div>'+
+        '<div id="ttQuestionPreview" class="question-preview"></div>'+
+      '</div>'+
 
       '<label>Support Team Roles</label>'+
       roleSelect([],'ttRoles')+
@@ -5990,12 +6151,16 @@ function renderDocs(){
 function selectedRoles(id){return Array.from(document.querySelectorAll('input[data-ms-check="'+id+'"]:checked')).map(el=>el.value)}
 function setRoleSelection(id,values){const selectedSet=new Set((values||[]).map(String));document.querySelectorAll('input[data-ms-check="'+id+'"]').forEach(el=>{el.checked=selectedSet.has(el.value)});updateRoleSelectionUi(id)}
 function updateRoleSelectionUi(id){const values=selectedRoles(id);const count=document.getElementById(id+'Count');if(count)count.textContent=values.length+' selected';const chipsEl=document.getElementById(id+'Chips');if(chipsEl){const roleMap=new Map((state.roleCatalog||[]).map(r=>[r.id,r]));chipsEl.innerHTML=values.map(v=>roleMap.get(v)).filter(Boolean).map(r=>'<span class="ms-chip">@'+esc(r.name)+'</span>').join('')}}
+function questionLimit(){const paid=Boolean(state&&state.aiAccess&&state.aiAccess.hasAccess);const allowFiles=document.getElementById('ttAllowFiles');const base=paid?5:1;return allowFiles&&allowFiles.checked?Math.min(base,4):base}
+function readOpenQuestions(){return Array.from(document.querySelectorAll('.ttQuestionInput')).map(el=>String(el.value||'').trim()).filter(Boolean).slice(0,questionLimit())}
+function syncOpenQuestions(){const values=readOpenQuestions();const hidden=document.getElementById('ttOpenQuestions');if(hidden)hidden.value=values.join('\n');const limit=questionLimit();const hint=document.getElementById('ttQuestionLimit');if(hint)hint.textContent=(state&&state.aiAccess&&state.aiAccess.hasAccess?'Paid limit':'Free limit')+': '+limit+' opening question'+(limit===1?'':'s')+(document.getElementById('ttAllowFiles')?.checked?' when file uploads are enabled.':'.');const add=document.getElementById('addOpenQuestion');if(add)add.disabled=document.querySelectorAll('.ttQuestionInput').length>=limit;const preview=document.getElementById('ttQuestionPreview');if(preview){const rows=values.length?values:[];preview.innerHTML='<strong>Opening Modal Preview</strong><div class="muted" style="margin-top:6px">Users will answer these before the ticket opens.</div>'+(rows.length?rows.map((q,i)=>'<div class="preview-q"><label>Question '+(i+1)+'</label><div class="muted">'+esc(q)+'</div><div class="preview-input"></div></div>').join(''):'<div class="muted" style="margin-top:10px">Add a question to preview the modal.</div>')}}
+function renderQuestionBuilder(values){const list=document.getElementById('ttQuestionList');if(!list)return;const cleaned=(Array.isArray(values)?values:[]).map(v=>String((v&&v.label)||v||'').trim()).filter(Boolean).slice(0,questionLimit());const rows=cleaned.length?cleaned:['Describe your issue and what you need from us.'];list.innerHTML=rows.map((q,i)=>'<div class="question-row"><input class="ttQuestionInput" value="'+esc(q)+'" maxlength="45" placeholder="Question '+(i+1)+'" /><button type="button" class="btn-soft removeQuestion" style="width:auto">Remove</button></div>').join('');list.querySelectorAll('.ttQuestionInput').forEach(input=>input.oninput=syncOpenQuestions);list.querySelectorAll('.removeQuestion').forEach(btn=>btn.onclick=()=>{btn.closest('.question-row')?.remove();if(!list.querySelector('.ttQuestionInput'))renderQuestionBuilder(['Describe your issue and what you need from us.']);else syncOpenQuestions()});syncOpenQuestions()}
 function closePickers(){document.querySelectorAll('.custom-select.open').forEach(el=>el.classList.remove('open'));document.querySelectorAll('.role-ms.open').forEach(el=>el.classList.remove('open'));document.querySelectorAll('.topnav.open').forEach(el=>el.classList.remove('open'))}
 function placeDropdown(wrap){if(!wrap)return;wrap.classList.remove('drop-up');requestAnimationFrame(()=>{const menu=wrap.querySelector('.cs-menu,.ms-menu');if(!menu)return;const r=menu.getBoundingClientRect();if(r.bottom>window.innerHeight-18&&wrap.getBoundingClientRect().top>r.height+18)wrap.classList.add('drop-up')})}
 function wireRoleMultiSelect(id){const wrap=document.querySelector('[data-role-ms="'+id+'"]');if(!wrap)return;const trigger=wrap.querySelector('[data-ms-trigger="'+id+'"]');const search=wrap.querySelector('[data-ms-search="'+id+'"]');const allBtn=wrap.querySelector('.select-all[data-select="'+id+'"]');const clearBtn=wrap.querySelector('.clear-all[data-select="'+id+'"]');if(trigger)trigger.onclick=(e)=>{e.stopPropagation();const next=!wrap.classList.contains('open');closePickers();if(next){wrap.classList.add('open');placeDropdown(wrap);if(search)search.focus();}};if(search)search.oninput=()=>{const q=search.value.trim().toLowerCase();wrap.querySelectorAll('[data-ms-item="'+id+'"]').forEach(item=>{item.style.display=!q||String(item.getAttribute('data-name')||'').includes(q)?'flex':'none'});placeDropdown(wrap)};if(allBtn)allBtn.onclick=()=>{wrap.querySelectorAll('input[data-ms-check="'+id+'"]').forEach(el=>{el.checked=true});updateRoleSelectionUi(id)};if(clearBtn)clearBtn.onclick=()=>{wrap.querySelectorAll('input[data-ms-check="'+id+'"]').forEach(el=>{el.checked=false});updateRoleSelectionUi(id)};wrap.querySelectorAll('input[data-ms-check="'+id+'"]').forEach(el=>{el.onchange=()=>updateRoleSelectionUi(id)});updateRoleSelectionUi(id)}
 function wireChannelSelect(id,placeholder){const wrap=document.querySelector('[data-cs="'+id+'"]');if(!wrap)return;const trigger=wrap.querySelector('[data-cs-trigger="'+id+'"]');const hidden=document.getElementById(id);const label=document.getElementById(id+'Label');const search=wrap.querySelector('[data-cs-search="'+id+'"]');const opts=Array.from(wrap.querySelectorAll('[data-cs-opt="'+id+'"]'));if(trigger)trigger.onclick=(e)=>{e.stopPropagation();const next=!wrap.classList.contains('open');closePickers();if(next){wrap.classList.add('open');placeDropdown(wrap);if(search)search.focus();}};if(search)search.oninput=()=>{const q=search.value.trim().toLowerCase();opts.forEach(btn=>{btn.style.display=!q||btn.textContent.toLowerCase().includes(q)?'flex':'none'});placeDropdown(wrap)};opts.forEach(btn=>{btn.onclick=()=>{const v=btn.getAttribute('data-value')||'';if(hidden)hidden.value=v;if(label)label.textContent=channelLabel(v,placeholder);opts.forEach(o=>o.classList.toggle('active',o===btn));wrap.classList.remove('open')}})}
 function wireCategorySelect(id,placeholder){const wrap=document.querySelector('[data-cs="'+id+'"]');if(!wrap)return;const trigger=wrap.querySelector('[data-cs-trigger="'+id+'"]');const hidden=document.getElementById(id);const label=document.getElementById(id+'Label');const search=wrap.querySelector('[data-cs-search="'+id+'"]');const opts=Array.from(wrap.querySelectorAll('[data-cs-opt="'+id+'"]'));if(trigger)trigger.onclick=(e)=>{e.stopPropagation();const next=!wrap.classList.contains('open');closePickers();if(next){wrap.classList.add('open');placeDropdown(wrap);if(search)search.focus();}};if(search)search.oninput=()=>{const q=search.value.trim().toLowerCase();opts.forEach(btn=>{btn.style.display=!q||btn.textContent.toLowerCase().includes(q)?'flex':'none'});placeDropdown(wrap)};opts.forEach(btn=>{btn.onclick=()=>{const v=btn.getAttribute('data-value')||'';if(hidden)hidden.value=v;if(label)label.textContent=categoryLabel(v,placeholder);opts.forEach(o=>o.classList.toggle('active',o===btn));wrap.classList.remove('open')}})}
-function fillType(name){const t=state.ticketTypes.find(x=>x.name===name);if(!t)return;ttName.value=t.name||'';ttEmoji.value=t.emoji||'';ttColor.value=t.embedColor||'#5865F2';ttFormat.value=t.format||'';const catEl=document.getElementById('ttCategory');if(catEl)catEl.value=t.categoryId||'';const catLabel=document.getElementById('ttCategoryLabel');if(catLabel)catLabel.textContent=categoryLabel((catEl&&catEl.value)||'', 'Use default ticket category');ttAliases.value=(t.aliases||[]).join(', ');const qEl=document.getElementById('ttOpenQuestions');if(qEl)qEl.value=(Array.isArray(t.openQuestions)?t.openQuestions:[]).map(q=>String((q&&q.label)||q||'').trim()).filter(Boolean).join('\\n');ttOpenTitle.value=(t.openEmbed&&t.openEmbed.title)||'';ttOpenDescription.value=(t.openEmbed&&t.openEmbed.description)||'';ttRequireReason.checked=t.requireReason!==false;ttAllowFiles.checked=t.allowAttachments!==false;setRoleSelection('ttRoles',t.roleIds||[])}
+function fillType(name){const t=state.ticketTypes.find(x=>x.name===name);if(!t)return;ttName.value=t.name||'';ttEmoji.value=t.emoji||'';ttColor.value=t.embedColor||'#5865F2';ttFormat.value=t.format||'';const catEl=document.getElementById('ttCategory');if(catEl)catEl.value=t.categoryId||'';const catLabel=document.getElementById('ttCategoryLabel');if(catLabel)catLabel.textContent=categoryLabel((catEl&&catEl.value)||'', 'Use default ticket category');ttAliases.value=(t.aliases||[]).join(', ');ttRequireReason.checked=t.requireReason!==false;ttAllowFiles.checked=t.allowAttachments!==false;renderQuestionBuilder(Array.isArray(t.openQuestions)?t.openQuestions:[]);ttOpenTitle.value=(t.openEmbed&&t.openEmbed.title)||'';ttOpenDescription.value=(t.openEmbed&&t.openEmbed.description)||'';setRoleSelection('ttRoles',t.roleIds||[])}
 function fillTag(name){const t=state.tags.find(x=>x.name===name);if(!t)return;tagName.value=t.name||'';tagKind.value=t.kind||'suggestion';tagTitle.value=t.title||'';tagDesc.value=t.description||'';tagKeys.value=(t.keywords||[]).join(', ')}
 function fillTeam(name){const t=state.supportTeams.find(x=>x.name===name);if(!t)return;stName.value=t.name||'';stEmoji.value=t.emoji||'';setRoleSelection('stRoles',(t.roleIds||(t.roleId?[t.roleId]:[]))||[])}
 function getBrandingTemplates(){const box=document.getElementById('brandingTemplates');if(!box)return {};try{const parsed=JSON.parse(box.value);return parsed&&typeof parsed==='object'?parsed:{};}catch{return {}}}
@@ -6159,9 +6324,11 @@ function wire(){
  const transcriptSearch=document.getElementById('transcriptSearch');if(transcriptSearch)transcriptSearch.oninput=()=>{const q=(transcriptSearch.value||'').toLowerCase().trim();document.querySelectorAll('.transcriptItem').forEach(it=>{const hay=String(it.getAttribute('data-hay')||'');const show=!q||hay.includes(q);it.style.display=show?'':'none'})};
   const saveTeam=document.getElementById('saveTeam');if(saveTeam)saveTeam.onclick=async()=>{try{await api('/api/support-team/upsert',{method:'POST',body:JSON.stringify({guildId:state.guildId,name:stName.value.trim(),emoji:stEmoji.value.trim(),roleIds:selectedRoles('stRoles')})});ui.selectedTeam=stName.value.trim();saveUi();note('Support team saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
 const resetTeam=document.getElementById('resetTeam');if(resetTeam)resetTeam.onclick=()=>{stName.value='';stEmoji.value='';setRoleSelection('stRoles',[])};
-  const saveType=document.getElementById('saveType');if(saveType)saveType.onclick=async()=>{try{await api('/api/ticket-type/upsert',{method:'POST',body:JSON.stringify({guildId:state.guildId,name:ttName.value.trim(),emoji:ttEmoji.value.trim(),embedColor:ttColor.value.trim(),format:ttFormat.value.trim(),categoryId:(document.getElementById('ttCategory')?.value||'').trim(),aliases:ttAliases.value,roleIds:selectedRoles('ttRoles'),openQuestions:(document.getElementById('ttOpenQuestions')?.value||''),openTitle:ttOpenTitle.value.trim(),openDescription:ttOpenDescription.value,requireReason:ttRequireReason.checked,allowAttachments:ttAllowFiles.checked})});ui.selectedType=ttName.value.trim();saveUi();note('Ticket type saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+  const saveType=document.getElementById('saveType');if(saveType)saveType.onclick=async()=>{try{syncOpenQuestions();await api('/api/ticket-type/upsert',{method:'POST',body:JSON.stringify({guildId:state.guildId,name:ttName.value.trim(),emoji:ttEmoji.value.trim(),embedColor:ttColor.value.trim(),format:ttFormat.value.trim(),categoryId:(document.getElementById('ttCategory')?.value||'').trim(),aliases:ttAliases.value,roleIds:selectedRoles('ttRoles'),openQuestions:readOpenQuestions(),openTitle:ttOpenTitle.value.trim(),openDescription:ttOpenDescription.value,requireReason:ttRequireReason.checked,allowAttachments:ttAllowFiles.checked})});ui.selectedType=ttName.value.trim();saveUi();note('Ticket type saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
   const ttFormatPreset=document.getElementById('ttFormatPreset');if(ttFormatPreset)ttFormatPreset.onchange=()=>{const v=ttFormatPreset.value||'';if(v&&document.getElementById('ttFormat'))document.getElementById('ttFormat').value=v};
-  const resetType=document.getElementById('resetType');if(resetType)resetType.onclick=()=>{['ttName','ttEmoji','ttFormat','ttAliases','ttOpenQuestions','ttOpenTitle','ttOpenDescription'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});const catEl=document.getElementById('ttCategory');if(catEl)catEl.value='';const catLabel=document.getElementById('ttCategoryLabel');if(catLabel)catLabel.textContent=categoryLabel('', 'Use default ticket category');ttColor.value='#5865F2';ttRequireReason.checked=true;ttAllowFiles.checked=true;setRoleSelection('ttRoles',[])};
+  const addOpenQuestion=document.getElementById('addOpenQuestion');if(addOpenQuestion)addOpenQuestion.onclick=()=>{const list=document.getElementById('ttQuestionList');if(!list||list.querySelectorAll('.ttQuestionInput').length>=questionLimit())return;const values=Array.from(list.querySelectorAll('.ttQuestionInput')).map(input=>input.value).filter(Boolean);values.push('New question');renderQuestionBuilder(values)};
+  const ttAllowFilesEl=document.getElementById('ttAllowFiles');if(ttAllowFilesEl)ttAllowFilesEl.onchange=()=>renderQuestionBuilder(readOpenQuestions());
+  const resetType=document.getElementById('resetType');if(resetType)resetType.onclick=()=>{['ttName','ttEmoji','ttFormat','ttAliases','ttOpenQuestions','ttOpenTitle','ttOpenDescription'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});const catEl=document.getElementById('ttCategory');if(catEl)catEl.value='';const catLabel=document.getElementById('ttCategoryLabel');if(catLabel)catLabel.textContent=categoryLabel('', 'Use default ticket category');ttColor.value='#5865F2';ttRequireReason.checked=true;ttAllowFiles.checked=true;renderQuestionBuilder(['Describe your issue and what you need from us.']);setRoleSelection('ttRoles',[])};
 const saveBranding=document.getElementById('saveBranding');if(saveBranding)saveBranding.onclick=async()=>{try{const parsed=getBrandingTemplates();await api('/api/config/embeds',{method:'POST',body:JSON.stringify({embedTemplates:parsed})});note('Branding templates saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
 const saveServerBranding=document.getElementById('saveServerBranding');if(saveServerBranding)saveServerBranding.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,branding:{botName:(document.getElementById('serverBrandName')?.value||'').trim(),avatarUrl:(document.getElementById('serverBrandAvatar')?.value||'').trim(),accentColor:(document.getElementById('serverBrandAccent')?.value||'').trim(),footerText:(document.getElementById('serverBrandFooter')?.value||'').trim()},setup:{step:4}})});note('Server branding saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
 const applyBrandingTemplate=document.getElementById('applyBrandingTemplate');if(applyBrandingTemplate)applyBrandingTemplate.onclick=()=>applyBrandingFormToTemplate();
@@ -6208,6 +6375,7 @@ if(document.getElementById('panelPreviewTitle'))renderPanelPreview();
       },
       initialPick:()=>{if(ui.selectedType){fillType(ui.selectedType)}}
     });
+    if(!ui.selectedType&&document.getElementById('ttQuestionList'))renderQuestionBuilder(['Describe your issue and what you need from us.']);
   }
 
   if(currentPath==='/commands/tag'){
@@ -6435,6 +6603,21 @@ function startDashboard(client, customBotManager = null) {
                     return;
                 }
                 sendHtml(res, 200, createControllerHtml(req));
+                return;
+            }
+
+            if (pathname === '/custom-bots' || pathname === '/custom-bots/') {
+                if (hasDiscordOAuthConfigured() && !getDashboardSessionUserId(req)) {
+                    const next = encodeURIComponent('/custom-bots' + (url.search || ''));
+                    res.writeHead(302, { Location: `/login?next=${next}`, 'Cache-Control': 'no-store' });
+                    res.end();
+                    return;
+                }
+                if (!isStrictOwnerViewer(req)) {
+                    sendHtml(res, 403, '<h1>403</h1><p>Owner user only.</p>');
+                    return;
+                }
+                sendHtml(res, 200, createCustomBotsHtml(req));
                 return;
             }
 

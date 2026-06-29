@@ -144,14 +144,14 @@ body.home[data-theme="hacker"] {
 .hero {
     max-width: 1100px;
     margin: 0 auto;
-    padding: 40px 22px 28px;
+    padding: 58px 22px 42px;
 }
 
 .hero-card {
     background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 18px;
-    padding: 28px 22px;
+    padding: clamp(28px, 4vw, 46px);
     box-shadow: 0 20px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(96, 165, 250, 0.10) inset;
     position: relative;
     overflow: hidden;
@@ -202,13 +202,13 @@ body.home[data-theme="hacker"] {
     max-width: 720px;
 }
 
-.cta { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+.cta { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
 
 .quick-access {
     display: grid;
     grid-template-columns: repeat(1, minmax(0, 1fr));
     gap: 10px;
-    margin-top: 18px;
+    margin-top: 26px;
 }
 @media (min-width: 760px) {
     .quick-access { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -290,7 +290,7 @@ body.home[data-theme="hacker"] {
     display: grid;
     grid-template-columns: repeat(1, minmax(0, 1fr));
     gap: 12px;
-    margin-top: 14px;
+    margin-top: 22px;
 }
 @media (min-width: 820px) {
     .feature-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -307,21 +307,42 @@ body.home[data-theme="hacker"] {
 .feature-desc { color: var(--muted); margin-top: 6px; font-size: 14px; line-height: 1.5; }
 
 .gallery {
-    margin-top: 18px;
-    padding: 18px 2px 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+    margin-top: 42px;
+    padding: 30px 0 0;
+}
+.gallery-copy {
+    align-self: center;
 }
 .gallery h2 {
-    margin: 0 0 12px;
-    font-size: 18px;
+    margin: 14px 0 10px;
+    font-size: clamp(26px, 4vw, 42px);
+    line-height: 1.05;
     letter-spacing: -0.01em;
+}
+.gallery-copy p {
+    margin: 0;
+    max-width: 560px;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.7;
 }
 .gallery-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 10px;
 }
 @media (min-width: 820px) {
-    .gallery-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .gallery {
+        grid-template-columns: minmax(260px, 0.75fr) minmax(0, 1.25fr);
+        align-items: center;
+    }
+    .gallery-grid {
+        grid-column: 2;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 .shot {
     display: block;
@@ -341,7 +362,7 @@ body.home[data-theme="hacker"] {
     box-shadow: 0 22px 86px rgba(0,0,0,0.32), 0 0 0 2px rgba(96,165,250,0.18) inset;
 }
 .featured-shot {
-    margin-bottom: 12px;
+    margin-bottom: 0;
 }
 .featured-shot img {
     height: clamp(220px, 34vw, 420px);
@@ -357,22 +378,68 @@ body.home[data-theme="hacker"] {
     height: 160px;
     object-fit: cover;
 }
+.home-shot-pick {
+    display: grid;
+    grid-template-columns: 74px 1fr;
+    align-items: center;
+    text-align: left;
+}
+.home-shot-pick img {
+    height: 74px;
+}
+.home-shot-pick span {
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 750;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+@media (min-width: 820px) {
+    .featured-shot { grid-column: 2; grid-row: 1; }
+    .home-shot-pick { grid-template-columns: 1fr; }
+    .home-shot-pick img { height: 110px; }
+    .home-shot-pick span { padding: 10px 12px 12px; }
+}
 @media (max-width: 420px) {
     .shot img { height: 140px; }
+    .home-shot-pick img { height: 74px; }
 }
 
 .footer {
     max-width: 1100px;
     margin: 0 auto;
-    padding: 18px 22px 26px;
+    padding: 32px 22px 44px;
 }
 .footer-inner {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    border-top: 1px solid rgba(255,255,255,0.10);
+    padding-top: 22px;
+}
+.footer-links {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
     gap: 10px;
     flex-wrap: wrap;
-    border-top: 1px solid rgba(255,255,255,0.10);
-    padding-top: 16px;
+}
+.footer-links a {
+    color: var(--text);
+    text-decoration: none;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    padding: 9px 12px;
+    border-radius: 12px;
+}
+.footer-links a:hover {
+    border-color: rgba(96,165,250,0.30);
+    background: rgba(255,255,255,0.07);
+}
+@media (min-width: 760px) {
+    .footer-inner {
+        grid-template-columns: 1fr auto;
+        align-items: center;
+    }
 }
 .muted { color: var(--muted); font-size: 13px; }
