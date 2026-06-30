@@ -192,6 +192,91 @@ function createDocumentTitle(pageName = 'Home') {
     return `${BRAND_NAME} - ${clean}`;
 }
 
+function absolutePublicUrl(pathname = '/') {
+    const base = String(getPublicBaseUrl() || '').trim();
+    const pathValue = String(pathname || '/').trim() || '/';
+    if (/^https?:\/\//i.test(pathValue)) return pathValue;
+    if (/^https?:\/\//i.test(base)) {
+        try { return new URL(pathValue, base.endsWith('/') ? base : `${base}/`).toString(); } catch {}
+    }
+    return pathValue.startsWith('/') ? pathValue : `/${pathValue}`;
+}
+
+function richLinkMeta(options = {}) {
+    const title = String(options.title || createDocumentTitle('Home')).trim();
+    const description = String(options.description || 'Run Discord ticket support, staff workflows, transcripts, and custom branded bots from one clean dashboard.').trim();
+    const pathname = String(options.path || '/').trim() || '/';
+    const imagePath = String(options.image || '/assets/sync.png').trim() || '/assets/sync.png';
+    const url = absolutePublicUrl(pathname);
+    const imageUrl = absolutePublicUrl(imagePath);
+    return [
+        `<meta name="description" content="${escapeHtml(description)}" />`,
+        '<meta name="robots" content="index,follow" />',
+        `<meta property="og:type" content="${escapeHtml(options.type || 'website')}" />`,
+        `<meta property="og:site_name" content="${escapeHtml(BRAND_NAME)}" />`,
+        `<meta property="og:title" content="${escapeHtml(title)}" />`,
+        `<meta property="og:description" content="${escapeHtml(description)}" />`,
+        `<meta property="og:url" content="${escapeHtml(url)}" />`,
+        `<meta property="og:image" content="${escapeHtml(imageUrl)}" />`,
+        '<meta name="twitter:card" content="summary_large_image" />',
+        `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
+        `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
+        `<meta name="twitter:image" content="${escapeHtml(imageUrl)}" />`,
+        '<meta name="theme-color" content="#38bdf8" />'
+    ].join('\n  ');
+}
+
+function privatePageMeta() {
+    return '<meta name="robots" content="noindex,nofollow" />';
+}
+
+function publicMetaForPath(pathname = '/') {
+    const pathKey = String(pathname || '/').replace(/\/+$/, '') || '/';
+    const meta = {
+        '/': {
+            title: createDocumentTitle('Discord Ticket Support'),
+            description: 'Run Discord ticket support, staff workflows, transcripts, AI support tools, and custom branded bots from one clean dashboard.',
+            path: '/'
+        },
+        '/home': {
+            title: createDocumentTitle('Discord Ticket Support'),
+            description: 'Run Discord ticket support, staff workflows, transcripts, AI support tools, and custom branded bots from one clean dashboard.',
+            path: '/home'
+        },
+        '/pricing': {
+            title: createDocumentTitle('Pricing'),
+            description: 'Compare Free, Plus, Pro, and Enterprise plans for eazyDesk Discord ticket support and custom branded bot operations.',
+            path: '/pricing'
+        },
+        '/upgrade': {
+            title: createDocumentTitle('Upgrade'),
+            description: 'Choose the next eazyDesk support tier for statistics, automation, AI tools, priority support, or branded custom bot runtime.',
+            path: '/upgrade'
+        },
+        '/documentation': {
+            title: createDocumentTitle('Documentation'),
+            description: 'Read eazyDesk setup notes, ticket flow guidance, transcript details, custom bot notes, and AI feature controls.',
+            path: '/documentation'
+        },
+        '/tutorials': {
+            title: createDocumentTitle('Tutorials'),
+            description: 'Browse eazyDesk tutorials for ticket panels, staff handoffs, transcripts, and queue health workflows.',
+            path: '/tutorials'
+        },
+        '/privacy': {
+            title: createDocumentTitle('Privacy Policy'),
+            description: 'Review how eazyDesk handles dashboard sessions, Discord IDs, ticket metadata, transcripts, and configuration data.',
+            path: '/privacy'
+        },
+        '/terms': {
+            title: createDocumentTitle('Terms of Service'),
+            description: 'Read the eazyDesk terms for Discord ticket support, dashboard usage, subscriptions, and custom branded bots.',
+            path: '/terms'
+        }
+    };
+    return meta[pathKey] ? richLinkMeta(meta[pathKey]) : privatePageMeta();
+}
+
 function dashboardIcon(name) {
     const icons = {
         servers: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M4 12h16M4 17.5h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
@@ -572,6 +657,7 @@ function createHomeHtml(options = {}) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>${createDocumentTitle('Home')}</title>
+  ${publicMetaForPath(options.path || '/')}
   <link rel="icon" href="/assets/sync.png" />
   <style>${getHomeCss()}</style>
 </head>
@@ -694,7 +780,7 @@ function createHomeHtml(options = {}) {
 </html>`;
 }
 
-function baseDashboardPage({ title, body, script = '', ownerView = false, staffView = false, showStaffLink = false }) {
+function baseDashboardPage({ title, body, script = '', ownerView = false, staffView = false, showStaffLink = false, meta = null }) {
     const siteAnnouncement = normalizeSiteAnnouncement(ticketStore.getBotConfig()?.siteAnnouncement);
     const announcementLabel = siteAnnouncement.type === 'promotional' ? 'Promotion' : siteAnnouncement.type === 'warning' ? 'Warning' : 'Announcement';
     const announcementHtml = siteAnnouncement.enabled
@@ -836,6 +922,7 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>${createDocumentTitle(title || 'Dashboard')}</title>
+  ${meta || privatePageMeta()}
   <link rel="icon" href="/assets/sync.png" />
   <style>${css}</style>
 </head>
@@ -924,11 +1011,11 @@ function createControllerHtml(req = null) {
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       const icons={open:${JSON.stringify(dashboardIcon('open'))},setup:${JSON.stringify(dashboardIcon('setup'))},tickets:${JSON.stringify(dashboardIcon('tickets'))},owner:${JSON.stringify(dashboardIcon('owner'))},restart:${JSON.stringify(dashboardIcon('restart'))},bot:${JSON.stringify(dashboardIcon('embed'))}};
       function iconMarkup(g){return g.iconURL?'<span class=\"controller-icon\"><img src=\"'+esc(g.iconURL)+'\" alt=\"\" /></span>':'<span class=\"controller-icon\">'+icons.bot+'</span>'}
-      function customBotBlock(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};if(!ai.isCustom&&!bot.tokenConfigured)return '';const on=!!bot.enabled&&!!bot.tokenConfigured;const status=bot.runtimeStatus||(on?'starting':'paused');const sync=bot.lastCommandSyncAt?(' - '+esc(bot.lastCommandSyncCount||0)+' command(s) synced'):'';return '<div class=\"custom-bot-strip\"><div><strong>Custom branded bot</strong><div class=\"muted\">'+(bot.tokenConfigured?'Token saved':'No token saved')+sync+(bot.lastError?' - '+esc(bot.lastError):'')+'</div></div><div class=\"controller-actions\"><span class=\"pill\">'+esc(status)+'</span><button class=\"btn '+(on?'warning':'primary')+'\" '+(!bot.tokenConfigured?'disabled':'')+' data-custom-bot-toggle=\"'+esc(g.id)+'\" data-next=\"'+(on?'false':'true')+'\"><span class=\"btn-icon\">'+icons.bot+'</span><span>'+(on?'Turn Off':'Turn On')+'</span></button><button class=\"btn subtle\" '+(!bot.tokenConfigured?'disabled':'')+' data-custom-bot-sync=\"'+esc(g.id)+'\"><span>Sync Commands</span></button></div></div>'}
+      function customBotBlock(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};if(!ai.isCustom&&!bot.tokenConfigured)return '';const on=!!bot.enabled&&!!bot.tokenConfigured;const status=bot.runtimeStatus||(on?'starting':'paused');const sync=bot.lastCommandSyncAt?(' - '+esc(bot.lastCommandSyncCount||0)+' command(s) synced'):'';return '<div class=\"custom-bot-strip\"><div><strong>Custom branded bot</strong><div class=\"muted\">'+(bot.tokenConfigured?'Token saved':'No token saved')+sync+(bot.lastError?' - '+esc(bot.lastError):'')+'</div></div><div class=\"controller-actions\"><span class=\"pill\">'+esc(status)+'</span><a class=\"btn subtle\" href=\"/custom-bots\"><span class=\"btn-icon\">'+icons.bot+'</span><span>Custom Bots</span></a></div></div>'}
       function filterCards(){const q=String(search&&search.value||'').trim().toLowerCase();let shown=0;for(const card of document.querySelectorAll('[data-server-card]')){const match=!q||String(card.getAttribute('data-hay')||'').includes(q);card.style.display=match?'':'none';if(match)shown+=1}if(count)count.textContent=shown+' shown'}
       if(search)search.oninput=filterCards;
       function item(g){const status=g.customOnly?'<span class=\"pill\">Custom-only</span>':(g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Setup step '+esc(g.setupStep||1)+'</span>');const plan=(g.aiAccess&&g.aiAccess.statusLabel)||'Free plan';const hay=esc([g.name,g.id,plan,g.customOnly?'custom-only':'public-bot'].join(' ').toLowerCase());const actions=[];if(g.botInServer||g.customOnly){actions.push('<a class=\"btn primary\" href=\"/overview?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.open+'</span><span>Dashboard</span></a>');if(!g.setupCompleted)actions.push('<a class=\"btn subtle\" href=\"/setup?guild='+encodeURIComponent(g.id)+'&page=1\"><span class=\"btn-icon\">'+icons.setup+'</span><span>Setup</span></a>');actions.push('<a class=\"btn subtle\" href=\"/tickets?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.tickets+'</span><span>Tickets</span></a>');if(!g.customOnly)actions.push('<button class=\"btn warning\" data-restart=\"'+esc(g.id)+'\"><span class=\"btn-icon\">'+icons.restart+'</span><span>Restart Setup</span></button>')}else{actions.push('<span class=\"muted\">No bot runtime is connected for this server yet.</span>')}actions.push('<a class=\"btn subtle\" href=\"/owner\"><span class=\"btn-icon\">'+icons.owner+'</span><span>Plans</span></a>');return ['<div class=\"card controller-card\" data-server-card=\"1\" data-hay=\"'+hay+'\">','<div class=\"controller-head\"><div class=\"controller-title\">'+iconMarkup(g)+'<div><div class=\"controller-name\">'+esc(g.name)+'</div><div class=\"muted\">'+esc(g.id)+'</div></div></div><div class=\"controller-meta\">'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+status+'<span class=\"pill\">'+esc(plan)+'</span></div></div>',customBotBlock(g),'<div class=\"controller-actions\">'+actions.join('')+'</div>','</div>'].join('')}
-      async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class=\"card empty-state\"><strong>No guilds found</strong><div class=\"muted\">Bot may not be ready yet.</div></div>';filterCards();for(const btn of document.querySelectorAll('[data-custom-bot-toggle]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-custom-bot-toggle'),action:'custom-bot-toggle',enabled:btn.getAttribute('data-next')==='true'})});await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-custom-bot-sync]')){btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-custom-bot-sync'),action:'custom-bot-sync'})});await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}for(const btn of document.querySelectorAll('[data-restart]')){btn.onclick=async()=>{try{btn.disabled=true;const original=btn.innerHTML;await api('/api/controller/setup/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-restart')})});btn.innerHTML='<span>Restarted</span>';setTimeout(()=>{btn.innerHTML=original;btn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}}catch(e){err.style.display='block';err.textContent=e.message}}load();
+      async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class=\"card empty-state\"><strong>No guilds found</strong><div class=\"muted\">Bot may not be ready yet.</div></div>';filterCards();for(const btn of document.querySelectorAll('[data-restart]')){btn.onclick=async()=>{try{btn.disabled=true;const original=btn.innerHTML;await api('/api/controller/setup/restart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-restart')})});btn.innerHTML='<span>Restarted</span>';setTimeout(()=>{btn.innerHTML=original;btn.disabled=false},1200)}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}}}}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
 
     return baseDashboardPage({ title: 'Controller', body, script, ownerView: true, showStaffLink: true });
@@ -1148,11 +1235,10 @@ function createOwnerHtml(req = null) {
       '<div class="card"><strong>Public tutorials</strong><div class="muted" style="margin-top:6px">Manage tutorial cards and walkthrough steps.</div><textarea id="ownerTutorialsJson" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(tutorials,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="ownerSaveTutorials" class="btn">Save Tutorials</button><button id="ownerFormatTutorials" class="btn-soft">Format</button></div></div>'+
       '<div class="card"><strong>Documentation sections</strong><div class="muted" style="margin-top:6px">Manage the public documentation guide sections.</div><textarea id="ownerDocsJson" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(docs,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="ownerSaveDocs" class="btn">Save Docs</button><button id="ownerFormatDocs" class="btn-soft">Format</button></div></div>'}
       function grantButtons(g){return '<div class="row"><button class="btn" data-plan="plus" data-guild="'+esc(g.id)+'">Grant Plus</button><button class="btn" data-plan="pro" data-guild="'+esc(g.id)+'">Grant Pro</button><button class="btn" data-custom="'+esc(g.id)+'">Grant Custom</button><button class="btn-soft" data-trial="plus_trial" data-guild="'+esc(g.id)+'">Plus Trial</button><button class="btn-soft" data-trial="pro_trial" data-guild="'+esc(g.id)+'">Pro Trial</button><button class="btn-danger" data-clear="'+esc(g.id)+'">Clear</button></div>'}
-      function customFields(g){const bot=(g.aiAccess&&g.aiAccess.customBot)||{};return '<details class="card" style="padding:10px 12px"><summary><strong>Custom branded bot</strong> <span class="muted">'+(bot.tokenConfigured?'Token saved':'No token')+'</span></summary><div class="grid" style="margin-top:10px"><div><label>App ID</label><input data-cb-app="'+esc(g.id)+'" value="'+esc(bot.appId||'')+'" /></div><div><label>Public Key</label><input data-cb-key="'+esc(g.id)+'" value="'+esc(bot.publicKey||'')+'" /></div><div><label>Bot Token</label><input data-cb-token="'+esc(g.id)+'" placeholder="'+(bot.tokenConfigured?'Leave blank to keep saved token':'Paste token')+'" /></div></div><div class="muted" style="margin-top:10px">Name, avatar, and profile settings are configured in the Discord Developer Portal.</div></details>'}
+      function customFields(g){const bot=(g.aiAccess&&g.aiAccess.customBot)||{};return '<details class="card" style="padding:10px 12px"><summary><strong>Custom branded bot</strong> <span class="muted">'+(bot.tokenConfigured?'Token saved':'No token')+'</span></summary><div class="muted" style="margin-top:10px">Runtime credentials and command sync are managed from Custom Bots. Server owners manage embed accent colors and footers from their dashboard.</div><div class="row" style="margin-top:10px"><a class="btn-soft" href="/custom-bots">Open Custom Bots</a></div></details>'}
       function filterOwnerCards(){const q=String(ownerSearch&&ownerSearch.value||'').trim().toLowerCase();let shown=0;for(const card of document.querySelectorAll('[data-owner-server]')){const match=!q||String(card.getAttribute('data-hay')||'').includes(q);card.style.display=match?'':'none';if(match)shown+=1}if(ownerCount)ownerCount.textContent=shown+' shown'}
       if(ownerSearch)ownerSearch.oninput=filterOwnerCards;
       function guildCard(g){const icon=g.iconURL?'<img src="'+esc(g.iconURL)+'" style="width:42px;height:42px;border-radius:14px" />':'';const ai=g.aiAccess||{};const hay=esc([g.name,g.id,ai.statusLabel,ai.planLabel,g.customOnly?'custom-only':'public-bot'].join(' ').toLowerCase());return '<div class="item server-card can-manage" data-owner-server="1" data-hay="'+hay+'"><div style="display:grid;gap:8px;width:100%"><div class="row">'+icon+'<div><strong>'+esc(g.name)+'</strong><div class="muted">'+esc(g.id)+'</div></div>'+pill(ai.statusLabel||'Free plan')+'</div><div class="muted">'+esc(g.memberCount||0)+' members - '+esc(ai.planLabel||'Free')+'</div>'+customFields(g)+grantButtons(g)+'</div></div>'}
-      function readCustomBot(guildId){return{appId:(document.querySelector('[data-cb-app="'+guildId+'"]')||{}).value||'',publicKey:(document.querySelector('[data-cb-key="'+guildId+'"]')||{}).value||'',token:(document.querySelector('[data-cb-token="'+guildId+'"]')||{}).value||''}}
       async function grant(guildId,action,plan,customBot){await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action,plan,days:14,customBot})})}
       async function saveContent(patch){const cfg=(lastData&&lastData.botConfig)||{};await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({appealsChannelId:'',homeImages:Array.isArray(cfg.homeImages)?cfg.homeImages:[],tutorials:Array.isArray(cfg.tutorials)?cfg.tutorials:[],docsSections:Array.isArray(cfg.docsSections)?cfg.docsSections:[],siteAnnouncement:cfg.siteAnnouncement||{},...patch})})}
       let lastData=null;
@@ -1163,7 +1249,7 @@ function createOwnerHtml(req = null) {
         guildList.innerHTML=(data.guilds||[]).map(guildCard).join('')||'<div class="muted">No guilds found.</div>';
         filterOwnerCards();
         document.querySelectorAll('[data-plan]').forEach(b=>b.onclick=async()=>{try{await grant(b.dataset.guild,'set-plan',b.dataset.plan);note('Plan granted.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
-        document.querySelectorAll('[data-custom]').forEach(b=>b.onclick=async()=>{try{const guildId=b.dataset.custom;await grant(guildId,'set-plan','custom',readCustomBot(guildId));note('Custom plan and branded bot details saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
+        document.querySelectorAll('[data-custom]').forEach(b=>b.onclick=async()=>{try{const guildId=b.dataset.custom;await grant(guildId,'set-plan','custom');note('Custom plan granted. Manage cloned bot credentials from Custom Bots.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
         document.querySelectorAll('[data-trial]').forEach(b=>b.onclick=async()=>{try{await grant(b.dataset.guild,'start-trial',b.dataset.trial);note('Trial started.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
         document.querySelectorAll('[data-clear]').forEach(b=>b.onclick=async()=>{try{await grant(b.dataset.clear,'clear','none');note('Access cleared.');await load()}catch(e){err.style.display='block';err.textContent=e.message}});
         const formatJson=(id,label)=>{try{const box=document.getElementById(id);box.value=JSON.stringify(JSON.parse(box.value),null,2)}catch{err.style.display='block';err.textContent=label+' JSON is invalid.'}};
@@ -1442,7 +1528,7 @@ function createSetupHtml(req = null) {
         '<div class=\"item\"><div><strong>Tutorial</strong><div class=\"muted\">'+(tutorialEnabled.checked?'Enabled':'Disabled')+'</div></div></div>';}
       async function loadCatalogs(){const gid=guildSelect.value;const suffix=gid?('?guildId='+encodeURIComponent(gid)):'';const ch=await api('/api/channels'+suffix);const cats=await api('/api/categories'+suffix);const roles=await api('/api/roles'+suffix);catalogs.channels=Array.isArray(ch.channels)?ch.channels:[];catalogs.categories=Array.isArray(cats.categories)?cats.categories:[];catalogs.roles=Array.isArray(roles.roles)?roles.roles:[];fillSelect(parentCategoryId,catalogs.categories,'Not set',null);const texts=catalogs.channels.filter(c=>c.type==='text');fillSelect(appealsChannelId,texts,'Not set',null);fillSelect(transcriptsChannelId,texts,'Not set',null);fillSelect(managerRoleId,catalogs.roles,'Optional',null);fillSelect(highEscalationRoleId,catalogs.roles,'Optional',null);fillSelect(immediateEscalationRoleId,catalogs.roles,'Optional',null)}
       async function loadGuilds(){const data=await api('/api/my/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];guildSelect.innerHTML=guilds.map(g=>'<option value=\"'+esc(g.id)+'\">'+esc(g.name)+' ('+esc(g.id)+')</option>').join('')||'<option value=\"\">No guilds found</option>';const preset=qs.get('guild');if(preset&&guilds.some(g=>g.id===preset))guildSelect.value=preset;refreshSetupSelect(guildSelect,'Select a server');syncPageState()}
-      async function loadConfig(){const gid=guildSelect.value; if(!gid) return; const data=await api('/api/guild-config?guildId='+encodeURIComponent(gid)); const c=data.config||{}; parentCategoryId.value=c.parentCategoryId||''; appealsChannelId.value=c.appealsChannelId||''; transcriptsChannelId.value=c.transcriptsChannelId||''; managerRoleId.value=c.managerRoleId||''; highEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.high)||''; immediateEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.immediate)||''; rolePermanence.checked=c.rolePermanence!==false; tutorialEnabled.checked=!!c.tutorialEnabled; refreshAllSetupSelects(); setupCompleted=Boolean(c&&c.setup&&c.setup.completed); const discordQuickSetup=String(c&&c.setup&&c.setup.source||'')==='discord-message-flow'; const canOverrideCompleted=Boolean(data&&data.access&&data.access.isOwner)||discordQuickSetup; setLocked(setupCompleted&&!canOverrideCompleted); const requestedPage=Number(qs.get('page')||0); const configStep=Number(c&&c.setup&&c.setup.step)||1; gotoStep(setupCompleted?4:(requestedPage||configStep));}
+      async function loadConfig(){const gid=guildSelect.value; if(!gid) return; const data=await api('/api/guild-config?guildId='+encodeURIComponent(gid)); const c=data.config||{}; parentCategoryId.value=c.parentCategoryId||''; appealsChannelId.value=c.appealsChannelId||''; transcriptsChannelId.value=c.transcriptsChannelId||''; managerRoleId.value=c.managerRoleId||''; highEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.high)||''; immediateEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.immediate)||''; rolePermanence.checked=c.rolePermanence!==false; tutorialEnabled.checked=!!c.tutorialEnabled; refreshAllSetupSelects(); setupCompleted=Boolean(c&&c.setup&&c.setup.completed); const canOverrideCompleted=Boolean(data&&data.access&&(data.access.isOwner||data.access.canFullDashboard||data.access.level==='owner')); setLocked(setupCompleted&&!canOverrideCompleted); const requestedPage=Number(qs.get('page')||0); const configStep=Number(c&&c.setup&&c.setup.step)||1; gotoStep(setupCompleted?4:(requestedPage||configStep));}
       async function saveConfig(extra){const payload={...configPayload(),...(extra||{})};await api('/api/guild-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})}
       saveBtn.onclick=async()=>{try{err.style.display='none';await saveConfig();saveBtn.textContent='Saved';setTimeout(()=>saveBtn.textContent='Save all',1000)}catch(e){err.style.display='block';err.textContent=e.message}};
       doneBtn.onclick=async()=>{try{err.style.display='none';await saveConfig({setupComplete:true,setup:{step:4}});fireConfetti();showFinishOverlay();doneBtn.textContent='Completed';setTimeout(()=>doneBtn.textContent='Mark complete',1200);await loadConfig()}catch(e){err.style.display='block';err.textContent=e.message}};
@@ -1573,7 +1659,7 @@ function createLegalHtml(type = 'privacy') {
         <div class="row" style="margin-top:18px"><a class="btn" href="/">Home</a><a class="btn-soft" href="/dashboard">Dashboard</a></div>
       </div>
     `;
-    return baseDashboardPage({ title, body, ownerView: false, showStaffLink: false });
+    return baseDashboardPage({ title, body, ownerView: false, showStaffLink: false, meta: publicMetaForPath(isTerms ? '/terms' : '/privacy') });
 }
 
 function normalizeDocSections(input) {
@@ -2042,11 +2128,12 @@ async function getDashboardAccess(client, req, guildId = null) {
     const storage = ticketStore.getActiveStorage();
     const knownGuildIds = getKnownDashboardGuildIds(client, storage);
     const ownerView = isStrictOwnerViewer(req);
-    if (ownerView) {
+    const tokenView = hasDashboardTokenAuth(req);
+    if (ownerView || tokenView) {
         return {
             guildId: id || null,
-            level: 'owner',
-            isOwner: true,
+            level: ownerView ? 'owner' : 'token-admin',
+            isOwner: ownerView,
             isManager: true,
             isStaff: true,
             canFullDashboard: true,
@@ -3145,7 +3232,8 @@ async function handleApi(req, res, url, client, customBotManager = null) {
 
     if (method === 'GET' && pathname === '/api/my/guilds') {
         const userId = getDashboardSessionUserId(req);
-        if (!userId) {
+        const tokenAuth = hasDashboardTokenAuth(req);
+        if (!userId && !tokenAuth) {
             sendJson(res, 401, { error: 'Unauthorized' });
             return true;
         }
@@ -3153,7 +3241,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         const ownerId = getBotOwnerId();
         const activeStorage = ticketStore.getActiveStorage();
         const knownGuildIds = getKnownDashboardGuildIds(client, activeStorage);
-        const allowedGuildIds = ownerId && userId === ownerId
+        const allowedGuildIds = tokenAuth || (ownerId && userId === ownerId)
             ? knownGuildIds
             : getDashboardSessionGuildIds(req);
 
@@ -3177,13 +3265,14 @@ async function handleApi(req, res, url, client, customBotManager = null) {
 
     if (method === 'GET' && pathname === '/api/dashboard/guilds') {
         const userId = getDashboardSessionUserId(req);
-        if (!userId) {
+        const tokenAuth = hasDashboardTokenAuth(req);
+        if (!userId && !tokenAuth) {
             sendJson(res, 401, { error: 'Unauthorized' });
             return true;
         }
 
         const ownerId = getBotOwnerId();
-        const isOwner = Boolean(ownerId && userId === ownerId);
+        const isOwner = Boolean(tokenAuth || (ownerId && userId === ownerId));
         const activeStorage = ticketStore.getActiveStorage();
         const knownGuildIds = getKnownDashboardGuildIds(client, activeStorage);
         let guilds = [];
@@ -3557,6 +3646,12 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         }
 
         const activeStorage = ticketStore.getActiveStorage();
+        const existingConfig = typeof ticketStore.getGuildConfig === 'function'
+            ? ticketStore.getGuildConfig(guildId, activeStorage)
+            : {};
+        const existingSetup = existingConfig?.setup && typeof existingConfig.setup === 'object'
+            ? existingConfig.setup
+            : {};
         const next = {};
         for (const key of ['parentCategoryId', 'appealsChannelId', 'transcriptsChannelId', 'managerRoleId']) {
             const value = String(body[key] || '').trim();
@@ -3619,13 +3714,23 @@ async function handleApi(req, res, url, client, customBotManager = null) {
                 sendJson(res, 403, { error: 'Custom branding requires the Custom plan.' });
                 return true;
             }
-            const accent = String(body.branding.accentColor || '').trim();
-            next.branding = {
-                botName: String(body.branding.botName || '').trim().slice(0, 80),
-                avatarUrl: /^https?:\/\//i.test(String(body.branding.avatarUrl || '').trim()) ? String(body.branding.avatarUrl).trim().slice(0, 500) : '',
-                accentColor: /^#?[0-9a-f]{6}$/i.test(accent) ? (accent.startsWith('#') ? accent : `#${accent}`) : '#5865F2',
-                footerText: String(body.branding.footerText || '').trim().slice(0, 120)
-            };
+            const existingBranding = existingConfig?.branding && typeof existingConfig.branding === 'object' ? existingConfig.branding : {};
+            const branding = { ...existingBranding };
+            if (Object.prototype.hasOwnProperty.call(body.branding, 'botName')) {
+                branding.botName = String(body.branding.botName || '').trim().slice(0, 80);
+            }
+            if (Object.prototype.hasOwnProperty.call(body.branding, 'avatarUrl')) {
+                const avatarUrl = String(body.branding.avatarUrl || '').trim();
+                branding.avatarUrl = /^https?:\/\//i.test(avatarUrl) ? avatarUrl.slice(0, 500) : '';
+            }
+            if (Object.prototype.hasOwnProperty.call(body.branding, 'accentColor')) {
+                const accent = String(body.branding.accentColor || '').trim();
+                branding.accentColor = /^#?[0-9a-f]{6}$/i.test(accent) ? (accent.startsWith('#') ? accent : `#${accent}`) : (existingBranding.accentColor || '#5865F2');
+            }
+            if (Object.prototype.hasOwnProperty.call(body.branding, 'footerText')) {
+                branding.footerText = String(body.branding.footerText || '').trim().slice(0, 120);
+            }
+            next.branding = branding;
         }
 
         if (Object.prototype.hasOwnProperty.call(body, 'rolePermanence')) {
@@ -3637,13 +3742,24 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         }
 
         if (Object.prototype.hasOwnProperty.call(body, 'setupComplete')) {
+            const setupComplete = Boolean(body.setupComplete);
+            const setupAccess = await getDashboardAccess(client, req, guildId);
+            if (existingSetup.completed && !setupComplete && !setupAccess?.isOwner && !setupAccess?.canFullDashboard && !isStrictOwnerViewer(req)) {
+                sendJson(res, 403, { error: 'Only the server owner can unlock completed setup.' });
+                return true;
+            }
             next.setup = {
+                ...existingSetup,
                 ...(body.setup && typeof body.setup === 'object' ? body.setup : {}),
-                completed: Boolean(body.setupComplete),
-                completedAt: Boolean(body.setupComplete) ? new Date().toISOString() : null
+                completed: setupComplete,
+                completedAt: setupComplete ? (existingSetup.completedAt || new Date().toISOString()) : null
             };
         } else if (body.setup && typeof body.setup === 'object') {
-            next.setup = { ...body.setup };
+            const setupPatch = {};
+            if (Object.prototype.hasOwnProperty.call(body.setup, 'step')) {
+                setupPatch.step = Math.max(1, Math.min(4, Number(body.setup.step) || Number(existingSetup.step) || 1));
+            }
+            next.setup = { ...existingSetup, ...setupPatch };
         }
 
         const updated = typeof ticketStore.setGuildConfig === 'function'
@@ -3728,6 +3844,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         const fakeInteraction = {
             guildId,
             channelId,
+            guild: channel.guild || client?.guilds?.cache?.get(guildId) || null,
             channel,
             user: { id: getDashboardSessionUserId(req) || getBotOwnerId() || 'dashboard' },
             reply: async () => null,
@@ -3805,8 +3922,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         const existingConfig = typeof ticketStore.getGuildConfig === 'function'
             ? ticketStore.getGuildConfig(guildId, activeStorage)
             : {};
-        const completedByDiscordQuickSetup = String(existingConfig?.setup?.source || '') === 'discord-message-flow';
-        if (Boolean(existingConfig?.setup?.completed) && !completedByDiscordQuickSetup) {
+        if (Boolean(existingConfig?.setup?.completed)) {
             sendJson(res, 409, { error: 'This server setup is already finished.' });
             return true;
         }
@@ -3876,6 +3992,16 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         }
         if (!(await ensureDashboardPermission(client, req, guildId, 'canManageSettings'))) {
             sendJson(res, 403, { error: 'Forbidden' });
+            return true;
+        }
+
+        const activeStorage = ticketStore.getActiveStorage();
+        const existingConfig = typeof ticketStore.getGuildConfig === 'function'
+            ? ticketStore.getGuildConfig(guildId, activeStorage)
+            : {};
+        const setupAccess = await getDashboardAccess(client, req, guildId);
+        if (Boolean(existingConfig?.setup?.completed) && !setupAccess?.isOwner && !setupAccess?.canFullDashboard && !isStrictOwnerViewer(req)) {
+            sendJson(res, 403, { error: 'This server setup is already finished.' });
             return true;
         }
 
@@ -4746,6 +4872,7 @@ function getAllowedDashboardPages(access = {}) {
         ['/overview', '/settings', '/availability', '/commands/ticket-types', '/panels', '/commands/tag', '/tickets', '/transcripts', '/commands/feedback', '/statistics', '/embed-editor', '/tutorials', '/pricing', '/upgrade', '/setup', '/controller', '/custom-bots', '/privacy', '/terms'].forEach(page => pages.add(page));
         return pages;
     }
+    if (access?.isManager || access?.isStaff || access?.canManageSettings || access?.canViewTickets) pages.add('/overview');
     if (access?.canManageSettings) pages.add('/setup');
     if (access?.canManageAvailability) pages.add('/availability');
     if (access?.canManageTicketTypes) {
@@ -4842,6 +4969,7 @@ function createUiHtml(currentPath) {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 <title>${createDocumentTitle(pageTitle)}</title>
+${publicMetaForPath(currentPath)}
 <link rel="icon" href="/assets/sync.png" />
 <style>
 :root{--bg:#07070a;--bg-alt:#0b1220;--card:rgba(255,255,255,.06);--card-strong:rgba(255,255,255,.09);--bd:rgba(255,255,255,.14);--tx:#f5f7ff;--mt:rgba(245,247,255,.72);--ac:#6366f1;--ac-soft:#a5b4fc;--ok:#57f287;--er:#ed4245}
@@ -6036,7 +6164,7 @@ function renderTranscripts(){
   '<div class=\"card\"><h3>Saved Transcripts</h3><div id=\"transcriptsList\" class=\"list\" style=\"margin-top:10px\">'+(items.length?items.map(row).join(''):'<div class=\"muted\">No transcripts saved yet.</div>')+'</div></div>'+
  '</div>';
 }
-function renderPanels(){const panels=(state.guildConfigSummary&&state.guildConfigSummary.panels)||{};const selected=String((ui&&ui.selectedPanelChannel)||Object.keys(panels)[0]||'');const panel=selected&&panels[selected]&&typeof panels[selected]==='object'?panels[selected]:{};const toSelectValue=s=>String(s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,90);const displayStyle=panel.mode==='single'?'buttons':(panel.displayStyle==='select'?'select':'buttons');const typeOptions=['<option value="">Select ticket type</option>'].concat((state.ticketTypes||[]).map(t=>{const v=String(t.name||'');const selectValue=String(t.selectValue||toSelectValue(v));const current=String(panel.ticketType||'');const sel=(current===v||current===selectValue)?' selected':'';return '<option value="'+esc(v)+'"'+sel+'>'+esc(v)+'</option>'})).join('');const rows=Object.entries(panels).map(([id,p])=>'<button type="button" class="list-btn panelPick '+(id===selected?'active':'')+'" data-id="'+esc(id)+'"><div class="list-title">'+esc(p.title||p.name||channelLabel(id,'Panel'))+'</div><div class="list-meta">'+esc(channelLabel(id,'No channel'))+' &middot; '+esc((p.mode==='single'?'Single type':(p.displayStyle==='select'?'Select menu':'Button flow')))+'</div></button>').join('')||'<div class="muted">No custom panels yet.</div>';const selectPreview='<select style="width:auto;margin-top:12px"><option>Choose a ticket type</option></select>';return '<div class="split"><div class="card list-card"><div class="list-head"><div><h3 style="margin:0">Panel Library</h3><div class="muted">Each channel can have its own panel copy and opener style.</div></div><button id="newPanelBtn" class="btn-soft" style="width:auto">New</button></div><div class="list list-compact" id="panelsList" style="margin-top:10px">'+rows+'</div></div><div class="card"><h3>'+(selected?'Edit Panel':'Create Panel')+'</h3><label>Destination Channel</label>'+channelSelect('panelChannel',selected,'Select panel channel')+'<div class="row"><div><label>Panel Mode</label><select id="panelMode"><option value="multi" '+(panel.mode!=='single'?'selected':'')+'>Multi ticket panel</option><option value="single" '+(panel.mode==='single'?'selected':'')+'>Single ticket type</option></select></div><div><label>Display Style</label><select id="panelDisplayStyle" '+(panel.mode==='single'?'disabled':'')+'><option value="buttons" '+(displayStyle!=='select'?'selected':'')+'>Button opens choices</option><option value="select" '+(displayStyle==='select'?'selected':'')+'>Select menu on panel</option></select><div class="help">Select menus are only available for multi ticket panels.</div></div></div><label>Ticket Type</label><select id="panelTicketType">'+typeOptions+'</select><label>Panel Title</label><input id="panelEditTitle" value="'+esc(panel.title||panel.name||'Support Desk')+'" /><label>Panel Description</label><textarea id="panelEditDescription" style="min-height:150px" placeholder="Explain what this panel is for.">'+esc(panel.description||'')+'</textarea><label>Button Text</label><input id="panelButtonLabel" value="'+esc(panel.buttonLabel||'Select a prompt')+'" maxlength="80" /><label>Advisory</label><textarea id="panelEditAdvisory" placeholder="Rules, policy notes, or expected response times.">'+esc(panel.advisory||'')+'</textarea><div class="row" style="margin-top:12px;grid-template-columns:1fr 1fr"><button id="savePanelDesign" class="btn">Save Panel</button><button id="publishPanelDesign" class="btn-soft">Publish Panel</button></div><div class="preview-shell" style="margin-top:14px"><div class="preview-msg"><div class="preview-avatar"></div><div class="preview-content"><div class="preview-name">'+esc((state.guildConfigSummary&&state.guildConfigSummary.branding&&state.guildConfigSummary.branding.botName)||'Tickets Bot')+' <span class="preview-tag">BOT</span></div><div class="preview-embed"><div class="preview-bar"></div><div class="preview-main"><div class="preview-title" id="panelPreviewTitle"></div><div class="preview-desc" id="panelPreviewDesc"></div><div id="panelPreviewControl">'+(displayStyle==='select'?selectPreview:'<button type="button" class="btn-soft" id="panelPreviewButton" style="width:auto;margin-top:12px"></button>')+'</div></div></div></div></div></div></div></div>'}
+function renderPanels(){const panels=(state.guildConfigSummary&&state.guildConfigSummary.panels)||{};const selected=String((ui&&ui.selectedPanelChannel)||Object.keys(panels)[0]||'');const panel=selected&&panels[selected]&&typeof panels[selected]==='object'?panels[selected]:{};const toSelectValue=s=>String(s||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,90);const displayStyle=panel.mode==='single'?'buttons':(panel.displayStyle==='select'?'select':'buttons');const typeOptions=['<option value="">Select ticket type</option>'].concat((state.ticketTypes||[]).map(t=>{const v=String(t.name||'');const selectValue=String(t.selectValue||toSelectValue(v));const current=String(panel.ticketType||'');const sel=(current===v||current===selectValue)?' selected':'';return '<option value="'+esc(v)+'"'+sel+'>'+esc(v)+'</option>'})).join('');const rows=Object.entries(panels).map(([id,p])=>'<button type="button" class="list-btn panelPick '+(id===selected?'active':'')+'" data-id="'+esc(id)+'"><div class="list-title">'+esc(p.title||p.name||channelLabel(id,'Panel'))+'</div><div class="list-meta">'+esc(channelLabel(id,'No channel'))+' &middot; '+esc((p.mode==='single'?'Single type':(p.displayStyle==='select'?'Select menu':'Button flow')))+'</div></button>').join('')||'<div class="muted">No custom panels yet.</div>';const selectPreview='<select style="width:auto;margin-top:12px"><option>Choose a ticket type</option></select>';return '<div class="split"><div class="card list-card"><div class="list-head"><div><h3 style="margin:0">Panel Library</h3><div class="muted">Each channel can have its own panel copy and opener style.</div></div><button id="newPanelBtn" class="btn-soft" style="width:auto">New</button></div><div class="list list-compact" id="panelsList" style="margin-top:10px">'+rows+'</div></div><div class="card"><h3>'+(selected?'Edit Panel':'Create Panel')+'</h3><label>Destination Channel</label>'+channelSelect('panelChannel',selected,'Select panel channel')+'<div class="row"><div><label>Panel Mode</label><select id="panelMode"><option value="multi" '+(panel.mode!=='single'?'selected':'')+'>Multi ticket panel</option><option value="single" '+(panel.mode==='single'?'selected':'')+'>Single ticket type</option></select></div><div><label>Display Style</label><select id="panelDisplayStyle" '+(panel.mode==='single'?'disabled':'')+'><option value="buttons" '+(displayStyle!=='select'?'selected':'')+'>Button opens choices</option><option value="select" '+(displayStyle==='select'?'selected':'')+'>Select menu on panel</option></select><div class="help">Select menus are only available for multi ticket panels.</div></div></div><div id="panelTicketTypeWrap" style="display:'+(panel.mode==='single'?'block':'none')+'"><label>Single-Panel Ticket Type</label><select id="panelTicketType">'+typeOptions+'</select><div class="help">Only single ticket panels lock the opener to one ticket type.</div></div><label>Panel Title</label><input id="panelEditTitle" value="'+esc(panel.title||panel.name||'Support Desk')+'" /><label>Panel Description</label><textarea id="panelEditDescription" style="min-height:150px" placeholder="Explain what this panel is for.">'+esc(panel.description||'')+'</textarea><label>Button Text</label><input id="panelButtonLabel" value="'+esc(panel.buttonLabel||'Select a prompt')+'" maxlength="80" /><label>Advisory</label><textarea id="panelEditAdvisory" placeholder="Rules, policy notes, or expected response times.">'+esc(panel.advisory||'')+'</textarea><div class="row" style="margin-top:12px;grid-template-columns:1fr 1fr"><button id="savePanelDesign" class="btn">Save Panel</button><button id="publishPanelDesign" class="btn-soft">Publish Panel</button></div><div class="preview-shell" style="margin-top:14px"><div class="preview-msg"><div class="preview-avatar"></div><div class="preview-content"><div class="preview-name">'+esc((state.guildConfigSummary&&state.guildConfigSummary.branding&&state.guildConfigSummary.branding.botName)||'Tickets Bot')+' <span class="preview-tag">BOT</span></div><div class="preview-embed"><div class="preview-bar"></div><div class="preview-main"><div class="preview-title" id="panelPreviewTitle"></div><div class="preview-desc" id="panelPreviewDesc"></div><div id="panelPreviewControl">'+(displayStyle==='select'?selectPreview:'<button type="button" class="btn-soft" id="panelPreviewButton" style="width:auto;margin-top:12px"></button>')+'</div></div></div></div></div></div></div></div>'}
 function renderFeedback(){const feedbackChannel=state.botConfig.appealsChannelId||'';return '<div class="split">'+
  '<div class="card list-card"><div class="list-head"><div><h3 style="margin:0">Feedback Flow</h3><div class="muted">Choose where completed ticket feedback is sent.</div></div><span class="pill '+(feedbackChannel?'ok':'warn')+'">'+(feedbackChannel?'Ready':'Needs channel')+'</span></div><div class="list" style="margin-top:14px">'+
   '<div class="item"><div><strong>User runs /feedback</strong><div class="muted">Only the ticket opener can submit it after a staff member claims the ticket.</div></div></div>'+
@@ -6055,9 +6183,9 @@ function renderStats(){const stats=state.statistics||{};const t=stats.totals||{a
  '<div class="card"><h3>Support Member Lookup</h3><label>User (ID or mention)</label><input id="staffLookupQuery" placeholder="<@123> or 123..." /><div class="row" style="margin-top:10px"><button id="staffLookupBtn" class="btn">Lookup</button><button id="staffLookupClear" class="btn-soft">Clear</button></div><div id="staffLookupResult" class="list" style="margin-top:10px"></div></div>'+
  '</div>'}
 function renderBranding(){const templates=state.botConfig.embedTemplates||defaultEmbedTemplates;const keys=Object.keys(templates);const firstKey=keys[0]||'ticketClaimed';const first=templates[firstKey]||{title:'',description:'',color:'#5865F2'};const brand=(state.guildConfigSummary&&state.guildConfigSummary.branding)||{};const customBot=(state.aiAccess&&state.aiAccess.customBot)||{};const templateList=keys.map(k=>'<button type="button" class="list-btn brandTemplatePick '+(k===firstKey?'active':'')+'" data-key="'+esc(k)+'"><div class="list-title">'+esc(k)+'</div><div class="list-meta">'+esc(((templates[k]&&templates[k].title)||'No title'))+'</div></button>').join('')||'<div class="muted">No templates found.</div>';return '<div class="split">'+
- '<div class="card list-card"><div class="list-head"><div><h3 style="margin:0">Branding</h3><div class="muted">Edit your server identity and message templates in one place.</div></div><button id="saveServerBranding" class="btn-soft" type="button" style="width:auto">Save Identity</button></div><label>Display Name</label><input id="serverBrandName" value="'+esc(brand.botName||customBot.botName||'Tickets Bot')+'" placeholder="Tickets Bot" maxlength="80" /><label>Avatar URL</label><input id="serverBrandAvatar" value="'+esc(brand.avatarUrl||customBot.avatarUrl||'')+'" placeholder="https://..." /><div class="row"><div><label>Accent Color</label><input id="serverBrandAccent" value="'+esc(brand.accentColor||'#67E8F9')+'" placeholder="#67E8F9" maxlength="16" /></div><div><label>Footer Text</label><input id="serverBrandFooter" value="'+esc(brand.footerText||customBot.statusText||'')+'" placeholder="Powered by support" maxlength="120" /></div></div><div class="list list-compact" style="margin-top:14px">'+templateList+'</div></div>'+
+ '<div class="card list-card"><div class="list-head"><div><h3 style="margin:0">Embed Branding</h3><div class="muted">Tune this server&apos;s embed accent color, footer, and message templates.</div></div><button id="saveServerBranding" class="btn-soft" type="button" style="width:auto">Save Embed Branding</button></div><div class="item" style="display:block;margin-top:12px"><strong>Bot identity</strong><div class="muted" style="margin-top:6px">'+esc(brand.botName||customBot.botName||'Tickets Bot')+(customBot.tokenConfigured?' is managed from the cloned bot setup.':' uses the public bot identity.')+'</div></div><div class="row"><div><label>Embed Accent Color</label><input id="serverBrandAccent" value="'+esc(brand.accentColor||'#67E8F9')+'" placeholder="#67E8F9" maxlength="16" /></div><div><label>Embed Footer Text</label><input id="serverBrandFooter" value="'+esc(brand.footerText||customBot.statusText||'')+'" placeholder="Powered by support" maxlength="120" /></div></div><div class="list list-compact" style="margin-top:14px">'+templateList+'</div></div>'+
  '<div class="card"><h3>Message Template</h3><div class="item" style="margin-bottom:12px"><div class="muted">Use <code>[[divider]]</code>, <code>[[divider:large]]</code>, <code>[[space]]</code>, or <code>[[space:large]]</code> on their own line for Components V2 spacing.</div></div><div class="row"><div><label>Template</label><select id="brandingKey">'+keys.map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join('')+'</select></div><div><label>Accent Color</label><input id="brandingColor" value="'+esc(first.color||'#5865F2')+'" placeholder="#5865F2" maxlength="16" /></div></div><label>Title</label><input id="brandingTitle" value="'+esc(first.title||'')+'" maxlength="180" /><label>Description</label><textarea id="brandingDescription" style="min-height:180px">'+esc(first.description||'')+'</textarea><div class="row" style="margin-top:10px"><button id="applyBrandingTemplate" class="btn-soft">Apply Template</button><button id="saveBranding" class="btn">Save Templates</button></div><div class="row" style="margin-top:10px"><button id="resetBrandingDefaults" class="btn-soft">Reset Defaults</button><button id="formatBrandingJson" class="btn-soft">Format JSON</button></div></div>'+
- '<div class="card"><h3>Live Preview</h3><div class="preview-shell"><div class="preview-msg"><div class="preview-avatar" id="brandingPreviewAvatar"></div><div class="preview-content"><div class="preview-name" id="brandingPreviewName">'+esc(brand.botName||customBot.botName||'Tickets Bot')+' <span class="preview-tag">BOT</span></div><div id="brandingPreviewEmbed" class="preview-embed"><div id="brandingPreviewBar" class="preview-bar"></div><div class="preview-main"><div id="brandingPreviewTitle" class="preview-title"></div><div id="brandingPreviewDesc" class="preview-desc"></div></div></div></div></div></div><details class="acc" style="margin-top:14px"><summary><span>Advanced JSON</span><span class="pill">Optional</span></summary><div class="acc-body"><textarea id="brandingTemplates" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(templates,null,2))+'</textarea></div></details></div>'+
+ '<div class="card"><h3>Live Preview</h3><div class="preview-shell"><div class="preview-msg"><div class="preview-avatar" id="brandingPreviewAvatar"></div><div class="preview-content"><div class="preview-name" id="brandingPreviewName">'+esc(brand.botName||customBot.botName||'Tickets Bot')+' <span class="preview-tag">BOT</span></div><div id="brandingPreviewEmbed" class="preview-embed"><div id="brandingPreviewBar" class="preview-bar"></div><div class="preview-main"><div id="brandingPreviewTitle" class="preview-title"></div><div id="brandingPreviewDesc" class="preview-desc"></div><div id="brandingPreviewFooter" class="muted" style="margin-top:12px;font-size:12px"></div></div></div></div></div></div><details class="acc" style="margin-top:14px"><summary><span>Advanced JSON</span><span class="pill">Optional</span></summary><div class="acc-body"><textarea id="brandingTemplates" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(templates,null,2))+'</textarea></div></details></div>'+
 '</div>'}
 function renderPricing(){const priceHtml=plan=>Number.isFinite(plan.gbp)?'<span class="localized-price" data-price-gbp="'+plan.gbp.toFixed(2)+'">&pound;'+plan.gbp.toFixed(2)+'</span><span class="plan-once">one-time payment</span>':esc(plan.price);const plans=[{name:'Free',price:'Free',description:'Core support tools for getting started',features:['Unlimited tickets','Ticket panels','Logs and transcripts','Dashboard access'],active:true},{name:'Plus',price:'&pound;8.99',gbp:8.99,description:'Better visibility for growing teams',features:['Statistics','Staff activity tracking','Priority support','Everything in Free'],featured:true},{name:'Pro',price:'&pound;14.99',gbp:14.99,description:'Automation for busier support teams',features:['AI moderation','Advanced analytics','Higher automation limits','Everything in Plus']},{name:'Enterprise',price:'Custom',description:'Custom branded bot and guided setup',features:['Custom bot runtime','Developer Portal guidance','Webhook monitoring','Everything in Pro']}];const rows=[['Tickets','Yes','Yes','Yes','Yes'],['Panels','Yes','Yes','Yes','Yes'],['Logs and Transcripts','Yes','Yes','Yes','Yes'],['Statistics','No','Yes','Yes','Yes'],['AI Moderation','No','No','Yes','Yes'],['Custom Branded Bot','No','No','No','Yes'],['Priority Support','No','Yes','Yes','Yes']];const faqs=[{q:'Can I start on Free and upgrade later?','a':'Yes. Free is available immediately and upgrades keep your configuration.'},{q:'Are Plus and Pro monthly?','a':'No. Plus and Pro are one-time payments, shown in your local currency when possible.'},{q:'What does Pro add?','a':'Pro adds AI moderation and advanced automation for busier support teams.'},{q:'What is Enterprise?','a':'Enterprise is the custom plan with branded bot runtime setup, monitoring, and guided Developer Portal configuration.'}];return '<div class="page-shell pricing-page">'+
     '<section class="pricing-hero card"><div class="row" style="align-items:flex-start;gap:24px"><div style="max-width:640px"><div class="page-kicker">Pricing</div><h3 style="margin:0 0 14px">Plans for ticket support and staff operations.</h3><p class="muted" style="max-width:620px">Pick the right plan for your community: Free, Plus, Pro, or Enterprise for fully custom branded bot operations.</p><div class="row" style="gap:10px;flex-wrap:wrap;margin-top:22px"><a class="btn primary" href="#plans">View plans</a><a class="btn-soft" href="#faq">Read FAQ</a></div></div><div class="pricing-hero-stats"><div class="pricing-stat"><strong>4 plans</strong><span>Free, Plus, Pro, and Enterprise</span></div><div class="pricing-stat"><strong>Custom bots</strong><span>Enterprise includes branded runtime monitoring</span></div></div></div></section>'+ 
@@ -6164,11 +6292,11 @@ function fillType(name){const t=state.ticketTypes.find(x=>x.name===name);if(!t)r
 function fillTag(name){const t=state.tags.find(x=>x.name===name);if(!t)return;tagName.value=t.name||'';tagKind.value=t.kind||'suggestion';tagTitle.value=t.title||'';tagDesc.value=t.description||'';tagKeys.value=(t.keywords||[]).join(', ')}
 function fillTeam(name){const t=state.supportTeams.find(x=>x.name===name);if(!t)return;stName.value=t.name||'';stEmoji.value=t.emoji||'';setRoleSelection('stRoles',(t.roleIds||(t.roleId?[t.roleId]:[]))||[])}
 function getBrandingTemplates(){const box=document.getElementById('brandingTemplates');if(!box)return {};try{const parsed=JSON.parse(box.value);return parsed&&typeof parsed==='object'?parsed:{};}catch{return {}}}
-function renderBrandingPreview(){const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');const brandNameEl=document.getElementById('serverBrandName');const brandAvatarEl=document.getElementById('serverBrandAvatar');const bar=document.getElementById('brandingPreviewBar');const titleView=document.getElementById('brandingPreviewTitle');const descView=document.getElementById('brandingPreviewDesc');const nameView=document.getElementById('brandingPreviewName');const avatarView=document.getElementById('brandingPreviewAvatar');const color=((colorEl&&colorEl.value)||'#5865F2').trim();if(bar)bar.style.background=color.startsWith('#')?color:('#'+color.replace('#',''));if(nameView)nameView.innerHTML=esc((brandNameEl&&brandNameEl.value)||'Tickets Bot')+' <span class="preview-tag">BOT</span>';if(avatarView){const avatar=((brandAvatarEl&&brandAvatarEl.value)||'').trim();avatarView.style.backgroundImage=avatar?'url('+avatar.replace(/["')]/g,'')+')':'';avatarView.style.backgroundSize='cover';avatarView.style.backgroundPosition='center'}if(titleView)titleView.textContent=(titleEl&&titleEl.value)||'(No title)';const rawDesc=(descEl&&descEl.value)||'';const cleaned=rawDesc.split(/\\r?\\n/).map(line=>{const t=String(line||'').trim();if(/^\\[\\[(divider|sep|separator)(?::(small|large))?\\]\\]$/i.test(t))return '--------';if(/^\\[\\[(space|spacer)(?::(small|large))?\\]\\]$/i.test(t))return '';return line}).join('\\n').replace(/\\n{3,}/g,'\\n\\n').trim()||'(No description)';if(descView)descView.textContent=cleaned}
+function renderBrandingPreview(){const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');const footerEl=document.getElementById('serverBrandFooter');const bar=document.getElementById('brandingPreviewBar');const titleView=document.getElementById('brandingPreviewTitle');const descView=document.getElementById('brandingPreviewDesc');const footerView=document.getElementById('brandingPreviewFooter');const nameView=document.getElementById('brandingPreviewName');const avatarView=document.getElementById('brandingPreviewAvatar');const brand=(state.guildConfigSummary&&state.guildConfigSummary.branding)||{};const customBot=(state.aiAccess&&state.aiAccess.customBot)||{};const color=((colorEl&&colorEl.value)||'#5865F2').trim();if(bar)bar.style.background=color.startsWith('#')?color:('#'+color.replace('#',''));if(nameView)nameView.innerHTML=esc(brand.botName||customBot.botName||'Tickets Bot')+' <span class="preview-tag">BOT</span>';if(avatarView){const avatar=String(brand.avatarUrl||customBot.avatarUrl||'').trim();avatarView.style.backgroundImage=avatar?'url('+avatar.replace(/["')]/g,'')+')':'';avatarView.style.backgroundSize='cover';avatarView.style.backgroundPosition='center'}if(titleView)titleView.textContent=(titleEl&&titleEl.value)||'(No title)';const rawDesc=(descEl&&descEl.value)||'';const cleaned=rawDesc.split(/\\r?\\n/).map(line=>{const t=String(line||'').trim();if(/^\\[\\[(divider|sep|separator)(?::(small|large))?\\]\\]$/i.test(t))return '--------';if(/^\\[\\[(space|spacer)(?::(small|large))?\\]\\]$/i.test(t))return '';return line}).join('\\n').replace(/\\n{3,}/g,'\\n\\n').trim()||'(No description)';if(descView)descView.textContent=cleaned;if(footerView)footerView.textContent=((footerEl&&footerEl.value)||brand.footerText||customBot.statusText||'').trim()}
 function loadBrandingKey(key){const templates=getBrandingTemplates();const t=templates[key]||defaultEmbedTemplates[key]||{title:'',description:'',color:'#5865F2'};const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');if(colorEl)colorEl.value=t.color||'#5865F2';if(titleEl)titleEl.value=t.title||'';if(descEl)descEl.value=t.description||'';renderBrandingPreview()}
 function applyBrandingFormToTemplate(){const keyEl=document.getElementById('brandingKey');const colorEl=document.getElementById('brandingColor');const titleEl=document.getElementById('brandingTitle');const descEl=document.getElementById('brandingDescription');const box=document.getElementById('brandingTemplates');if(!keyEl||!box)return;const key=keyEl.value;const templates=getBrandingTemplates();templates[key]={...(templates[key]||{}),color:((colorEl&&colorEl.value)||'').trim(),title:(titleEl&&titleEl.value)||'',description:(descEl&&descEl.value)||''};box.value=JSON.stringify(templates,null,2);renderBrandingPreview()}
-function renderPanelPreview(){const title=document.getElementById('panelEditTitle');const desc=document.getElementById('panelEditDescription');const adv=document.getElementById('panelEditAdvisory');const button=document.getElementById('panelButtonLabel');const mode=document.getElementById('panelMode');const type=document.getElementById('panelTicketType');const display=document.getElementById('panelDisplayStyle');const titleView=document.getElementById('panelPreviewTitle');const descView=document.getElementById('panelPreviewDesc');const control=document.getElementById('panelPreviewControl');if(display&&mode){display.disabled=mode.value==='single';if(mode.value==='single')display.value='buttons'}if(titleView)titleView.textContent=(title&&title.value)||'Support Desk';const bits=[(desc&&desc.value)||'',(adv&&adv.value)||''].filter(v=>String(v||'').trim());if(descView)descView.textContent=bits.join('\\n\\n')||'Panel description preview';if(control){const useSelect=mode&&mode.value!=='single'&&display&&display.value==='select';if(useSelect){control.innerHTML='<select style="width:auto;margin-top:12px"><option>Choose a ticket type</option></select>'}else{const suffix=mode&&mode.value==='single'&&type&&type.value?(' - '+type.value):'';control.innerHTML='<button type="button" class="btn-soft" id="panelPreviewButton" style="width:auto;margin-top:12px">'+esc(((button&&button.value)||'Select a prompt')+suffix)+'</button>'}}}
-async function savePanelDesign(publish=false){const channelId=(document.getElementById('panelChannel')?.value||'').trim();if(!channelId)return note('Choose a panel channel first.','danger');const payload={guildId:state.guildId,channelId,title:(document.getElementById('panelEditTitle')?.value||'').trim(),description:document.getElementById('panelEditDescription')?.value||'',advisory:document.getElementById('panelEditAdvisory')?.value||'',buttonLabel:(document.getElementById('panelButtonLabel')?.value||'').trim(),mode:document.getElementById('panelMode')?.value||'multi',displayStyle:document.getElementById('panelDisplayStyle')?.value||'buttons',ticketType:document.getElementById('panelTicketType')?.value||''};await api('/api/panel/upsert',{method:'POST',body:JSON.stringify(payload)});ui.selectedPanelChannel=channelId;saveUi();if(publish)await api('/api/panel/publish',{method:'POST',body:JSON.stringify({guildId:state.guildId,channelId})});note(publish?'Panel saved and published.':'Panel saved.','ok');await boot()}
+function renderPanelPreview(){const title=document.getElementById('panelEditTitle');const desc=document.getElementById('panelEditDescription');const adv=document.getElementById('panelEditAdvisory');const button=document.getElementById('panelButtonLabel');const mode=document.getElementById('panelMode');const type=document.getElementById('panelTicketType');const typeWrap=document.getElementById('panelTicketTypeWrap');const display=document.getElementById('panelDisplayStyle');const titleView=document.getElementById('panelPreviewTitle');const descView=document.getElementById('panelPreviewDesc');const control=document.getElementById('panelPreviewControl');if(display&&mode){display.disabled=mode.value==='single';if(mode.value==='single')display.value='buttons'}if(typeWrap&&mode)typeWrap.style.display=mode.value==='single'?'block':'none';if(titleView)titleView.textContent=(title&&title.value)||'Support Desk';const bits=[(desc&&desc.value)||'',(adv&&adv.value)||''].filter(v=>String(v||'').trim());if(descView)descView.textContent=bits.join('\\n\\n')||'Panel description preview';if(control){const useSelect=mode&&mode.value!=='single'&&display&&display.value==='select';if(useSelect){control.innerHTML='<select style="width:auto;margin-top:12px"><option>Choose a ticket type</option></select>'}else{const suffix=mode&&mode.value==='single'&&type&&type.value?(' - '+type.value):'';control.innerHTML='<button type="button" class="btn-soft" id="panelPreviewButton" style="width:auto;margin-top:12px">'+esc(((button&&button.value)||'Select a prompt')+suffix)+'</button>'}}}
+async function savePanelDesign(publish=false){const channelId=(document.getElementById('panelChannel')?.value||'').trim();if(!channelId)return note('Choose a panel channel first.','danger');const mode=document.getElementById('panelMode')?.value||'multi';const payload={guildId:state.guildId,channelId,title:(document.getElementById('panelEditTitle')?.value||'').trim(),description:document.getElementById('panelEditDescription')?.value||'',advisory:document.getElementById('panelEditAdvisory')?.value||'',buttonLabel:(document.getElementById('panelButtonLabel')?.value||'').trim(),mode,displayStyle:document.getElementById('panelDisplayStyle')?.value||'buttons',ticketType:mode==='single'?(document.getElementById('panelTicketType')?.value||''):''};await api('/api/panel/upsert',{method:'POST',body:JSON.stringify(payload)});ui.selectedPanelChannel=channelId;saveUi();if(publish)await api('/api/panel/publish',{method:'POST',body:JSON.stringify({guildId:state.guildId,channelId})});note(publish?'Panel saved and published.':'Panel saved.','ok');await boot()}
 function setupModuleDrilldown(){
  if(['/overview','/tutorials','/documentation','/pricing','/upgrade'].includes(currentPath))return;
  const root=app.querySelector(':scope > .grid, :scope > .split');
@@ -6264,7 +6392,7 @@ function wire(){
     const navTitleForPath=(p)=>({ '/overview':'Home','/settings':'Settings','/availability':'Availability','/tutorials':'Tutorials','/commands/ticket-types':'Ticket Types','/panels':'Panels','/commands/tag':'Tags','/tickets':'Tickets','/transcripts':'Transcripts','/commands/feedback':'Feedback','/statistics':'Statistics','/embed-editor':'Branding','/documentation':'Documentation'}[p]||'Dashboard');
     const pageDescForPath=(p)=>({ '/overview':'A cleaner snapshot of ticket activity, queue health, and the most common next actions.','/settings':'Core server configuration, routing, and system behavior in one place.','/availability':'Adjust queue expectations per ticket type without digging through commands.','/tutorials':'Guides, walkthroughs, and internal onboarding material for your staff.','/commands/ticket-types':'Shape each ticket flow, assign support coverage, and keep categories tidy.','/panels':'Design, save, and publish channel-specific ticket panels.','/commands/tag':'Store reusable answers and keep repeat support responses consistent.','/tickets':'Review active conversations, add notes, and handle escalations quickly.','/transcripts':'Browse saved transcripts and archive history without leaving the dashboard.','/commands/feedback':'Control where feedback lands and how the flow is presented.','/statistics':'Track recent performance, close reasons, and staff activity trends.','/embed-editor':'Customize server branding and reusable bot message templates.','/documentation':'Reference placeholders, templates, and dashboard usage notes.'}[p]||'Manage this part of the dashboard with a simpler, more focused layout.');
      const groupForPath=(p)=>{if(p==='/overview'||p==='/settings'||p==='/availability'||p==='/tutorials')return 'general';if(p==='/commands/ticket-types'||p==='/commands/tag'||p==='/tickets'||p==='/transcripts')return 'tickets';return 'content'};
-     const allowedPages=()=>{const access=(state&&state.access)||{};const plan=(state&&state.aiAccess)||{};const set=new Set(['/documentation','/tutorials','/pricing','/upgrade','/privacy','/terms']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/panels','/commands/tag','/tickets','/transcripts','/commands/feedback','/pricing','/upgrade'].forEach(p=>set.add(p));if(plan.isPlusOrHigher)set.add('/statistics');if(plan.isCustom)set.add('/embed-editor');return set}if(access.canManageTicketTypes){set.add('/settings');set.add('/commands/ticket-types');set.add('/panels');if(plan.isCustom)set.add('/embed-editor')}if(plan.isPlusOrHigher&&access.canManageTicketTypes)set.add('/statistics');if(access.canManageAvailability)set.add('/availability');if(access.canViewTickets||access.canManageEscalations)set.add('/tickets');if(access.canViewTranscripts)set.add('/transcripts');return set};
+     const allowedPages=()=>{const access=(state&&state.access)||{};const plan=(state&&state.aiAccess)||{};const set=new Set(['/documentation','/tutorials','/pricing','/upgrade','/privacy','/terms']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/panels','/commands/tag','/tickets','/transcripts','/commands/feedback','/pricing','/upgrade'].forEach(p=>set.add(p));if(plan.isPlusOrHigher)set.add('/statistics');if(plan.isCustom)set.add('/embed-editor');return set}if(access.isManager||access.isStaff||access.canManageSettings||access.canViewTickets)set.add('/overview');if(access.canManageTicketTypes){set.add('/settings');set.add('/commands/ticket-types');set.add('/panels');if(plan.isCustom)set.add('/embed-editor')}if(plan.isPlusOrHigher&&access.canManageTicketTypes)set.add('/statistics');if(access.canManageAvailability)set.add('/availability');if(access.canViewTickets||access.canManageEscalations)set.add('/tickets');if(access.canViewTranscripts)set.add('/transcripts');return set};
      let darkSecretCount=0;
      const normaliseTheme=(t)=>{const v=String(t||'').trim().toLowerCase();if(v==='hacker'&&!isHackerUnlocked())return 'dark';return ['dark','light','ocean','sunset','diamond','hacker'].includes(v)?v:'dark'};
      const syncThemeUi=()=>{const cur=normaliseTheme(document.body.dataset.theme);const labels={dark:'Dark',light:'Light',ocean:'Ocean',sunset:'Sunset',diamond:'Diamond',hacker:'Hacker'};if(themeLabel)themeLabel.textContent='Theme: '+(labels[cur]||'Dark');themeItems.forEach(btn=>{const v=btn.getAttribute('data-theme-item')||'';btn.classList.toggle('active',v===cur)})};
@@ -6330,7 +6458,7 @@ const resetTeam=document.getElementById('resetTeam');if(resetTeam)resetTeam.oncl
   const ttAllowFilesEl=document.getElementById('ttAllowFiles');if(ttAllowFilesEl)ttAllowFilesEl.onchange=()=>renderQuestionBuilder(readOpenQuestions());
   const resetType=document.getElementById('resetType');if(resetType)resetType.onclick=()=>{['ttName','ttEmoji','ttFormat','ttAliases','ttOpenQuestions','ttOpenTitle','ttOpenDescription'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});const catEl=document.getElementById('ttCategory');if(catEl)catEl.value='';const catLabel=document.getElementById('ttCategoryLabel');if(catLabel)catLabel.textContent=categoryLabel('', 'Use default ticket category');ttColor.value='#5865F2';ttRequireReason.checked=true;ttAllowFiles.checked=true;renderQuestionBuilder(['Describe your issue and what you need from us.']);setRoleSelection('ttRoles',[])};
 const saveBranding=document.getElementById('saveBranding');if(saveBranding)saveBranding.onclick=async()=>{try{const parsed=getBrandingTemplates();await api('/api/config/embeds',{method:'POST',body:JSON.stringify({embedTemplates:parsed})});note('Branding templates saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
-const saveServerBranding=document.getElementById('saveServerBranding');if(saveServerBranding)saveServerBranding.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,branding:{botName:(document.getElementById('serverBrandName')?.value||'').trim(),avatarUrl:(document.getElementById('serverBrandAvatar')?.value||'').trim(),accentColor:(document.getElementById('serverBrandAccent')?.value||'').trim(),footerText:(document.getElementById('serverBrandFooter')?.value||'').trim()},setup:{step:4}})});note('Server branding saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+const saveServerBranding=document.getElementById('saveServerBranding');if(saveServerBranding)saveServerBranding.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,branding:{accentColor:(document.getElementById('serverBrandAccent')?.value||'').trim(),footerText:(document.getElementById('serverBrandFooter')?.value||'').trim()},setup:{step:4}})});note('Embed branding saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
 const applyBrandingTemplate=document.getElementById('applyBrandingTemplate');if(applyBrandingTemplate)applyBrandingTemplate.onclick=()=>applyBrandingFormToTemplate();
 const formatBrandingJson=document.getElementById('formatBrandingJson');if(formatBrandingJson)formatBrandingJson.onclick=()=>{const box=document.getElementById('brandingTemplates');if(box)box.value=JSON.stringify(getBrandingTemplates(),null,2)};
 const resetBrandingDefaults=document.getElementById('resetBrandingDefaults');if(resetBrandingDefaults)resetBrandingDefaults.onclick=()=>{const box=document.getElementById('brandingTemplates');if(box)box.value=JSON.stringify(defaultEmbedTemplates,null,2);if(brandingKey)loadBrandingKey(brandingKey.value)};
@@ -6339,7 +6467,7 @@ document.querySelectorAll('.brandTemplatePick').forEach(b=>b.onclick=()=>{const 
 const brandingTitle=document.getElementById('brandingTitle');if(brandingTitle)brandingTitle.oninput=()=>renderBrandingPreview();
 const brandingDescription=document.getElementById('brandingDescription');if(brandingDescription)brandingDescription.oninput=()=>renderBrandingPreview();
 const brandingColor=document.getElementById('brandingColor');if(brandingColor)brandingColor.oninput=()=>renderBrandingPreview();
-['serverBrandName','serverBrandAvatar','serverBrandAccent','serverBrandFooter'].forEach(id=>{const el=document.getElementById(id);if(el)el.oninput=()=>renderBrandingPreview()});
+['serverBrandAccent','serverBrandFooter'].forEach(id=>{const el=document.getElementById(id);if(el)el.oninput=()=>renderBrandingPreview()});
  if(brandingKey)loadBrandingKey(brandingKey.value);
 const savePanelDesignBtn=document.getElementById('savePanelDesign');if(savePanelDesignBtn)savePanelDesignBtn.onclick=async()=>{try{await savePanelDesign(false)}catch(e){note(e.message,'danger')}};
 const publishPanelDesign=document.getElementById('publishPanelDesign');if(publishPanelDesign)publishPanelDesign.onclick=async()=>{try{await savePanelDesign(true)}catch(e){note(e.message,'danger')}};
@@ -6501,7 +6629,7 @@ function renderPageHero(path){
  else if(access.isStaff)chips.push('<span class="pill">Staff access</span>');
  return '<div class="card page-hero"><div class="page-hero-head"><div><div class="page-kicker">Module</div><h3>'+esc(title)+'</h3><p>'+esc(desc)+'</p></div><div class="page-pill-row">'+chips.join('')+'</div></div></div>';
 }
-function render(){const access=(state&&state.access)||{};const plan=(state&&state.aiAccess)||{};const allowed=new Set(['/documentation','/tutorials','/pricing','/upgrade','/privacy','/terms']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/panels','/commands/tag','/tickets','/transcripts','/commands/feedback','/pricing','/upgrade'].forEach(p=>allowed.add(p));if(plan.isPlusOrHigher)allowed.add('/statistics');if(plan.isCustom)allowed.add('/embed-editor')}else{if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types');allowed.add('/panels');if(plan.isCustom)allowed.add('/embed-editor')}if(plan.isPlusOrHigher&&access.canManageTicketTypes)allowed.add('/statistics');if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This module is not available for your current role or server plan.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderPageHero(currentPath)+renderSettings();else if(currentPath==='/availability')html=renderPageHero(currentPath)+renderAvailability();else if(currentPath==='/tutorials')html=renderPageHero(currentPath)+renderTutorials();else if(currentPath==='/commands/ticket-types')html=renderPageHero(currentPath)+renderTypes();else if(currentPath==='/panels')html=renderPageHero(currentPath)+renderPanels();else if(currentPath==='/commands/tag')html=renderPageHero(currentPath)+renderTags();else if(currentPath==='/tickets')html=renderPageHero(currentPath)+renderTickets();else if(currentPath==='/transcripts')html=renderPageHero(currentPath)+renderTranscripts();else if(currentPath==='/commands/feedback')html=renderPageHero(currentPath)+renderFeedback();else if(currentPath==='/commands/appeal')html=renderPageHero(currentPath)+renderAppeal();else if(currentPath==='/statistics')html=renderPageHero(currentPath)+renderStats();else if(currentPath==='/embed-editor')html=renderPageHero(currentPath)+renderBranding();else if(currentPath==='/pricing')html=renderPageHero(currentPath)+renderPricing();else if(currentPath==='/upgrade')html=renderPageHero(currentPath)+renderUpgrade();else html=renderPageHero(currentPath)+renderDocs();document.title=${JSON.stringify(BRAND_NAME + ' - ')}+({"/overview":"Home","/settings":"Settings","/availability":"Availability","/tutorials":"Tutorials","/commands/ticket-types":"Ticket Types","/panels":"Panels","/commands/tag":"Tags","/tickets":"Tickets","/transcripts":"Transcripts","/commands/feedback":"Feedback","/statistics":"Statistics","/embed-editor":"Branding","/pricing":"Pricing","/upgrade":"Upgrade","/documentation":"Documentation","/privacy":"Privacy","/terms":"Terms"}[currentPath]||'Dashboard');renderAnnouncementBar();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire();if(window.localizePlanPrices)window.localizePlanPrices()})})}
+function render(){const access=(state&&state.access)||{};const plan=(state&&state.aiAccess)||{};const allowed=new Set(['/documentation','/tutorials','/pricing','/upgrade','/privacy','/terms']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/panels','/commands/tag','/tickets','/transcripts','/commands/feedback','/pricing','/upgrade'].forEach(p=>allowed.add(p));if(plan.isPlusOrHigher)allowed.add('/statistics');if(plan.isCustom)allowed.add('/embed-editor')}else{if(access.isManager||access.isStaff||access.canManageSettings||access.canViewTickets)allowed.add('/overview');if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types');allowed.add('/panels');if(plan.isCustom)allowed.add('/embed-editor')}if(plan.isPlusOrHigher&&access.canManageTicketTypes)allowed.add('/statistics');if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This module is not available for your current role or server plan.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderPageHero(currentPath)+renderSettings();else if(currentPath==='/availability')html=renderPageHero(currentPath)+renderAvailability();else if(currentPath==='/tutorials')html=renderPageHero(currentPath)+renderTutorials();else if(currentPath==='/commands/ticket-types')html=renderPageHero(currentPath)+renderTypes();else if(currentPath==='/panels')html=renderPageHero(currentPath)+renderPanels();else if(currentPath==='/commands/tag')html=renderPageHero(currentPath)+renderTags();else if(currentPath==='/tickets')html=renderPageHero(currentPath)+renderTickets();else if(currentPath==='/transcripts')html=renderPageHero(currentPath)+renderTranscripts();else if(currentPath==='/commands/feedback')html=renderPageHero(currentPath)+renderFeedback();else if(currentPath==='/commands/appeal')html=renderPageHero(currentPath)+renderAppeal();else if(currentPath==='/statistics')html=renderPageHero(currentPath)+renderStats();else if(currentPath==='/embed-editor')html=renderPageHero(currentPath)+renderBranding();else if(currentPath==='/pricing')html=renderPageHero(currentPath)+renderPricing();else if(currentPath==='/upgrade')html=renderPageHero(currentPath)+renderUpgrade();else html=renderPageHero(currentPath)+renderDocs();document.title=${JSON.stringify(BRAND_NAME + ' - ')}+({"/overview":"Home","/settings":"Settings","/availability":"Availability","/tutorials":"Tutorials","/commands/ticket-types":"Ticket Types","/panels":"Panels","/commands/tag":"Tags","/tickets":"Tickets","/transcripts":"Transcripts","/commands/feedback":"Feedback","/statistics":"Statistics","/embed-editor":"Branding","/pricing":"Pricing","/upgrade":"Upgrade","/documentation":"Documentation","/privacy":"Privacy","/terms":"Terms"}[currentPath]||'Dashboard');renderAnnouncementBar();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire();if(window.localizePlanPrices)window.localizePlanPrices()})})}
 function showUpgradeCelebration(plan){const label=String(plan||'Plus');let overlay=document.getElementById('upgradeOverlay');if(!overlay){overlay=document.createElement('div');overlay.id='upgradeOverlay';overlay.className='upgrade-overlay';overlay.innerHTML='<canvas class="upgrade-confetti" id="upgradeConfetti"></canvas><div class="upgrade-card"><div class="page-kicker">Upgrade complete</div><h2 id="upgradeTitle"></h2><div class="muted">You\\'ve unlocked:</div><ul id="upgradeList"></ul><button class="btn" id="upgradeClose" style="margin-top:18px">Continue</button></div>';document.body.appendChild(overlay)}const title=document.getElementById('upgradeTitle');const list=document.getElementById('upgradeList');if(title)title.textContent='You\\'ve upgraded to '+label+'!';const items=label==='Custom'?['White-label bot branding','Diamond dashboard theme','Custom bot instance controls','Everything in Plus and Pro']:label==='Pro'?['Statistics','Advanced operations','Priority support controls']:['Statistics','Improved analytics','Premium dashboard modules'];if(list)list.innerHTML=items.map(x=>'<li>'+esc(x)+'</li>').join('');overlay.classList.add('show');const canvas=document.getElementById('upgradeConfetti');if(canvas&&canvas.getContext){const ctx=canvas.getContext('2d');const dpr=Math.max(1,window.devicePixelRatio||1);canvas.width=Math.floor(window.innerWidth*dpr);canvas.height=Math.floor(window.innerHeight*dpr);canvas.style.width=window.innerWidth+'px';canvas.style.height=window.innerHeight+'px';ctx.setTransform(dpr,0,0,dpr,0,0);const pieces=Array.from({length:180},(_,i)=>({x:Math.random()*window.innerWidth,y:window.innerHeight+Math.random()*80,vx:(Math.random()-.5)*5,vy:-(4+Math.random()*7),g:.08+Math.random()*.04,s:5+Math.random()*9,r:Math.random()*6,c:['#67e8f9','#d9f99d','#fef08a','#c4b5fd','#f8fafc'][i%5]}));let frame=0;(function tick(){ctx.clearRect(0,0,window.innerWidth,window.innerHeight);pieces.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=p.g;p.r+=.12;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.r);ctx.fillStyle=p.c;ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s*.65);ctx.restore()});frame++;if(frame<210&&overlay.classList.contains('show'))requestAnimationFrame(tick);else ctx.clearRect(0,0,window.innerWidth,window.innerHeight)})()}const close=document.getElementById('upgradeClose');if(close)close.onclick=()=>overlay.classList.remove('show')}
 function handlePlanExperience(){const plan=(state&&state.aiAccess)||{};if(!plan.hasAccess||!plan.grantedAt)return;const key='dash_upgrade_seen_'+String(state.guildId||'global');const marker=String(plan.plan||'')+'@'+String(plan.grantedAt||'');try{if(localStorage.getItem(key)!==marker){localStorage.setItem(key,marker);showUpgradeCelebration(plan.planLabel||'upgrade')}}catch{}}
 async function boot(){state=await api('/api/state'+(location.search||''));handlePlanExperience();render()}
@@ -6526,10 +6654,12 @@ function startDashboard(client, customBotManager = null) {
             const pathname = url.pathname;
 
             const requestedGuildId = String(url.searchParams.get('guild') || '').trim();
-            if (/^\d{17,20}$/.test(requestedGuildId) && isAuthed(req) && client?.guilds?.cache?.has(requestedGuildId)) {
+            const activeStorage = ticketStore.getActiveStorage();
+            const knownDashboardGuildIds = getKnownDashboardGuildIds(client, activeStorage);
+            if (/^\d{17,20}$/.test(requestedGuildId) && isAuthed(req) && knownDashboardGuildIds.includes(requestedGuildId)) {
                 const userId = getDashboardSessionUserId(req);
                 const ownerId = getBotOwnerId();
-                const allowed = !userId || (ownerId && userId === ownerId) || getDashboardSessionGuildIds(req).includes(requestedGuildId);
+                const allowed = hasDashboardTokenAuth(req) || !userId || (ownerId && userId === ownerId) || getDashboardSessionGuildIds(req).includes(requestedGuildId);
                 if (allowed) {
                     appendSetCookie(res, `dashboard_guild=${encodeURIComponent(requestedGuildId)}; ${cookieAttributes({
                         maxAge: 2592000,
@@ -6587,7 +6717,7 @@ function startDashboard(client, customBotManager = null) {
             }
 
             if (pathname === '/home') {
-                sendHtml(res, 200, createHomeHtml({ showOwnerGallery: isStrictOwnerViewer(req) }));
+                sendHtml(res, 200, createHomeHtml({ showOwnerGallery: isStrictOwnerViewer(req), path: '/home' }));
                 return;
             }
 
@@ -6698,8 +6828,7 @@ function startDashboard(client, customBotManager = null) {
                         const setupConfig = typeof ticketStore.getGuildConfig === 'function'
                             ? ticketStore.getGuildConfig(targetGuildId, ticketStore.getActiveStorage())
                             : {};
-                        const completedByDiscordQuickSetup = String(setupConfig?.setup?.source || '') === 'discord-message-flow';
-                        if (Boolean(setupConfig?.setup?.completed) && !completedByDiscordQuickSetup) {
+                        if (Boolean(setupConfig?.setup?.completed)) {
                             sendHtml(res, 403, '<h1>403</h1><p>This server has already completed setup.</p>');
                             return;
                         }
@@ -6750,7 +6879,8 @@ function startDashboard(client, customBotManager = null) {
                         </div>
                     `,
                     ownerView: false,
-                    showStaffLink: false
+                    showStaffLink: false,
+                    meta: publicMetaForPath('/pricing')
                 });
             }            function createUpgradePage(req = null) {
                 const supportUrl = String(process.env.SUPPORT_SERVER_URL || process.env.DISCORD_SUPPORT_URL || '').trim();
@@ -6762,7 +6892,8 @@ function startDashboard(client, customBotManager = null) {
                         '<div style="position:relative;z-index:1;max-width:900px"><div class="pricing-kicker">Upgrade options</div><h1 style="font-size:clamp(38px,6vw,72px);line-height:1;margin:0 0 14px">Choose your next support tier.</h1><p class="muted" style="font-size:16px">Free keeps tickets running. Plus adds visibility. Pro adds automation. Enterprise adds the custom branded bot runtime and guided setup.</p><div class="pricing-grid" style="margin-top:24px;text-align:left"><div class="pricing-card"><div class="plan-name">Free</div><div class="plan-price">&pound;0</div><div class="plan-note">Tickets, panels, logs, and transcripts.</div></div><div class="pricing-card featured"><div class="plan-name">Plus</div><div class="plan-price">' + planPriceHtml('plus') + '</div><div class="plan-note">Statistics, staff activity, and priority support.</div></div><div class="pricing-card"><div class="plan-name">Pro</div><div class="plan-price">' + planPriceHtml('pro') + '</div><div class="plan-note">AI moderation and advanced automation.</div></div><div class="pricing-card"><div class="plan-name">Enterprise</div><div class="plan-price">Custom</div><div class="plan-note">Custom branded bot runtime and monitoring.</div></div></div><div class="row" style="justify-content:center;margin-top:24px">' + (supportLink ? '<a class="btn primary" href="' + escapeHtml(supportLink) + '" target="_blank" rel="noreferrer">Contact us in support</a>' : '<a class="btn primary" href="/dashboard">Open dashboard</a>') + '<a class="btn-soft" href="/pricing">Compare plans</a></div></div>' +
                     '</section>',
                     ownerView: false,
-                    showStaffLink: false
+                    showStaffLink: false,
+                    meta: publicMetaForPath('/upgrade')
                 });
             }
             if (pathname === '/pricing' || pathname === '/pricing/') {

@@ -1,6 +1,7 @@
 const { PermissionsBitField, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const ticketStore = require('./ticket-store');
 const { getPublicBaseUrl } = require('./public-url');
+const ticketHandler = require('../handlers/ticket-handler');
 
 const sessions = new Map();
 const SESSION_TTL_MS = 15 * 60 * 1000;
@@ -24,6 +25,14 @@ function canRun(member, guildConfig = {}) {
     if (perms?.has?.(PermissionsBitField.Flags.ManageGuild) || perms?.has?.(PermissionsBitField.Flags.Administrator)) return true;
     const managerRoleId = String(guildConfig.managerRoleId || '').trim();
     return Boolean(managerRoleId && member.roles?.cache?.has?.(managerRoleId));
+}
+
+function canOverrideCompletedSetup(interaction) {
+    const ownerId = String(process.env.BOT_OWNER_ID || process.env.OWNER_USER_ID || process.env.OWNER_ID || '').trim();
+    return Boolean(
+        interaction?.guild?.ownerId === interaction?.user?.id ||
+        (ownerId && ownerId === interaction?.user?.id)
+    );
 }
 
 function extractSnowflakes(content) {
@@ -51,6 +60,7 @@ async function sendPrompt(channel, session) {
 
 function buildDashboardRow(guildId) {
     const baseUrl = getPublicBaseUrl();
+    if (!/^https?:\/\//i.test(String(baseUrl || '').trim())) return null;
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setStyle(ButtonStyle.Link)
@@ -63,12 +73,20 @@ function buildDashboardRow(guildId) {
     );
 }
 
+function buildDashboardComponents(guildId) {
+    const row = buildDashboardRow(guildId);
+    return row ? [row] : [];
+}
+
 async function start(interaction) {
     const guildId = interaction.guildId;
     const activeStorage = ticketStore.getActiveStorage();
     const guildConfig = ticketStore.bootstrapGuildConfig(guildId, { storage: activeStorage }) || ticketStore.getGuildConfig(guildId, activeStorage);
     if (!canRun(interaction.member, guildConfig)) {
         return interaction.reply({ content: 'You need Manage Server permission, Administrator, or the configured manager role to run setup.', flags: MessageFlags.Ephemeral });
+    }
+    if (guildConfig?.setup?.completed && !canOverrideCompletedSetup(interaction)) {
+        return interaction.reply({ content: 'Setup is already complete for this server. Ask the server owner to unlock setup from the dashboard if it needs to be rerun.', flags: MessageFlags.Ephemeral });
     }
 
     const key = sessionKey(guildId, interaction.user.id);
@@ -85,7 +103,7 @@ async function start(interaction) {
     await interaction.reply({
         content: 'Setup started. I will ask for one thing at a time in this channel. Reply to each prompt with an ID, mention, or `skip`.',
         flags: MessageFlags.Ephemeral,
-        components: [buildDashboardRow(guildId)]
+        components: buildDashboardComponents(guildId)
     });
     await sendPrompt(interaction.channel, sessions.get(key));
 }
@@ -139,10 +157,35 @@ async function finish(message, session) {
         setup: { completed: true, step: 4, completedAt: new Date().toISOString(), source: 'discord-message-flow' }
     }, activeStorage);
 
+    let panelPosted = false;
+    if (session.answers.panelChannelId) {
+        const targetChannel = await message.guild.channels.fetch(session.answers.panelChannelId).catch(() => null);
+        if (targetChannel && typeof targetChannel.send === 'function') {
+            const fakeInteraction = {
+                guildId: session.guildId,
+                channelId: message.channel.id,
+                guild: message.guild,
+                channel: message.channel,
+                user: message.author,
+                replied: false,
+                deferred: false,
+                reply: async () => null,
+                editReply: async () => null
+            };
+            await ticketHandler.createTicketPanel(fakeInteraction, {
+                channel: targetChannel,
+                notice: 'Setup is complete and the ticket panel has been posted.'
+            }).catch(() => null);
+            panelPosted = true;
+        }
+    }
+
     sessions.delete(sessionKey(session.guildId, session.userId));
     await message.channel.send({
-        content: 'Setup is complete. You can fine-tune ticket types, panels, and exclusions from the dashboard.',
-        components: [buildDashboardRow(session.guildId)]
+        content: panelPosted
+            ? 'Setup is complete and the ticket panel has been posted. You can fine-tune ticket types, panels, and exclusions from the dashboard.'
+            : 'Setup is complete. You can fine-tune ticket types, panels, and exclusions from the dashboard.',
+        components: buildDashboardComponents(session.guildId)
     }).catch(() => null);
 }
 
