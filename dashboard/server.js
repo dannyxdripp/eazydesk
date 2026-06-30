@@ -509,6 +509,21 @@ function validateCustomBotTargetGuildId(guildId, customBot = {}) {
     return '';
 }
 
+function sanitizeCustomBotPatch(input = {}, current = {}) {
+    const raw = input && typeof input === 'object' ? input : {};
+    const existing = current && typeof current === 'object' ? current : {};
+    const token = String(raw.token || '').trim();
+    return {
+        enabled: raw.enabled === undefined ? existing.enabled !== false : raw.enabled !== false,
+        botName: String(raw.botName || existing.botName || '').trim().slice(0, 80),
+        avatarUrl: String(raw.avatarUrl || existing.avatarUrl || '').trim().slice(0, 500),
+        appId: String(raw.appId || existing.appId || '').trim().slice(0, 30),
+        publicKey: String(raw.publicKey || existing.publicKey || '').trim().slice(0, 120),
+        token: token || String(existing.token || '').trim(),
+        statusText: String(raw.statusText || existing.statusText || '').trim().slice(0, 120)
+    };
+}
+
 function isTranscriptOAuthRequired() {
     const raw = String(process.env.TRANSCRIPT_REQUIRE_OAUTH ?? 'true').trim().toLowerCase();
     return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
@@ -1029,7 +1044,6 @@ function createControllerHtml(req = null) {
         </div>
         <div class="controller-actions">
           <a class="btn primary" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Servers</span></a>
-          <a class="btn subtle" href="/custom-bots"><span class="btn-icon">${dashboardIcon('embed')}</span><span>Custom Bot Setup</span></a>
           <a class="btn subtle" href="/owner"><span class="btn-icon">${dashboardIcon('owner')}</span><span>Owner Console</span></a>
         </div>
       </div>
@@ -1055,7 +1069,7 @@ function createControllerHtml(req = null) {
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       const icons={open:${JSON.stringify(dashboardIcon('open'))},setup:${JSON.stringify(dashboardIcon('setup'))},tickets:${JSON.stringify(dashboardIcon('tickets'))},owner:${JSON.stringify(dashboardIcon('owner'))},restart:${JSON.stringify(dashboardIcon('restart'))},bot:${JSON.stringify(dashboardIcon('embed'))}};
       function iconMarkup(g){return g.iconURL?'<span class=\"controller-icon\"><img src=\"'+esc(g.iconURL)+'\" alt=\"\" /></span>':'<span class=\"controller-icon\">'+icons.bot+'</span>'}
-      function customBotBlock(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};if(!ai.isCustom&&!bot.tokenConfigured)return '';const on=!!bot.enabled&&!!bot.tokenConfigured;const status=bot.runtimeStatus||(on?'starting':'paused');const sync=bot.lastCommandSyncAt?(' - '+esc(bot.lastCommandSyncCount||0)+' command(s) synced'):'';return '<div class=\"custom-bot-strip\"><div><strong>Custom branded bot</strong><div class=\"muted\">'+(bot.tokenConfigured?'Token saved':'No token saved')+sync+(bot.lastError?' - '+esc(bot.lastError):'')+'</div></div><div class=\"controller-actions\"><span class=\"pill\">'+esc(status)+'</span><a class=\"btn subtle\" href=\"/custom-bots\"><span class=\"btn-icon\">'+icons.bot+'</span><span>Custom Bots</span></a></div></div>'}
+      function customBotBlock(g){return ''}
       function filterCards(){const q=String(search&&search.value||'').trim().toLowerCase();let shown=0;for(const card of document.querySelectorAll('[data-server-card]')){const match=!q||String(card.getAttribute('data-hay')||'').includes(q);card.style.display=match?'':'none';if(match)shown+=1}if(count)count.textContent=shown+' shown'}
       if(search)search.oninput=filterCards;
       function item(g){const status=g.customOnly?'<span class=\"pill\">Custom-only</span>':(g.setupCompleted?'<span class=\"pill\">Setup complete</span>':'<span class=\"pill\">Setup step '+esc(g.setupStep||1)+'</span>');const plan=(g.aiAccess&&g.aiAccess.statusLabel)||'Free plan';const hay=esc([g.name,g.id,plan,g.customOnly?'custom-only':'public-bot'].join(' ').toLowerCase());const actions=[];if(g.botInServer||g.customOnly){actions.push('<a class=\"btn primary\" href=\"/overview?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.open+'</span><span>Dashboard</span></a>');if(!g.setupCompleted)actions.push('<a class=\"btn subtle\" href=\"/setup?guild='+encodeURIComponent(g.id)+'&page=1\"><span class=\"btn-icon\">'+icons.setup+'</span><span>Setup</span></a>');actions.push('<a class=\"btn subtle\" href=\"/tickets?guild='+encodeURIComponent(g.id)+'\"><span class=\"btn-icon\">'+icons.tickets+'</span><span>Tickets</span></a>');if(!g.customOnly)actions.push('<button class=\"btn warning\" data-restart=\"'+esc(g.id)+'\"><span class=\"btn-icon\">'+icons.restart+'</span><span>Restart Setup</span></button>')}else{actions.push('<span class=\"muted\">No bot runtime is connected for this server yet.</span>')}actions.push('<a class=\"btn subtle\" href=\"/owner\"><span class=\"btn-icon\">'+icons.owner+'</span><span>Plans</span></a>');return ['<div class=\"card controller-card\" data-server-card=\"1\" data-hay=\"'+hay+'\">','<div class=\"controller-head\"><div class=\"controller-title\">'+iconMarkup(g)+'<div><div class=\"controller-name\">'+esc(g.name)+'</div><div class=\"muted\">'+esc(g.id)+'</div></div></div><div class=\"controller-meta\">'+(g.memberCount?('<span class=\"pill\">'+esc(g.memberCount)+' members</span>'):'')+status+'<span class=\"pill\">'+esc(plan)+'</span></div></div>',customBotBlock(g),'<div class=\"controller-actions\">'+actions.join('')+'</div>','</div>'].join('')}
@@ -1085,10 +1099,13 @@ function createCustomBotsHtml(req = null) {
           <div class="card">
             <strong>Add or update a custom server</strong>
             <div class="muted" style="margin-top:6px">Use this when a server should run only the branded custom bot. The public bot is not required for dashboard visibility.</div>
+            <input id="customOriginalGuildId" type="hidden" />
             <label>Target Server ID (Guild ID)</label>
             <input id="customGuildId" placeholder="123456789012345678" />
             <label>Bot display name</label>
             <input id="customBotName" placeholder="Customer Support" />
+            <label>Avatar URL</label>
+            <input id="customAvatarUrl" placeholder="https://..." />
             <label>Bot token</label>
             <input id="customToken" placeholder="Paste token, or leave blank when updating metadata" />
             <label>Status text</label>
@@ -1099,6 +1116,7 @@ function createCustomBotsHtml(req = null) {
             <input id="customPublicKey" placeholder="Optional interaction public key" />
             <div class="row" style="margin-top:12px">
               <button id="saveCustomBot" class="btn primary" type="button">Save Custom Bot</button>
+              <button id="clearCustomForm" class="btn subtle" type="button">Clear Form</button>
               <a class="btn subtle" href="/dashboard">Public Bot Setup</a>
             </div>
           </div>
@@ -1117,16 +1135,18 @@ function createCustomBotsHtml(req = null) {
     `;
 
     const script = `
-      const err=document.getElementById('customBotError'),ok=document.getElementById('customBotSuccess'),list=document.getElementById('customBotList'),search=document.getElementById('customBotSearch'),count=document.getElementById('customBotCount'),saveBtn=document.getElementById('saveCustomBot'),guildInput=document.getElementById('customGuildId'),nameInput=document.getElementById('customBotName'),tokenInput=document.getElementById('customToken'),statusInput=document.getElementById('customStatus'),appInput=document.getElementById('customAppId'),keyInput=document.getElementById('customPublicKey');
+      const err=document.getElementById('customBotError'),ok=document.getElementById('customBotSuccess'),list=document.getElementById('customBotList'),search=document.getElementById('customBotSearch'),count=document.getElementById('customBotCount'),saveBtn=document.getElementById('saveCustomBot'),clearBtn=document.getElementById('clearCustomForm'),originalInput=document.getElementById('customOriginalGuildId'),guildInput=document.getElementById('customGuildId'),nameInput=document.getElementById('customBotName'),avatarInput=document.getElementById('customAvatarUrl'),tokenInput=document.getElementById('customToken'),statusInput=document.getElementById('customStatus'),appInput=document.getElementById('customAppId'),keyInput=document.getElementById('customPublicKey');
       const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
       function note(message){ok.style.display='block';ok.innerHTML='<strong>Updated</strong><div class="muted">'+esc(message)+'</div>'}
       function filterCards(){const q=String(search&&search.value||'').trim().toLowerCase();let shown=0;for(const card of document.querySelectorAll('[data-custom-server]')){const match=!q||String(card.getAttribute('data-hay')||'').includes(q);card.style.display=match?'':'none';if(match)shown+=1}if(count)count.textContent=shown+' shown'}
       if(search)search.oninput=filterCards;
-      function customCard(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};const isRelevant=ai.isCustom||bot.tokenConfigured||g.customOnly;if(!isRelevant)return '';const on=!!bot.enabled&&!!bot.tokenConfigured;const status=bot.runtimeStatus||(on?'starting':'paused');const hay=esc([g.name,g.id,ai.statusLabel,status,g.customOnly?'custom-only':'public-bot'].join(' ').toLowerCase());return '<div class="item server-card can-manage" data-custom-server="1" data-hay="'+hay+'"><div style="display:grid;gap:8px;width:100%"><div class="row"><strong>'+esc(g.name)+'</strong><span class="pill">'+esc(ai.statusLabel||'Custom')+'</span><span class="pill">'+esc(status)+'</span></div><div class="muted">'+esc(g.id)+'</div><div class="muted">'+(bot.tokenConfigured?'Token saved':'No token saved')+(bot.lastCommandSyncAt?' - '+esc(bot.lastCommandSyncCount||0)+' command(s) synced':'')+(bot.lastError?' - '+esc(bot.lastError):'')+'</div><div class="row"><a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Dashboard</a><button class="btn '+(on?'warning':'primary')+'" '+(!bot.tokenConfigured?'disabled':'')+' data-toggle="'+esc(g.id)+'" data-next="'+(on?'false':'true')+'">'+(on?'Turn Off':'Turn On')+'</button><button class="btn subtle" '+(!bot.tokenConfigured?'disabled':'')+' data-sync="'+esc(g.id)+'">Sync Commands</button><button class="btn subtle" data-fill="'+esc(g.id)+'" data-name="'+esc(g.name)+'">Edit</button></div></div></div>'}
-      async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];const html=guilds.map(customCard).filter(Boolean).join('');list.innerHTML=html||'<div class="muted">No custom bot servers found yet.</div>';filterCards();for(const btn of document.querySelectorAll('[data-toggle]'))btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-toggle'),action:'custom-bot-toggle',enabled:btn.getAttribute('data-next')==='true'})});note('Custom bot runtime updated.');await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}};for(const btn of document.querySelectorAll('[data-sync]'))btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-sync'),action:'custom-bot-sync'})});note('Command sync requested.');await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}};for(const btn of document.querySelectorAll('[data-fill]'))btn.onclick=()=>{guildInput.value=btn.getAttribute('data-fill')||'';nameInput.value=btn.getAttribute('data-name')||'';tokenInput.value='';guildInput.focus()}}catch(e){err.style.display='block';err.textContent=e.message}}
-      saveBtn.onclick=async()=>{try{err.style.display='none';const guildId=String(guildInput.value||'').trim();if(!/^\\d{17,20}$/.test(guildId))throw new Error('Enter a valid target server/guild ID.');const customBot={botName:String(nameInput.value||'').trim(),appId:String(appInput.value||'').trim(),publicKey:String(keyInput.value||'').trim(),token:String(tokenInput.value||'').trim(),statusText:String(statusInput.value||'').trim(),enabled:true};if(customBot.appId&&customBot.appId===guildId)throw new Error('Server ID and App ID cannot be the same. Use the Discord server/guild ID as the target server.');saveBtn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action:'set-plan',plan:'custom',customBot})});note('Custom bot saved. Invite only the branded bot to that server.');tokenInput.value='';await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{saveBtn.disabled=false}};
+      function clearForm(){originalInput.value='';guildInput.value='';nameInput.value='';avatarInput.value='';tokenInput.value='';statusInput.value='';appInput.value='';keyInput.value='';saveBtn.textContent='Save Custom Bot'}
+      if(clearBtn)clearBtn.onclick=clearForm;
+      function customCard(g){const ai=g.aiAccess||{};const bot=ai.customBot||{};const isRelevant=ai.isCustom||bot.tokenConfigured||g.customOnly;if(!isRelevant)return '';const on=!!bot.enabled&&!!bot.tokenConfigured;const status=bot.runtimeStatus||(on?'starting':'paused');const hay=esc([g.name,g.id,ai.statusLabel,status,g.customOnly?'custom-only':'public-bot'].join(' ').toLowerCase());return '<div class="item server-card can-manage" data-custom-server="1" data-hay="'+hay+'"><div style="display:grid;gap:8px;width:100%"><div class="row"><strong>'+esc(g.name)+'</strong><span class="pill">'+esc(ai.statusLabel||'Custom')+'</span><span class="pill">'+esc(status)+'</span></div><div class="muted">Accepted server ID: '+esc(g.id)+'</div><div class="muted">'+(bot.tokenConfigured?'Token saved':'No token saved')+(bot.appId?' - App '+esc(bot.appId):'')+(bot.lastCommandSyncAt?' - '+esc(bot.lastCommandSyncCount||0)+' command(s) synced':'')+(bot.lastError?' - '+esc(bot.lastError):'')+'</div><div class="row"><a class="btn primary" href="/overview?guild='+encodeURIComponent(g.id)+'">Dashboard</a><button class="btn '+(on?'warning':'primary')+'" '+(!bot.tokenConfigured?'disabled':'')+' data-toggle="'+esc(g.id)+'" data-next="'+(on?'false':'true')+'">'+(on?'Turn Off':'Turn On')+'</button><button class="btn subtle" '+(!bot.tokenConfigured?'disabled':'')+' data-sync="'+esc(g.id)+'">Sync Commands</button><button class="btn subtle" data-fill="'+esc(g.id)+'" data-name="'+esc(g.name)+'" data-avatar="'+esc(bot.avatarUrl||'')+'" data-status="'+esc(bot.statusText||'')+'" data-app="'+esc(bot.appId||'')+'" data-key="'+esc(bot.publicKey||'')+'">Edit</button><button class="btn warning" data-clear-custom="'+esc(g.id)+'">Clear Custom</button></div></div></div>'}
+      async function load(){try{const data=await api('/api/controller/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];const html=guilds.map(customCard).filter(Boolean).join('');list.innerHTML=html||'<div class="muted">No custom bot servers found yet.</div>';filterCards();for(const btn of document.querySelectorAll('[data-toggle]'))btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-toggle'),action:'custom-bot-toggle',enabled:btn.getAttribute('data-next')==='true'})});note('Custom bot runtime updated.');await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}};for(const btn of document.querySelectorAll('[data-sync]'))btn.onclick=async()=>{try{btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-sync'),action:'custom-bot-sync'})});note('Command sync requested.');await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}};for(const btn of document.querySelectorAll('[data-clear-custom]'))btn.onclick=async()=>{try{if(!confirm('Clear Custom plan and runtime for this server?'))return;btn.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId:btn.getAttribute('data-clear-custom'),action:'clear'})});note('Custom bot cleared.');clearForm();await load()}catch(e){err.style.display='block';err.textContent=e.message;btn.disabled=false}};for(const btn of document.querySelectorAll('[data-fill]'))btn.onclick=()=>{originalInput.value=btn.getAttribute('data-fill')||'';guildInput.value=btn.getAttribute('data-fill')||'';nameInput.value=btn.getAttribute('data-name')||'';avatarInput.value=btn.getAttribute('data-avatar')||'';statusInput.value=btn.getAttribute('data-status')||'';appInput.value=btn.getAttribute('data-app')||'';keyInput.value=btn.getAttribute('data-key')||'';tokenInput.value='';saveBtn.textContent='Save Changes';guildInput.focus()}}catch(e){err.style.display='block';err.textContent=e.message}}
+      saveBtn.onclick=async()=>{try{err.style.display='none';const guildId=String(guildInput.value||'').trim();const originalGuildId=String(originalInput.value||'').trim();if(!/^\\d{17,20}$/.test(guildId))throw new Error('Enter a valid target server/guild ID.');const customBot={botName:String(nameInput.value||'').trim(),avatarUrl:String(avatarInput.value||'').trim(),appId:String(appInput.value||'').trim(),publicKey:String(keyInput.value||'').trim(),token:String(tokenInput.value||'').trim(),statusText:String(statusInput.value||'').trim(),enabled:true};if(customBot.appId&&customBot.appId===guildId)throw new Error('Server ID and App ID cannot be the same. Use the Discord server/guild ID as the target server.');saveBtn.disabled=true;const action=originalGuildId&&originalGuildId!==guildId?'move-custom-bot':'set-plan';const body=action==='move-custom-bot'?{guildId:originalGuildId,targetGuildId:guildId,action,customBot}:{guildId,action:'set-plan',plan:'custom',customBot};await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});note(action==='move-custom-bot'?'Custom bot accepted server ID changed.':'Custom bot saved. Invite only the branded bot to that server, or type e?bind in the server after inviting it.');originalInput.value=guildId;tokenInput.value='';await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{saveBtn.disabled=false}};
       load();
     `;
 
@@ -1273,7 +1293,7 @@ function createOwnerHtml(req = null) {
       function renderRows(title,items,mapper){return '<div class="card"><strong>'+esc(title)+'</strong><div class="list">'+(items.length?items.map(mapper).join(''):'<div class="muted">Nothing yet.</div>')+'</div></div>'}
       function renderMatrix(matrix){return '<div class="card"><strong>Staff dashboard role access</strong><div class="muted" style="margin-top:6px">Role IDs come from environment variables. Update STAFF_EXECUTIVE_ROLE_IDS, STAFF_SUPPORT_ROLE_IDS, STAFF_QA_ROLE_IDS, STAFF_COMMUNITY_ROLE_IDS, or SENIOR_STAFF_ROLE_IDS, then redeploy/restart.</div><div class="list" style="margin-top:10px">'+(matrix||[]).map(row=>'<details class="item" style="display:block"><summary><strong>'+esc(row.name)+'</strong> <span class="pill">'+esc((row.roleIds||[]).length)+' role(s)</span></summary><div class="muted" style="margin-top:8px;white-space:pre-wrap">'+esc((row.roleIds||[]).join('\\n')||'No roles configured')+'</div><div class="roles" style="margin-top:8px">'+Object.entries(row.permissions||{}).filter(x=>x[1]).map(x=>'<span class="pill">'+esc(x[0].replace(/^can/,''))+'</span>').join('')+'</div></details>').join('')+'</div></div>'}
       function renderContentTools(cfg,backupStatus){const imgs=Array.isArray(cfg.homeImages)?cfg.homeImages:[];const slide=i=>{const raw=imgs[i];return typeof raw==='string'?{url:raw,title:'',body:''}:(raw&&typeof raw==='object'?raw:{})};const tutorials=Array.isArray(cfg.tutorials)?cfg.tutorials:[];const docs=Array.isArray(cfg.docsSections)?cfg.docsSections:[];const ann=cfg.siteAnnouncement||{};const backupText=backupStatus&&backupStatus.configured?'MEGA backup configured':'MEGA not configured; manual backup will save locally';return '<div class="card"><strong>Owner operations</strong><div class="muted" style="margin-top:6px">'+esc(backupText)+'</div><div class="row" style="margin-top:10px"><button id="ownerBackupNow" class="btn">Backup Data Now</button></div><label style="margin-top:14px">Maintenance message to all servers</label><textarea id="ownerMaintenanceText" style="min-height:110px" placeholder="Short maintenance notice..."></textarea><div class="row" style="margin-top:10px"><button id="ownerSendMaintenance" class="btn-danger">Send Maintenance Message</button></div></div>'+
-      '<div class="card"><strong>Bot setup</strong><div class="muted" style="margin-top:6px">Add a server once, then choose public bot, custom bot, or custom-only operation from one place.</div><div class="grid" style="margin-top:10px"><div><label>Target Server ID (Guild ID)</label><input id="manualCustomGuildId" placeholder="123456789012345678" /></div><div><label>Bot display name</label><input id="manualCustomBotName" placeholder="Customer Support" /></div><div><label>Bot Token</label><input id="manualCustomToken" placeholder="Custom bot token" /></div><div><label>Status Text</label><input id="manualCustomStatus" placeholder="Handling support" /></div><div><label>App ID</label><input id="manualCustomAppId" placeholder="Optional application/client ID" /></div><div><label>Public Key</label><input id="manualCustomPublicKey" placeholder="Optional interaction public key" /></div></div><div class="row" style="margin-top:10px"><button id="ownerAddCustomServer" class="btn">Save Custom Server</button><a class="btn-soft" href="/dashboard">Add public bot</a></div></div>'+
+      '<div class="card"><strong>Custom bot editing</strong><div class="muted" style="margin-top:6px">Runtime tokens, accepted server IDs, app IDs, public keys, status text, and command sync are managed from the owner-only Custom Bots page.</div><div class="row" style="margin-top:10px"><a class="btn" href="/custom-bots">Open Custom Bots</a><a class="btn-soft" href="/dashboard">Add public bot</a></div></div>'+
       '<div class="card"><strong>Announcement panel</strong><div class="muted" style="margin-top:6px">Shown on the website and dashboard while enabled.</div><div class="row"><div><label>Enabled</label><select id="ownerAnnouncementEnabled"><option value="true" '+(ann.enabled?'selected':'')+'>On</option><option value="false" '+(!ann.enabled?'selected':'')+'>Off</option></select></div><div><label>Type</label><select id="ownerAnnouncementType"><option value="general" '+((ann.type||'general')==='general'?'selected':'')+'>General</option><option value="promotional" '+(ann.type==='promotional'?'selected':'')+'>Promotional</option><option value="warning" '+(ann.type==='warning'?'selected':'')+'>Warning</option></select></div></div><label>Message</label><textarea id="ownerAnnouncementText" style="min-height:110px" maxlength="240">'+esc(ann.text||'')+'</textarea><div class="row"><div><label>Button label</label><input id="ownerAnnouncementCta" value="'+esc(ann.ctaLabel||'')+'" maxlength="40" placeholder="Learn more" /></div><div><label>Button URL</label><input id="ownerAnnouncementUrl" value="'+esc(ann.linkUrl||'')+'" placeholder="https://..." /></div></div><div class="row" style="margin-top:10px"><button id="ownerSaveAnnouncement" class="btn">Save Announcement</button><button id="ownerClearAnnouncement" class="btn-soft">Clear</button></div></div>'+
       '<div class="card"><strong>Homepage highlights</strong><div class="muted" style="margin-top:6px">Each highlight has an image and short text beside it on the homepage.</div>'+[0,1,2].map(i=>{const s=slide(i);return '<div class="item" style="display:block;margin-top:10px"><strong>Highlight '+(i+1)+'</strong><label>Image URL</label><input id="ownerHomeImg'+(i+1)+'" value="'+esc(s.url||'')+'" placeholder="https://..." /><label>Title</label><input id="ownerHomeTitle'+(i+1)+'" value="'+esc(s.title||'')+'" placeholder="Dashboard that stays organized" /><label>Text</label><textarea id="ownerHomeBody'+(i+1)+'" placeholder="Short supporting copy...">'+esc(s.body||s.description||'')+'</textarea></div>'}).join('')+'<div class="row" style="margin-top:10px"><button id="ownerSaveHomeImages" class="btn">Save Highlights</button><button id="ownerClearHomeImages" class="btn-soft">Clear</button></div></div>'+
       '<div class="card"><strong>Public tutorials</strong><div class="muted" style="margin-top:6px">Manage tutorial cards and walkthrough steps.</div><textarea id="ownerTutorialsJson" style="min-height:240px;font-family:Consolas,monospace">'+esc(JSON.stringify(tutorials,null,2))+'</textarea><div class="row" style="margin-top:10px"><button id="ownerSaveTutorials" class="btn">Save Tutorials</button><button id="ownerFormatTutorials" class="btn-soft">Format</button></div></div>'+
@@ -1301,7 +1321,6 @@ function createOwnerHtml(req = null) {
         const ownerFormatDocs=document.getElementById('ownerFormatDocs');if(ownerFormatDocs)ownerFormatDocs.onclick=()=>formatJson('ownerDocsJson','Documentation');
         const ownerBackupNow=document.getElementById('ownerBackupNow');if(ownerBackupNow)ownerBackupNow.onclick=async()=>{try{ownerBackupNow.disabled=true;const data=await api('/api/owner/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:'owner-manual'})});const r=data.result||{};note('Backup complete: '+(r.files||0)+' file(s), '+(r.bytes||0)+' bytes'+(r.local?' saved locally.':' uploaded to MEGA.'));await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{ownerBackupNow.disabled=false}};
         const ownerSendMaintenance=document.getElementById('ownerSendMaintenance');if(ownerSendMaintenance)ownerSendMaintenance.onclick=async()=>{try{const msg=String(ownerMaintenanceText.value||'').trim();if(!msg)return err.textContent='Maintenance message is required.',err.style.display='block';if(!confirm('Send this maintenance message to every server the bot is in?'))return;ownerSendMaintenance.disabled=true;const data=await api('/api/owner/maintenance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});note('Maintenance message sent to '+(data.sent||0)+' server(s). Failed: '+(data.failed||0)+'.')}catch(e){err.style.display='block';err.textContent=e.message}finally{ownerSendMaintenance.disabled=false}};
-        const ownerAddCustomServer=document.getElementById('ownerAddCustomServer');if(ownerAddCustomServer)ownerAddCustomServer.onclick=async()=>{try{const guildId=String(manualCustomGuildId.value||'').trim();const customBot={botName:String(manualCustomBotName.value||'').trim(),appId:String(manualCustomAppId.value||'').trim(),publicKey:String(manualCustomPublicKey.value||'').trim(),token:String(manualCustomToken.value||'').trim(),statusText:String(manualCustomStatus.value||'').trim(),enabled:true};if(!/^\\d{17,20}$/.test(guildId))throw new Error('Enter a valid target server/guild ID.');if(customBot.appId&&customBot.appId===guildId)throw new Error('Server ID and App ID cannot be the same. Use the Discord server/guild ID as the target server.');if(!customBot.token)throw new Error('Bot token is required for a custom-only server.');ownerAddCustomServer.disabled=true;await api('/api/owner/guild-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({guildId,action:'set-plan',plan:'custom',customBot})});note('Custom-only server saved. Invite only the branded bot to that server.');await load()}catch(e){err.style.display='block';err.textContent=e.message}finally{ownerAddCustomServer.disabled=false}};
         const ownerSaveAnnouncement=document.getElementById('ownerSaveAnnouncement');if(ownerSaveAnnouncement)ownerSaveAnnouncement.onclick=async()=>{try{const siteAnnouncement={enabled:(ownerAnnouncementEnabled.value||'false')==='true',type:ownerAnnouncementType.value||'general',text:ownerAnnouncementText.value||'',ctaLabel:ownerAnnouncementCta.value||'',linkUrl:ownerAnnouncementUrl.value||''};await saveContent({siteAnnouncement});note('Announcement saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
         const ownerClearAnnouncement=document.getElementById('ownerClearAnnouncement');if(ownerClearAnnouncement)ownerClearAnnouncement.onclick=async()=>{try{await saveContent({siteAnnouncement:{enabled:false,type:'general',text:'',ctaLabel:'',linkUrl:''}});note('Announcement cleared.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
         const ownerSaveHomeImages=document.getElementById('ownerSaveHomeImages');if(ownerSaveHomeImages)ownerSaveHomeImages.onclick=async()=>{try{const homeImages=[1,2,3].map(i=>({url:String((document.getElementById('ownerHomeImg'+i)||{}).value||'').trim(),title:String((document.getElementById('ownerHomeTitle'+i)||{}).value||'').trim(),body:String((document.getElementById('ownerHomeBody'+i)||{}).value||'').trim()})).filter(s=>s.url);await saveContent({homeImages});note('Home highlights saved.');await load()}catch(e){err.style.display='block';err.textContent=e.message}};
@@ -3372,8 +3391,8 @@ async function handleApi(req, res, url, client, customBotManager = null) {
     }
 
     if (method === 'GET' && pathname === '/api/controller/guilds') {
-        if (!isBotOwnerUser(req)) {
-            sendJson(res, 403, { error: 'Owner user only' });
+        if (!isStrictOwnerViewer(req)) {
+            sendJson(res, 403, { error: 'Owner access required' });
             return true;
         }
 
@@ -4006,8 +4025,8 @@ async function handleApi(req, res, url, client, customBotManager = null) {
     }
 
     if (method === 'POST' && pathname === '/api/controller/setup/restart') {
-        if (!isBotOwnerUser(req)) {
-            sendJson(res, 403, { error: 'Owner user only' });
+        if (!isStrictOwnerViewer(req)) {
+            sendJson(res, 403, { error: 'Owner access required' });
             return true;
         }
 
@@ -4216,6 +4235,8 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         const current = ticketStore.getGuildAiAccess(guildId, activeStorage);
         const ownerId = getDashboardSessionUserId(req) || getBotOwnerId() || null;
         let nextPatch = {};
+        let responseGuildId = guildId;
+        const syncGuildIds = new Set([guildId]);
 
         if (action === 'start-trial') {
             const trialPlan = ['plus_trial', 'pro_trial', 'custom_trial', 'trial'].includes(String(body.plan || '').trim().toLowerCase())
@@ -4245,15 +4266,9 @@ async function handleApi(req, res, url, client, customBotManager = null) {
                     return true;
                 }
             }
-            const customBot = body.customBot && typeof body.customBot === 'object' ? {
-                enabled: body.customBot.enabled === undefined ? current.customBot?.enabled !== false : body.customBot.enabled !== false,
-                botName: String(body.customBot.botName || current.customBot?.botName || '').trim().slice(0, 80),
-                avatarUrl: String(current.customBot?.avatarUrl || '').trim().slice(0, 500),
-                appId: String(body.customBot.appId || '').trim().slice(0, 30),
-                publicKey: String(body.customBot.publicKey || '').trim().slice(0, 120),
-                token: String(body.customBot.token || '').trim() || String(current.customBot?.token || '').trim(),
-                statusText: String(body.customBot.statusText || current.customBot?.statusText || '').trim().slice(0, 120)
-            } : current.customBot;
+            const customBot = body.customBot && typeof body.customBot === 'object'
+                ? sanitizeCustomBotPatch(body.customBot, current.customBot)
+                : current.customBot;
             nextPatch = {
                 plan,
                 enabled: true,
@@ -4264,6 +4279,80 @@ async function handleApi(req, res, url, client, customBotManager = null) {
                 grantedAt: new Date().toISOString(),
                 customBot: plan === 'custom' ? { ...customBot, enabled: customBot.enabled !== false } : current.customBot
             };
+        } else if (action === 'move-custom-bot') {
+            const targetGuildId = String(body.targetGuildId || '').trim();
+            if (!/^\d{17,20}$/.test(targetGuildId)) {
+                sendJson(res, 400, { error: 'Invalid target server ID' });
+                return true;
+            }
+            if (!['custom', 'custom_trial'].includes(current.plan) && !String(current.customBot?.token || '').trim()) {
+                sendJson(res, 400, { error: 'No custom bot is configured on the source server ID.' });
+                return true;
+            }
+            const customBot = sanitizeCustomBotPatch(body.customBot || {}, current.customBot);
+            const targetError = validateCustomBotTargetGuildId(targetGuildId, customBot);
+            if (targetError) {
+                sendJson(res, 400, { error: targetError });
+                return true;
+            }
+
+            const movedAccess = ticketStore.setGuildAiAccess(targetGuildId, {
+                ...current,
+                guildId: targetGuildId,
+                plan: 'custom',
+                enabled: true,
+                trialEndsAt: null,
+                notifiedTrialExpiredAt: null,
+                grantedByOwnerId: ownerId,
+                grantedAt: new Date().toISOString(),
+                customBot: {
+                    ...customBot,
+                    enabled: customBot.enabled !== false,
+                    runtimeStatus: 'rebinding',
+                    lastReboundAt: new Date().toISOString(),
+                    lastReboundFromGuildId: guildId,
+                    lastError: null
+                }
+            }, activeStorage);
+
+            const sourceConfig = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(guildId, activeStorage) : {};
+            const targetConfig = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(targetGuildId, activeStorage) : {};
+            if (sourceConfig && Object.keys(sourceConfig).length && (!targetConfig || !Object.keys(targetConfig).length)) {
+                ticketStore.setGuildConfig(targetGuildId, {
+                    ...sourceConfig,
+                    setup: {
+                        ...(sourceConfig.setup || {}),
+                        completed: false,
+                        reboundAt: new Date().toISOString(),
+                        reboundFromGuildId: guildId
+                    }
+                }, activeStorage);
+            }
+
+            ticketStore.setGuildAiAccess(guildId, {
+                plan: 'none',
+                enabled: false,
+                trialStartedAt: null,
+                trialEndsAt: null,
+                notifiedTrialExpiredAt: null,
+                grantedByOwnerId: ownerId,
+                grantedAt: null,
+                customBot: {}
+            }, activeStorage);
+            responseGuildId = targetGuildId;
+            syncGuildIds.add(targetGuildId);
+            if (customBotManager && typeof customBotManager.stopGuild === 'function') {
+                customBotManager.stopGuild(guildId, 'accepted server id changed').catch(error => {
+                    console.error('[Custom Bot] Failed to stop old branded bot runtime:', error);
+                });
+            }
+            sendJson(res, 200, { ok: true, guildId: targetGuildId, previousGuildId: guildId, aiAccess: getGuildAiUiState(targetGuildId, activeStorage), raw: movedAccess });
+            if (customBotManager && typeof customBotManager.syncGuild === 'function') {
+                customBotManager.syncGuild(targetGuildId).catch(error => {
+                    console.error('[Custom Bot] Failed to sync moved branded bot:', error);
+                });
+            }
+            return true;
         } else if (action === 'custom-bot-toggle') {
             if (!['custom', 'custom_trial'].includes(current.plan)) {
                 sendJson(res, 400, { error: 'Custom bot controls require the Custom plan' });
@@ -4300,6 +4389,11 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         } else if (action === 'enable') {
             nextPatch = { enabled: true };
         } else if (action === 'clear') {
+            if (customBotManager && typeof customBotManager.stopGuild === 'function') {
+                customBotManager.stopGuild(guildId, 'custom bot cleared').catch(error => {
+                    console.error('[Custom Bot] Failed to stop cleared branded bot runtime:', error);
+                });
+            }
             nextPatch = {
                 plan: 'none',
                 enabled: false,
@@ -4334,11 +4428,13 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             }
         }
         if (customBotManager && typeof customBotManager.syncGuild === 'function') {
-            customBotManager.syncGuild(guildId).catch(error => {
-                console.error('[Custom Bot] Failed to sync branded bot after dashboard change:', error);
-            });
+            for (const id of syncGuildIds) {
+                customBotManager.syncGuild(id).catch(error => {
+                    console.error('[Custom Bot] Failed to sync branded bot after dashboard change:', error);
+                });
+            }
         }
-        sendJson(res, 200, { ok: true, guildId, aiAccess: getGuildAiUiState(guildId, activeStorage), raw: updated });
+        sendJson(res, 200, { ok: true, guildId: responseGuildId, aiAccess: getGuildAiUiState(responseGuildId, activeStorage), raw: updated });
         return true;
     }
 
@@ -6774,7 +6870,7 @@ function startDashboard(client, customBotManager = null) {
             }
 
             if (pathname === '/controller' || pathname === '/controller/') {
-                if (hasDiscordOAuthConfigured() && !getDashboardSessionUserId(req)) {
+                if (!isAuthed(req) && hasDiscordOAuthConfigured()) {
                     const next = encodeURIComponent('/controller' + (url.search || ''));
                     res.writeHead(302, { Location: `/login?next=${next}`, 'Cache-Control': 'no-store' });
                     res.end();
@@ -6789,7 +6885,7 @@ function startDashboard(client, customBotManager = null) {
             }
 
             if (pathname === '/custom-bots' || pathname === '/custom-bots/') {
-                if (hasDiscordOAuthConfigured() && !getDashboardSessionUserId(req)) {
+                if (!isAuthed(req) && hasDiscordOAuthConfigured()) {
                     const next = encodeURIComponent('/custom-bots' + (url.search || ''));
                     res.writeHead(302, { Location: `/login?next=${next}`, 'Cache-Control': 'no-store' });
                     res.end();
@@ -6804,7 +6900,7 @@ function startDashboard(client, customBotManager = null) {
             }
 
             if (pathname === '/owner' || pathname === '/owner/') {
-                if (hasDiscordOAuthConfigured() && !getDashboardSessionUserId(req)) {
+                if (!isAuthed(req) && hasDiscordOAuthConfigured()) {
                     const next = encodeURIComponent('/owner' + (url.search || ''));
                     res.writeHead(302, { Location: `/login?next=${next}`, 'Cache-Control': 'no-store' });
                     res.end();

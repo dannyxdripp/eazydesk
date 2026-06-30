@@ -154,7 +154,9 @@ async function reportCustomBotEvent(event, details = {}, error = null) {
         ? 'Custom Bot Online'
         : event === 'stopped'
             ? 'Custom Bot Stopped'
-            : 'Custom Bot Error';
+            : event === 'waiting_for_bind'
+                ? 'Custom Bot Waiting For Bind'
+                : 'Custom Bot Error';
     const description = error
         ? String(error.stack || error.message || error).slice(0, 1400)
         : String(details.description || 'Custom branded bot lifecycle update.').slice(0, 1400);
@@ -172,7 +174,7 @@ async function reportCustomBotEvent(event, details = {}, error = null) {
         username: 'Tickets Bot Monitor',
         embeds: [{
             title,
-            color: event === 'online' ? 0x57F287 : event === 'stopped' ? 0xFEE75C : 0xED4245,
+            color: event === 'online' ? 0x57F287 : (event === 'stopped' || event === 'waiting_for_bind') ? 0xFEE75C : 0xED4245,
             description,
             fields,
             timestamp: now.toISOString()

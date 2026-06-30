@@ -42,6 +42,10 @@ function getIntervalMs() {
     return Math.max(15000, Number(process.env.CUSTOM_BOT_SYNC_INTERVAL_MS || 30000));
 }
 
+function getBotOwnerId() {
+    return String(process.env.BOT_OWNER_ID || process.env.OWNER_USER_ID || process.env.OWNER_ID || '').trim();
+}
+
 function isEligible(access) {
     const customBot = access?.customBot && typeof access.customBot === 'object' ? access.customBot : {};
     return ['custom', 'custom_trial'].includes(String(access?.plan || '')) &&
@@ -117,12 +121,12 @@ async function announceStartup(guildId, customBot, runtimeClient) {
     } catch {}
 }
 
-async function notifyAndLeaveUnauthorizedGuild(runtimeClient, guild, targetGuildId) {
+async function notifyUnauthorizedGuild(runtimeClient, guild, targetGuildId) {
     const content = [
         `**${runtimeClient.user?.username || 'This custom support bot'} is not enabled for this server.**`,
-        `This custom bot is locked to server ID \`${targetGuildId}\`.`,
+        `This custom bot is currently locked to server ID \`${targetGuildId}\`.`,
         '',
-        'Ask the bot owner to add this server as a Custom server if this is intentional.'
+        'The configured bot owner can type `e?bind` in this server to activate it here.'
     ].join('\n');
 
     try {
@@ -140,10 +144,6 @@ async function notifyAndLeaveUnauthorizedGuild(runtimeClient, guild, targetGuild
         unauthorizedGuildId: guild?.id,
         unauthorizedGuildName: guild?.name
     }).catch(() => null);
-
-    try {
-        await guild.leave();
-    } catch {}
 }
 
 async function enforceGuildLock(runtimeClient, targetGuildId) {
@@ -151,7 +151,7 @@ async function enforceGuildLock(runtimeClient, targetGuildId) {
     const guilds = [...runtimeClient.guilds.cache.values()];
     for (const guild of guilds) {
         if (String(guild.id) !== allowed) {
-            await notifyAndLeaveUnauthorizedGuild(runtimeClient, guild, allowed);
+            await notifyUnauthorizedGuild(runtimeClient, guild, allowed);
         }
     }
 }
@@ -167,10 +167,91 @@ async function getTargetGuild(runtimeClient, guildId) {
     return runtimeClient.guilds.cache.get(id) || await runtimeClient.guilds.fetch(id).catch(() => null);
 }
 
+async function bindRuntimeToGuild(currentTargetGuildId, newGuildId, runtimeClient, message = null) {
+    const oldId = String(currentTargetGuildId || '').trim();
+    const id = String(newGuildId || '').trim();
+    if (!/^\d{17,20}$/.test(oldId) || !/^\d{17,20}$/.test(id)) {
+        throw new Error('Invalid server ID for bind.');
+    }
+    const storage = ticketStore.getActiveStorage();
+    const current = ticketStore.getGuildAiAccess(oldId, storage);
+    const customBot = current.customBot && typeof current.customBot === 'object' ? current.customBot : {};
+    if (!String(customBot.token || '').trim()) {
+        throw new Error('This custom bot runtime has no saved token to bind.');
+    }
+
+    ticketStore.setGuildAiAccess(id, {
+        ...current,
+        guildId: id,
+        plan: 'custom',
+        enabled: true,
+        trialEndsAt: null,
+        notifiedTrialExpiredAt: null,
+        grantedAt: new Date().toISOString(),
+        customBot: {
+            ...customBot,
+            enabled: true,
+            runtimeStatus: 'rebinding',
+            lastReboundAt: new Date().toISOString(),
+            lastReboundFromGuildId: oldId,
+            lastError: null
+        }
+    }, storage);
+
+    const oldConfig = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(oldId, storage) : {};
+    const newConfig = typeof ticketStore.getGuildConfig === 'function' ? ticketStore.getGuildConfig(id, storage) : {};
+    if (oldConfig && Object.keys(oldConfig).length && (!newConfig || !Object.keys(newConfig).length)) {
+        ticketStore.setGuildConfig(id, {
+            ...oldConfig,
+            setup: {
+                ...(oldConfig.setup || {}),
+                completed: false,
+                reboundAt: new Date().toISOString(),
+                reboundFromGuildId: oldId,
+                source: 'custom-bot-bind'
+            }
+        }, storage);
+    } else if (typeof ticketStore.bootstrapGuildConfig === 'function') {
+        ticketStore.bootstrapGuildConfig(id, { storage });
+    }
+
+    ticketStore.setGuildAiAccess(oldId, {
+        plan: 'none',
+        enabled: false,
+        trialStartedAt: null,
+        trialEndsAt: null,
+        notifiedTrialExpiredAt: null,
+        grantedByOwnerId: current.grantedByOwnerId || null,
+        grantedAt: null,
+        customBot: {}
+    }, storage);
+
+    await message?.reply?.(`Bound this custom bot to **${message.guild?.name || id}** (\`${id}\`). Restarting the branded runtime now.`).catch(() => null);
+    setTimeout(() => {
+        stopGuild(oldId, 'bound to another server')
+            .then(() => syncGuild(id))
+            .catch(error => {
+                storageMonitor.reportCustomBotEvent('error', { guildId: id, reason: 'bind sync failed' }, error).catch(() => null);
+            });
+    }, 250);
+    return { ok: true, previousGuildId: oldId, guildId: id };
+}
+
+function describeRuntimeInteraction(interaction) {
+    if (!interaction) return 'unknown interaction';
+    if (interaction.isChatInputCommand?.()) return `/${interaction.commandName || 'unknown'}`;
+    if (interaction.isButton?.()) return `button:${interaction.customId || 'unknown'}`;
+    if (interaction.isStringSelectMenu?.()) return `select:${interaction.customId || 'unknown'}`;
+    if (interaction.isModalSubmit?.()) return `modal:${interaction.customId || 'unknown'}`;
+    if (interaction.isAutocomplete?.()) return `autocomplete:${interaction.commandName || 'unknown'}`;
+    return `interaction:${interaction.type || 'unknown'}`;
+}
+
 function attachRuntimeHandlers(runtimeClient, targetGuildId) {
     runtimeClient.commands = commandMap || new Map();
     if (typeof handleInteraction === 'function') {
         runtimeClient.on('interactionCreate', async interaction => {
+            const startedAt = Date.now();
             try {
                 if (interaction.guildId && String(interaction.guildId) !== String(targetGuildId)) {
                     const payload = {
@@ -182,7 +263,19 @@ function attachRuntimeHandlers(runtimeClient, targetGuildId) {
                     }
                     return;
                 }
-                return await handleInteraction(interaction, runtimeClient);
+                const result = await handleInteraction(interaction, runtimeClient);
+                const durationMs = Date.now() - startedAt;
+                if (durationMs >= 2500) {
+                    console.warn(`[Custom Bot] ${describeRuntimeInteraction(interaction)} took ${durationMs}ms`, {
+                        targetGuildId,
+                        guildId: interaction.guildId || null,
+                        channelId: interaction.channelId || null,
+                        userId: interaction.user?.id || null,
+                        deferred: Boolean(interaction.deferred),
+                        replied: Boolean(interaction.replied)
+                    });
+                }
+                return result;
             } catch (error) {
                 storageMonitor.reportCustomBotEvent('error', {
                     guildId: targetGuildId,
@@ -200,11 +293,24 @@ function attachRuntimeHandlers(runtimeClient, targetGuildId) {
     }
     if (typeof handleMessage === 'function') {
         runtimeClient.on('messageCreate', message => {
+            const content = String(message?.content || '').trim().toLowerCase();
+            if (message.guildId && content === 'e?bind') {
+                const ownerId = getBotOwnerId();
+                if (!ownerId) {
+                    return message.reply('Bot owner ID is not configured, so this custom bot cannot be bound from Discord.').catch(() => null);
+                }
+                if (String(message.author?.id || '') !== ownerId) {
+                    return message.reply('Only the configured bot owner can bind this custom bot to a server.').catch(() => null);
+                }
+                return bindRuntimeToGuild(targetGuildId, message.guildId, runtimeClient, message).catch(error => {
+                    message.reply(`Bind failed: ${error?.message || error}`).catch(() => null);
+                });
+            }
             if (message.guildId && String(message.guildId) !== String(targetGuildId)) return;
             return handleMessage(message);
         });
     }
-    runtimeClient.on('guildCreate', guild => notifyAndLeaveUnauthorizedGuild(runtimeClient, guild, targetGuildId));
+    runtimeClient.on('guildCreate', guild => notifyUnauthorizedGuild(runtimeClient, guild, targetGuildId));
 }
 
 async function stopGuild(guildId, reason = 'disabled') {
@@ -214,11 +320,15 @@ async function stopGuild(guildId, reason = 'disabled') {
     try {
         entry.client.destroy();
     } catch {}
-    patchCustomBot(guildId, {
-        runtimeStatus: 'stopped',
-        lastStoppedAt: new Date().toISOString(),
-        lastStopReason: reason
-    });
+    const current = ticketStore.getGuildAiAccess(guildId);
+    const currentCustomBot = current.customBot && typeof current.customBot === 'object' ? current.customBot : {};
+    if (['custom', 'custom_trial'].includes(current.plan) || String(currentCustomBot.token || '').trim()) {
+        patchCustomBot(guildId, {
+            runtimeStatus: 'stopped',
+            lastStoppedAt: new Date().toISOString(),
+            lastStopReason: reason
+        });
+    }
     storageMonitor.reportCustomBotEvent('stopped', {
         guildId,
         botName: entry.botName,
@@ -238,22 +348,23 @@ async function startGuild(guildId, access) {
             const resolvedAppId = existing.appId || existing.client.application?.id || existing.client.user?.id || '';
             const targetGuild = await getTargetGuild(existing.client, guildId);
             if (!targetGuild) {
-                const message = `Custom bot is not in assigned server ${guildId}. Joined server IDs: ${describeJoinedGuildIds(existing.client)}.`;
-                clients.delete(String(guildId));
-                try { existing.client.destroy(); } catch {}
+                const joinedIds = describeJoinedGuildIds(existing.client);
+                const message = `Custom bot is waiting to be bound. Accepted server ID: ${guildId}. Joined server IDs: ${joinedIds}. Type e?bind as the configured bot owner in the server that should use it.`;
                 patchCustomBot(guildId, {
-                    runtimeStatus: 'error',
+                    runtimeStatus: 'waiting_for_bind',
                     lastError: message,
                     lastErrorAt: new Date().toISOString()
                 });
-                storageMonitor.reportCustomBotEvent('error', { guildId, botName: existing.botName, appId: resolvedAppId, reason: 'target guild missing' }, new Error(message)).catch(() => null);
-                return { ok: false, reused: true, error: new Error(message) };
+                storageMonitor.reportCustomBotEvent('waiting_for_bind', { guildId, botName: existing.botName, appId: resolvedAppId, reason: 'target guild missing', description: message }).catch(() => null);
+                return { ok: true, reused: true, waitingForBind: true };
             }
             if (!shouldDeployCommands(existing, access)) {
-                patchCustomBot(guildId, {
-                    runtimeStatus: 'online',
-                    lastError: null
-                });
+                if (customBot.runtimeStatus !== 'online' || customBot.lastError) {
+                    patchCustomBot(guildId, {
+                        runtimeStatus: 'online',
+                        lastError: null
+                    });
+                }
                 return { ok: true, reused: true, synced: false };
             }
             try {
@@ -309,7 +420,20 @@ async function startGuild(guildId, access) {
             const targetGuild = await getTargetGuild(runtimeClient, guildId);
             if (!targetGuild) {
                 await enforceGuildLock(runtimeClient, String(guildId));
-                throw new Error(`Custom bot logged in, but it is not invited to assigned server ${guildId}. Joined server IDs: ${describeJoinedGuildIds(runtimeClient)}.`);
+                const joinedIds = describeJoinedGuildIds(runtimeClient);
+                if (joinedIds !== 'none') {
+                    const message = `Custom bot is waiting to be bound. Accepted server ID: ${guildId}. Joined server IDs: ${joinedIds}. Type e?bind as the configured bot owner in the server that should use it.`;
+                    patchCustomBot(guildId, {
+                        runtimeStatus: 'waiting_for_bind',
+                        lastStartedAt: new Date().toISOString(),
+                        lastError: message,
+                        lastErrorAt: new Date().toISOString(),
+                        appId: customBot.appId || resolvedAppId
+                    });
+                    storageMonitor.reportCustomBotEvent('waiting_for_bind', { guildId, botName, appId: resolvedAppId, description: message }).catch(() => null);
+                    return;
+                }
+                throw new Error(`Custom bot logged in, but it is not invited to assigned server ${guildId}. Joined server IDs: ${joinedIds}.`);
             }
             await enforceGuildLock(runtimeClient, String(guildId));
             applyPresence(runtimeClient, customBot);

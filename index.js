@@ -8,6 +8,7 @@ const { archiveTranscript } = require('./utils/transcript-archive');
 const closeRequestCommand = require('./commands/closerequest');
 const tagCommand = require('./commands/tag');
 const feedbackCommand = require('./commands/feedback');
+const ticketHandler = require('./handlers/ticket-handler');
 const setupConversation = require('./utils/setup-conversation');
 const customBotBrandingHandler = require('./handlers/custom-bot-branding-handler');
 const { startDashboard } = require('./dashboard/server');
@@ -843,16 +844,13 @@ async function handleRuntimeInteraction(interaction, runtimeClient = client) {
                 await interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags }).catch(() => null);
                 return;
             }
-            const ticketHandler = require('./handlers/ticket-handler');
             await ticketHandler.handleTicketReasonSubmit(interaction);
         }
     } else if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'select-ticket-type' || interaction.customId.startsWith('select-ticket-type:')) {
-            const ticketHandler = require('./handlers/ticket-handler');
             await ticketHandler.handleTicketSelection(interaction);
         }
     } else if (interaction.isButton()) {
-        const ticketHandler = require('./handlers/ticket-handler');
         if (interaction.customId === 'open-support-flow' || interaction.customId === 'p_275287590028972042') {
             await ticketHandler.handleOpenSupportFlow(interaction);
         } else if (interaction.customId.startsWith('open-ticket-type:')) {
@@ -927,8 +925,33 @@ async function reportUnhandledInteractionError(interaction, error) {
     } catch {}
 }
 
+function describeInteractionForLog(interaction) {
+    if (!interaction) return 'unknown interaction';
+    if (interaction.isChatInputCommand?.()) return `/${interaction.commandName || 'unknown'}`;
+    if (interaction.isButton?.()) return `button:${interaction.customId || 'unknown'}`;
+    if (interaction.isStringSelectMenu?.()) return `select:${interaction.customId || 'unknown'}`;
+    if (interaction.isModalSubmit?.()) return `modal:${interaction.customId || 'unknown'}`;
+    if (interaction.isAutocomplete?.()) return `autocomplete:${interaction.commandName || 'unknown'}`;
+    return `interaction:${interaction.type || 'unknown'}`;
+}
+
 client.on('interactionCreate', interaction => {
-    handleRuntimeInteraction(interaction, client).catch(error => reportUnhandledInteractionError(interaction, error));
+    const startedAt = Date.now();
+    handleRuntimeInteraction(interaction, client)
+        .then(() => {
+            if (interaction.isChatInputCommand?.()) return;
+            const durationMs = Date.now() - startedAt;
+            if (durationMs >= COMMAND_SLOW_LOG_MS) {
+                console.warn(`[Interactions] ${describeInteractionForLog(interaction)} took ${durationMs}ms`, {
+                    guildId: interaction.guildId || null,
+                    channelId: interaction.channelId || null,
+                    userId: interaction.user?.id || null,
+                    deferred: Boolean(interaction.deferred),
+                    replied: Boolean(interaction.replied)
+                });
+            }
+        })
+        .catch(error => reportUnhandledInteractionError(interaction, error));
 });
 
 async function handleRuntimeMessage(message) {
@@ -945,7 +968,6 @@ async function handleRuntimeMessage(message) {
         touchTicket(ticket, message.author.id);
         if (shouldPersistNow) ticketStore.saveActiveStorage(activeStorage);
 
-        const ticketHandler = require('./handlers/ticket-handler');
         const aiHandled = await ticketHandler.handleAiConversationMessage(message, ticket, activeStorage).catch(error => {
             console.warn('[AI] Conversation handler failed:', error?.message || error);
             return false;

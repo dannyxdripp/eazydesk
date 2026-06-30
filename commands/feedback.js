@@ -57,6 +57,14 @@ function buildTicketError(interaction, ticket) {
     return null;
 }
 
+function editDeferredReply(interaction, payload) {
+    const editable = { ...(payload || {}) };
+    const flags = Number(editable.flags || 0) & ~MessageFlags.Ephemeral;
+    if (flags) editable.flags = flags;
+    else delete editable.flags;
+    return interaction.editReply(editable).catch(() => null);
+}
+
 module.exports = {
     MODAL_ID,
     data: new SlashCommandBuilder()
@@ -104,18 +112,19 @@ module.exports = {
     },
 
     async handleModalSubmit(interaction) {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
         const ticketChannel = interaction.channel;
         const ticket = getTicketForInteraction(interaction);
         const error = buildTicketError(interaction, ticket);
         if (error) {
-            return interaction.reply({ ...error, flags: MessageFlags.Ephemeral | error.flags });
+            return editDeferredReply(interaction, error);
         }
 
         const ratingRaw = String(interaction.fields.getTextInputValue(RATING_ID) || '').trim();
         const rating = Number.parseInt(ratingRaw, 10);
         if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
             const base = buildV2Notice(RESPONSES.invalidRatingTitle, RESPONSES.invalidRatingDescription, 0xED4245);
-            return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
+            return editDeferredReply(interaction, base);
         }
 
         const comment = String(interaction.fields.getTextInputValue(COMMENT_ID) || '').trim();
@@ -123,7 +132,7 @@ module.exports = {
         const feedbackChannelId = getFeedbackChannelId(interaction.guildId);
         if (!feedbackChannelId) {
             const base = buildV2Notice(RESPONSES.notConfiguredTitle, RESPONSES.notConfiguredDescription, 0xFEE75C);
-            return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
+            return editDeferredReply(interaction, base);
         }
 
         const feedbackChannel = await interaction.client.channels.fetch(feedbackChannelId).catch(() => null);
@@ -133,7 +142,7 @@ module.exports = {
                 RESPONSES.channelErrorDescription.replace('{channelId}', feedbackChannelId),
                 0xED4245
             );
-            return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
+            return editDeferredReply(interaction, base);
         }
 
         await feedbackChannel.send(buildV2Notice(
@@ -150,6 +159,6 @@ module.exports = {
         ));
 
         const base = buildV2Notice(RESPONSES.thanksTitle, RESPONSES.thanksDescription, 0x5865F2);
-        return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
+        return editDeferredReply(interaction, base);
     }
 };

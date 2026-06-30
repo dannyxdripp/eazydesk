@@ -838,6 +838,7 @@ module.exports = {
             allowAttachments: true
         };
         try {
+            await ensureEphemeralAck(interaction);
             if (!interaction.guild) {
                 return sendEphemeral(interaction, buildInfoMessage('Invalid Context', 'This action can only be used in a server.', 0xED4245));
             }
@@ -1012,14 +1013,19 @@ module.exports = {
             ticketStore.saveActiveStorage(activeStorage);
             await updateTicketChannelMetadata(ticketChannel, nextTicket);
 
-            if (options.reason) await sendAiPromptedResponse(ticketChannel, options.reason);
-
             const createdContainer = new ContainerBuilder().addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(
                     `<:ticket:1487471770406486076> **Ticket Created**\n> Your ticket has been created. View it here: ${ticketChannel}`
                 )
             );
-            return sendEphemeral(interaction, { flags: MessageFlags.IsComponentsV2, components: [createdContainer] });
+            await sendEphemeral(interaction, { flags: MessageFlags.IsComponentsV2, components: [createdContainer] });
+
+            if (options.reason) {
+                sendAiPromptedResponse(ticketChannel, options.reason).catch(error => {
+                    console.warn('[AI] Prompted ticket response failed:', error?.message || error);
+                });
+            }
+            return null;
         } catch (error) {
             console.error('Error creating ticket:', error);
             if (error?.code === 50013 || error?.status === 403 || error?.code === 50001) {
@@ -1053,6 +1059,10 @@ module.exports = {
 
     async handleCloseRequest(interaction, reason) {
         try {
+            // A close button can trigger transcript generation and channel deletion.
+            // Acknowledge immediately, then do the slower work.
+            await ensureEphemeralAck(interaction);
+
             const ticketChannel = interaction.channel;
             const activeStorage = ticketStore.getActiveStorage();
             const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
@@ -1062,13 +1072,6 @@ module.exports = {
 
             if (ticket.createdBy && ticket.createdBy !== interaction.user.id) {
                 return sendEphemeral(interaction, buildInfoMessage('Permission Denied', 'Only the ticket opener can close this ticket.', 0xED4245));
-            }
-
-            // Button interactions should not create noisy ephemeral confirmations.
-            if (typeof interaction.deferUpdate === 'function') {
-                await interaction.deferUpdate().catch(() => null);
-            } else {
-                await ensureEphemeralAck(interaction);
             }
 
             const safeReason = String(reason || 'Closed by requester.').trim().slice(0, 900);
