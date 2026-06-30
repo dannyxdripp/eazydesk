@@ -82,9 +82,10 @@ module.exports = {
                 .setRequired(false)
         ),
     async execute(interaction) {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
         const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
         if (!targetChannel || targetChannel.type !== ChannelType.GuildText) {
-            return interaction.reply({ content: RESPONSES.invalidChannel, flags: MessageFlags.Ephemeral }).catch(() => null);
+            return interaction.editReply({ content: RESPONSES.invalidChannel }).catch(() => null);
         }
 
         const me = interaction.guild?.members?.me;
@@ -96,7 +97,7 @@ module.exports = {
                 PermissionsBitField.Flags.ReadMessageHistory
             ]);
             if (missing.length) {
-                return interaction.reply({ content: `I cannot post the ticket panel in ${targetChannel} because I am missing: **${missing.join(', ')}**.`, flags: MessageFlags.Ephemeral }).catch(() => null);
+                return interaction.editReply({ content: `I cannot post the ticket panel in ${targetChannel} because I am missing: **${missing.join(', ')}**.` }).catch(() => null);
             }
         }
 
@@ -117,14 +118,14 @@ module.exports = {
         } else if (ticketTypeInput) {
             restrictedSelectValue = ticketStore.setRestrictedTicketTypeForChannel(targetChannel.id, ticketTypeInput, null, interaction.guildId);
             if (!restrictedSelectValue) {
-                return interaction.reply({ content: RESPONSES.unknownTicketType.replace('{ticketType}', ticketTypeInput), flags: MessageFlags.Ephemeral }).catch(() => null);
+                return interaction.editReply({ content: RESPONSES.unknownTicketType.replace('{ticketType}', ticketTypeInput) }).catch(() => null);
             }
             const allowedConfig = ticketStore.findTicketTypeBySelectValue(restrictedSelectValue, interaction.guildId);
             notice = RESPONSES.panelRestricted.replace('{ticketType}', allowedConfig?.name || restrictedSelectValue);
         }
 
         if (panelMode === 'single' && displayStyle === 'select') {
-            return interaction.reply({ content: 'Select menus can only be used on multi ticket panels.', flags: MessageFlags.Ephemeral }).catch(() => null);
+            return interaction.editReply({ content: 'Select menus can only be used on multi ticket panels.' }).catch(() => null);
         }
 
         if (panelName || panelDescription || buttonLabel || panelAdvisory || panelMode || displayStyle || clearRestriction || restrictedSelectValue) {

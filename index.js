@@ -229,9 +229,10 @@ const OWNER_COMMAND_HIDE = String(process.env.OWNER_COMMAND_HIDE || 'true').toLo
 const RATE_LIMIT_DURATION_MS = 60 * 60 * 1000;
 const INACTIVITY_SWEEP_MS = 10 * 60 * 1000;
 const AUTO_CLOSE_REQUEST_TIMER_MIN = Number(process.env.AUTO_CLOSE_REQUEST_TIMER_MIN || 360);
-const COMMAND_COOLDOWN_MS = Math.max(0, Number(process.env.COMMAND_COOLDOWN_MS || 2500));
+const COMMAND_COOLDOWN_MS = Math.max(0, Number(process.env.COMMAND_COOLDOWN_MS || 1000));
 const COMMAND_BURST_WINDOW_MS = Math.max(1000, Number(process.env.COMMAND_BURST_WINDOW_MS || 10000));
-const COMMAND_BURST_MAX = Math.max(1, Number(process.env.COMMAND_BURST_MAX || 5));
+const COMMAND_BURST_MAX = Math.max(1, Number(process.env.COMMAND_BURST_MAX || 8));
+const COMMAND_SLOW_LOG_MS = Math.max(250, Number(process.env.COMMAND_SLOW_LOG_MS || 2500));
 const TICKET_OPEN_COOLDOWN_MS = Math.max(0, Number(process.env.TICKET_OPEN_COOLDOWN_MS || 15000));
 const commandCooldowns = new Map();
 const commandBurstBuckets = new Map();
@@ -790,6 +791,7 @@ async function handleRuntimeInteraction(interaction, runtimeClient = client) {
             return;
         }
 
+        const startedAt = Date.now();
         try {
             const commandRateLimit = checkAndTrackCommandRateLimit(interaction);
             if (commandRateLimit.limited) {
@@ -801,7 +803,27 @@ async function handleRuntimeInteraction(interaction, runtimeClient = client) {
                 return;
             }
             await command.execute(interaction);
+            const durationMs = Date.now() - startedAt;
+            if (durationMs >= COMMAND_SLOW_LOG_MS) {
+                console.warn(`[Commands] /${interaction.commandName} took ${durationMs}ms`, {
+                    guildId: interaction.guildId || null,
+                    channelId: interaction.channelId || null,
+                    userId: interaction.user?.id || null,
+                    deferred: Boolean(interaction.deferred),
+                    replied: Boolean(interaction.replied)
+                });
+            }
         } catch (error) {
+            const durationMs = Date.now() - startedAt;
+            console.error(`[Commands] /${interaction.commandName} failed after ${durationMs}ms`, {
+                guildId: interaction.guildId || null,
+                channelId: interaction.channelId || null,
+                userId: interaction.user?.id || null,
+                deferred: Boolean(interaction.deferred),
+                replied: Boolean(interaction.replied),
+                errorCode: error?.code,
+                errorStatus: error?.status
+            });
             console.error(`[Event \u{1F514}] Error executing ${interaction.commandName}:`, error);
             if (interaction.replied || interaction.deferred) {
                 const base = buildMessage('Command Error', 'There was an error while executing this command.', 0xED4245);
@@ -881,7 +903,33 @@ async function handleRuntimeInteraction(interaction, runtimeClient = client) {
     }
 }
 
-client.on('interactionCreate', interaction => handleRuntimeInteraction(interaction, client));
+async function reportUnhandledInteractionError(interaction, error) {
+    console.error('[Event \u{1F514}] Unhandled interaction error:', {
+        type: interaction?.type,
+        commandName: interaction?.commandName || null,
+        customId: interaction?.customId || null,
+        guildId: interaction?.guildId || null,
+        channelId: interaction?.channelId || null,
+        userId: interaction?.user?.id || null,
+        deferred: Boolean(interaction?.deferred),
+        replied: Boolean(interaction?.replied),
+        errorCode: error?.code,
+        errorStatus: error?.status
+    }, error);
+
+    const base = buildMessage('Interaction Error', 'That action failed before it could complete. Please try again in a moment.', 0xED4245);
+    try {
+        if (interaction?.replied || interaction?.deferred) {
+            await interaction.followUp({ ...base, flags: MessageFlags.Ephemeral | base.flags }).catch(() => null);
+        } else if (typeof interaction?.reply === 'function') {
+            await interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags }).catch(() => null);
+        }
+    } catch {}
+}
+
+client.on('interactionCreate', interaction => {
+    handleRuntimeInteraction(interaction, client).catch(error => reportUnhandledInteractionError(interaction, error));
+});
 
 async function handleRuntimeMessage(message) {
     eventLog(`messageCreate in ${message.guild?.id || 'DM'} from ${message.author?.id || 'unknown'}`);

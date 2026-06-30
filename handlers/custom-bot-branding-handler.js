@@ -15,6 +15,29 @@ function tokenFingerprint(token) {
     return crypto.createHash('sha256').update(String(token || '')).digest('hex').slice(0, 12);
 }
 
+function commandPayloadFingerprint() {
+    try {
+        return crypto
+            .createHash('sha256')
+            .update(JSON.stringify(commandPayloads || []))
+            .digest('hex')
+            .slice(0, 16);
+    } catch {
+        return '';
+    }
+}
+
+function shouldDeployCommands(entry, access) {
+    const fingerprint = commandPayloadFingerprint();
+    if (!fingerprint) return false;
+    if (!entry || entry.commandFingerprint !== fingerprint) return true;
+
+    const customBot = access?.customBot && typeof access.customBot === 'object' ? access.customBot : {};
+    const requestedAt = Date.parse(customBot.lastCommandSyncRequestedAt || '');
+    const syncedAt = Date.parse(customBot.lastCommandSyncAt || '');
+    return !Number.isNaN(requestedAt) && (Number.isNaN(syncedAt) || requestedAt > syncedAt);
+}
+
 function getIntervalMs() {
     return Math.max(15000, Number(process.env.CUSTOM_BOT_SYNC_INTERVAL_MS || 30000));
 }
@@ -133,21 +156,46 @@ async function enforceGuildLock(runtimeClient, targetGuildId) {
     }
 }
 
+function describeJoinedGuildIds(runtimeClient) {
+    const ids = [...(runtimeClient?.guilds?.cache?.keys?.() || [])].map(String).filter(Boolean);
+    return ids.length ? ids.join(', ') : 'none';
+}
+
+async function getTargetGuild(runtimeClient, guildId) {
+    const id = String(guildId || '').trim();
+    if (!id) return null;
+    return runtimeClient.guilds.cache.get(id) || await runtimeClient.guilds.fetch(id).catch(() => null);
+}
+
 function attachRuntimeHandlers(runtimeClient, targetGuildId) {
     runtimeClient.commands = commandMap || new Map();
     if (typeof handleInteraction === 'function') {
         runtimeClient.on('interactionCreate', async interaction => {
-            if (interaction.guildId && String(interaction.guildId) !== String(targetGuildId)) {
-                const payload = {
-                    content: 'This custom bot is not enabled for this server. Ask the bot owner to add this server as a Custom server if this is intentional.',
-                    ephemeral: true
-                };
-                if (interaction.isRepliable?.()) {
-                    await interaction.reply(payload).catch(() => null);
+            try {
+                if (interaction.guildId && String(interaction.guildId) !== String(targetGuildId)) {
+                    const payload = {
+                        content: 'This custom bot is not enabled for this server. Ask the bot owner to add this server as a Custom server if this is intentional.',
+                        ephemeral: true
+                    };
+                    if (interaction.isRepliable?.()) {
+                        await interaction.reply(payload).catch(() => null);
+                    }
+                    return;
                 }
-                return;
+                return await handleInteraction(interaction, runtimeClient);
+            } catch (error) {
+                storageMonitor.reportCustomBotEvent('error', {
+                    guildId: targetGuildId,
+                    customId: interaction?.customId || null,
+                    commandName: interaction?.commandName || null,
+                    reason: 'interaction handler failed'
+                }, error).catch(() => null);
+                if (interaction?.isRepliable?.()) {
+                    const payload = { content: 'That action failed before it could complete. Please try again in a moment.', ephemeral: true };
+                    if (interaction.replied || interaction.deferred) await interaction.followUp(payload).catch(() => null);
+                    else await interaction.reply(payload).catch(() => null);
+                }
             }
-            return handleInteraction(interaction, runtimeClient);
         });
     }
     if (typeof handleMessage === 'function') {
@@ -188,8 +236,29 @@ async function startGuild(guildId, access) {
     if (existing && existing.fingerprint === fingerprint) {
         if (existing.ready) {
             const resolvedAppId = existing.appId || existing.client.application?.id || existing.client.user?.id || '';
+            const targetGuild = await getTargetGuild(existing.client, guildId);
+            if (!targetGuild) {
+                const message = `Custom bot is not in assigned server ${guildId}. Joined server IDs: ${describeJoinedGuildIds(existing.client)}.`;
+                clients.delete(String(guildId));
+                try { existing.client.destroy(); } catch {}
+                patchCustomBot(guildId, {
+                    runtimeStatus: 'error',
+                    lastError: message,
+                    lastErrorAt: new Date().toISOString()
+                });
+                storageMonitor.reportCustomBotEvent('error', { guildId, botName: existing.botName, appId: resolvedAppId, reason: 'target guild missing' }, new Error(message)).catch(() => null);
+                return { ok: false, reused: true, error: new Error(message) };
+            }
+            if (!shouldDeployCommands(existing, access)) {
+                patchCustomBot(guildId, {
+                    runtimeStatus: 'online',
+                    lastError: null
+                });
+                return { ok: true, reused: true, synced: false };
+            }
             try {
                 const result = await deployCommands(token, resolvedAppId, String(guildId));
+                existing.commandFingerprint = commandPayloadFingerprint();
                 patchCustomBot(guildId, {
                     runtimeStatus: 'online',
                     lastCommandSyncAt: new Date().toISOString(),
@@ -225,7 +294,7 @@ async function startGuild(guildId, access) {
 
     const botName = String(customBot.botName || 'Custom Support Bot').trim().slice(0, 80);
     const appId = String(customBot.appId || '').trim();
-    clients.set(String(guildId), { client: runtimeClient, fingerprint, botName, appId, ready: false });
+    clients.set(String(guildId), { client: runtimeClient, fingerprint, botName, appId, ready: false, commandFingerprint: '' });
     patchCustomBot(guildId, {
         runtimeStatus: 'starting',
         lastStartAttemptAt: new Date().toISOString(),
@@ -237,9 +306,10 @@ async function startGuild(guildId, access) {
         if (entry) entry.ready = true;
         const resolvedAppId = appId || runtimeClient.application?.id || runtimeClient.user?.id || '';
         try {
-            const targetGuild = runtimeClient.guilds.cache.get(String(guildId)) || await runtimeClient.guilds.fetch(String(guildId)).catch(() => null);
+            const targetGuild = await getTargetGuild(runtimeClient, guildId);
             if (!targetGuild) {
-                throw new Error('Custom bot logged in, but it is not invited to the target server.');
+                await enforceGuildLock(runtimeClient, String(guildId));
+                throw new Error(`Custom bot logged in, but it is not invited to assigned server ${guildId}. Joined server IDs: ${describeJoinedGuildIds(runtimeClient)}.`);
             }
             await enforceGuildLock(runtimeClient, String(guildId));
             applyPresence(runtimeClient, customBot);
@@ -247,6 +317,8 @@ async function startGuild(guildId, access) {
             let deployResult = null;
             try {
                 deployResult = await deployCommands(token, resolvedAppId, String(guildId));
+                const entryAfterDeploy = clients.get(String(guildId));
+                if (entryAfterDeploy) entryAfterDeploy.commandFingerprint = commandPayloadFingerprint();
             } catch (error) {
                 deployError = error;
                 storageMonitor.reportCustomBotEvent('error', {
@@ -275,6 +347,8 @@ async function startGuild(guildId, access) {
                     : `${runtimeClient.user?.tag || botName} connected and ${deployResult?.count || 0} slash command(s) were synced to the server.`
             }).catch(() => null);
         } catch (error) {
+            clients.delete(String(guildId));
+            try { runtimeClient.destroy(); } catch {}
             patchCustomBot(guildId, {
                 runtimeStatus: 'error',
                 lastError: error?.message || String(error),
