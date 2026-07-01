@@ -48,6 +48,8 @@ const BOT_TICKET_CHANNEL_PERMISSIONS = [
     PermissionsBitField.Flags.ReadMessageHistory,
     PermissionsBitField.Flags.ManageChannels
 ];
+const PERMISSION_REPAIR_CACHE_TTL_MS = 60 * 1000;
+const permissionRepairCache = new Map();
 
 function getAutomaticAvailabilityStatus(count) {
     if (count > REDUCED_THRESHOLD) return 'reduced_assistance';
@@ -308,6 +310,97 @@ function getMissingPermissionNames(permissions, required) {
         .map(permission => labels[permission] || String(permission));
 }
 
+function permissionOverwritePatch(required) {
+    const keys = {
+        [PermissionsBitField.Flags.ManageChannels]: 'ManageChannels',
+        [PermissionsBitField.Flags.ViewChannel]: 'ViewChannel',
+        [PermissionsBitField.Flags.SendMessages]: 'SendMessages',
+        [PermissionsBitField.Flags.EmbedLinks]: 'EmbedLinks',
+        [PermissionsBitField.Flags.ReadMessageHistory]: 'ReadMessageHistory',
+        [PermissionsBitField.Flags.AttachFiles]: 'AttachFiles'
+    };
+    const patch = {};
+    for (const permission of required || []) {
+        const key = keys[permission];
+        if (key) patch[key] = true;
+    }
+    return patch;
+}
+
+function permissionRepairCacheKey(channel, required) {
+    return `${channel?.guild?.id || 'guild'}:${channel?.id || 'channel'}:${(required || []).map(String).sort().join(',')}`;
+}
+
+async function ensureBotChannelPermissions(channel, options = {}) {
+    const guild = channel?.guild || options.guild || null;
+    if (!guild || !channel || typeof channel.permissionsFor !== 'function') {
+        return { ok: false, repaired: false, message: 'I could not read my permissions for that channel. Please try again in a moment.' };
+    }
+
+    if (!guild.members?.me && typeof guild.members?.fetchMe === 'function') {
+        await guild.members.fetchMe().catch(() => null);
+    }
+
+    const me = guild.members?.me || null;
+    if (!me) {
+        return { ok: false, repaired: false, message: 'I could not read my server member permissions. Please try again in a moment.' };
+    }
+
+    const required = [
+        ...new Set([
+            ...(Array.isArray(options.required) ? options.required : BOT_TICKET_CHANNEL_PERMISSIONS),
+            ...(options.allowAttachments === false ? [] : [PermissionsBitField.Flags.AttachFiles])
+        ])
+    ];
+    let current = channel.permissionsFor(me);
+    let missing = getMissingPermissionNames(current, required);
+    if (!missing.length) return { ok: true, repaired: false };
+
+    const cacheKey = permissionRepairCacheKey(channel, required);
+    const cachedUntil = Number(permissionRepairCache.get(cacheKey) || 0);
+    if (cachedUntil > Date.now()) {
+        current = channel.permissionsFor(me);
+        missing = getMissingPermissionNames(current, required);
+        if (!missing.length) return { ok: true, repaired: false, cached: true };
+    }
+
+    if (!channel.permissionOverwrites || typeof channel.permissionOverwrites.edit !== 'function') {
+        return {
+            ok: false,
+            repaired: false,
+            message: `I am missing **${missing.join(', ')}** in **${channel.name || 'that channel'}**.`
+        };
+    }
+
+    const canRepair = current?.has?.(PermissionsBitField.Flags.ManageChannels)
+        || me.permissions?.has?.(PermissionsBitField.Flags.Administrator)
+        || me.permissions?.has?.(PermissionsBitField.Flags.ManageChannels);
+    if (!canRepair) {
+        return {
+            ok: false,
+            repaired: false,
+            message: `I am missing **${missing.join(', ')}** in **${channel.name || 'that channel'}**, and I cannot repair it because I also need **Manage Channels** there.`
+        };
+    }
+
+    try {
+        await channel.permissionOverwrites.edit(
+            me.id,
+            permissionOverwritePatch(required),
+            { reason: options.reason || 'Repair bot ticket permissions before handling interaction' }
+        );
+        permissionRepairCache.set(cacheKey, Date.now() + PERMISSION_REPAIR_CACHE_TTL_MS);
+        return { ok: true, repaired: true };
+    } catch (error) {
+        return {
+            ok: false,
+            repaired: false,
+            error,
+            message: `I tried to repair my channel permissions but Discord blocked it. Missing: **${missing.join(', ')}**.`
+        };
+    }
+}
+
 function getRequiredTicketPermissions(/* allowAttachments = true */) {
     return [
         ...BOT_TICKET_GUILD_PERMISSIONS
@@ -392,8 +485,17 @@ function validateCreateTicketPermissions(guild, parentInfo) {
     return { ok: true };
 }
 
-async function ensureBotCategoryPermissions(/* guild, parentInfo, allowAttachments = true */) {
-    return { ok: true, repaired: false };
+async function ensureBotCategoryPermissions(guild, parentInfo, allowAttachments = true) {
+    if (!parentInfo?.channel) return { ok: true, repaired: false };
+    return ensureBotChannelPermissions(parentInfo.channel, {
+        guild,
+        allowAttachments,
+        required: [
+            ...BOT_TICKET_CHANNEL_PERMISSIONS,
+            ...(allowAttachments ? [PermissionsBitField.Flags.AttachFiles] : [])
+        ],
+        reason: 'Repair bot ticket category permissions before ticket creation'
+    });
 }
 
 function getRestrictedTicketTypeForChannel(interaction) {
@@ -467,7 +569,7 @@ function buildTicketTypeSelectRows(guildId, panelChannelId = null) {
 
 function resolvePanelDisplayStyle(panel) {
     const display = String(panel?.displayStyle || panel?.selectorStyle || '').trim().toLowerCase();
-    return display === 'select' ? 'select' : 'buttons';
+    return display === 'buttons' ? 'buttons' : 'select';
 }
 
 async function sendEphemeral(interaction, payload) {
@@ -893,6 +995,22 @@ module.exports = {
             }
 
             if (parentInfo.channel) {
+                const repair = await ensureBotCategoryPermissions(interaction.guild, parentInfo, allowAttachments);
+                if (!repair.ok) {
+                    console.warn('[Permissions] Could not repair configured ticket category; creating ticket without parent category.', {
+                        guildId: interaction.guildId,
+                        categoryId: parentInfo.channel.id,
+                        categoryName: parentInfo.channel.name,
+                        message: repair.message,
+                        errorCode: repair.error?.code,
+                        errorStatus: repair.error?.status
+                    });
+                    parentInfo = { id: null, channel: null, missing: false };
+                    permissionContext.parentInfo = parentInfo;
+                }
+            }
+
+            if (parentInfo.channel) {
                 const categoryPermissions = parentInfo.channel.permissionsFor(botMember);
                 if (categoryPermissions && !categoryPermissions.has(PermissionsBitField.Flags.ManageChannels)) {
                     console.warn('[Permissions] Bot lacks ManageChannels in configured category; falling back to create ticket without parent category.', {
@@ -958,6 +1076,21 @@ module.exports = {
                 permissionOverwrites
             });
             permissionContext.ticketChannel = ticketChannel;
+
+            const channelRepair = await ensureBotChannelPermissions(ticketChannel, {
+                allowAttachments,
+                reason: 'Ensure bot can manage newly created ticket channel'
+            });
+            if (!channelRepair.ok) {
+                console.warn('[Permissions] Newly created ticket channel is missing bot permissions:', {
+                    guildId: interaction.guildId,
+                    channelId: ticketChannel.id,
+                    message: channelRepair.message,
+                    errorCode: channelRepair.error?.code,
+                    errorStatus: channelRepair.error?.status
+                });
+                return sendEphemeral(interaction, buildInfoMessage('Missing Permissions', channelRepair.message, 0xED4245));
+            }
 
             const mentionText = teamRoleIds.length ? teamRoleIds.map(roleId => `<@&${roleId}>`).join(' ') : '';
             if (mentionText) {
@@ -1064,6 +1197,13 @@ module.exports = {
             await ensureEphemeralAck(interaction);
 
             const ticketChannel = interaction.channel;
+            const permissionRepair = await ensureBotChannelPermissions(ticketChannel, {
+                allowAttachments: true,
+                reason: 'Ensure bot can close ticket channel'
+            });
+            if (!permissionRepair.ok) {
+                return sendEphemeral(interaction, buildInfoMessage('Missing Permissions', permissionRepair.message, 0xED4245));
+            }
             const activeStorage = ticketStore.getActiveStorage();
             const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
             if (!ticket) {
@@ -1092,6 +1232,26 @@ module.exports = {
             }
             if (!interaction.guild?.members?.me) {
                 await interaction.guild?.members?.fetchMe?.().catch(() => null);
+            }
+            const panelRepair = await ensureBotChannelPermissions(targetChannel, {
+                allowAttachments: false,
+                required: [
+                    PermissionsBitField.Flags.ViewChannel,
+                    PermissionsBitField.Flags.SendMessages,
+                    PermissionsBitField.Flags.EmbedLinks,
+                    PermissionsBitField.Flags.ReadMessageHistory
+                ],
+                reason: 'Ensure bot can publish ticket panel'
+            });
+            if (!panelRepair.ok) {
+                console.warn('[Permissions] Ticket panel creation could not repair channel permissions:', {
+                    guildId: interaction.guildId,
+                    channelId: targetChannel?.id,
+                    message: panelRepair.message,
+                    errorCode: panelRepair.error?.code,
+                    errorStatus: panelRepair.error?.status
+                });
+                return sendEphemeral(interaction, buildInfoMessage('Missing Permissions', panelRepair.message, 0xED4245));
             }
             const panelPermissionCheck = validateSendPanelPermissions(targetChannel, interaction.guild);
             if (!panelPermissionCheck.ok) {
