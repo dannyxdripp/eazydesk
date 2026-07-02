@@ -559,8 +559,22 @@ function getStatus(guildId) {
     };
 }
 
+function getRuntimeClient(guildId) {
+    const entry = clients.get(String(guildId || '').trim());
+    return entry?.client || null;
+}
+
+function getRuntimeGuild(guildId) {
+    const id = String(guildId || '').trim();
+    if (!id) return null;
+    const runtimeClient = getRuntimeClient(id);
+    return runtimeClient?.guilds?.cache?.get?.(id) || null;
+}
+
 module.exports = {
     getStatus,
+    getRuntimeClient,
+    getRuntimeGuild,
     start,
     stopGuild,
     syncAll,

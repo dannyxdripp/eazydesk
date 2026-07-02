@@ -17,6 +17,7 @@ const megaBackup = require('../utils/mega-backup');
 const { getRuntimeJsonDir } = require('../utils/storage-paths');
 
 let dashboardServer = null;
+let dashboardCustomBotManager = null;
 const ASSETS_DIR = path.join(__dirname, 'assets');
 const COPYRIGHT_NAME = 'Sync Development';
 let cachedHomeCss = { mtimeMs: 0, value: '' };
@@ -2044,9 +2045,10 @@ function getGuildAiUiState(guildId, storage = null) {
         ? ticketStore.getGuildAiSettings(guildId, storage)
         : {
             enabled: Boolean(access.hasAccess),
+            mode: 'response',
             autoResolution: Boolean(access.hasAccess && ['pro', 'custom', 'pro_trial', 'custom_trial'].includes(access.plan)),
             autoLearn: Boolean(access.hasAccess),
-            conversation: Boolean(access.hasAccess && ['custom', 'custom_trial'].includes(access.plan))
+            conversation: false
         };
     const trialEndsAtMs = Date.parse(access.trialEndsAt || '');
     const trialRemainingMs = access.trialActive && !Number.isNaN(trialEndsAtMs)
@@ -2150,17 +2152,33 @@ function getKnownDashboardGuildIds(client, storage = null) {
     ])];
 }
 
+function getDashboardRuntimeGuild(client, guildId) {
+    const id = String(guildId || '').trim();
+    if (!/^\d{17,20}$/.test(id)) return null;
+    return client?.guilds?.cache?.get?.(id)
+        || dashboardCustomBotManager?.getRuntimeGuild?.(id)
+        || null;
+}
+
+function getDashboardRuntimeClient(client, guildId) {
+    const id = String(guildId || '').trim();
+    if (!/^\d{17,20}$/.test(id)) return client || null;
+    if (client?.guilds?.cache?.has?.(id)) return client;
+    return dashboardCustomBotManager?.getRuntimeClient?.(id) || client || null;
+}
+
 function getDashboardGuildLabel(client, guildId, storage = null) {
     const id = String(guildId || '').trim();
     const sharedGuild = client?.guilds?.cache?.get?.(id) || null;
-    if (sharedGuild) {
+    const runtimeGuild = sharedGuild || dashboardCustomBotManager?.getRuntimeGuild?.(id) || null;
+    if (runtimeGuild) {
         return {
             id,
-            name: sharedGuild.name || `Server ${id}`,
-            memberCount: sharedGuild.memberCount ?? null,
-            iconURL: typeof sharedGuild.iconURL === 'function' ? sharedGuild.iconURL({ extension: 'png', size: 64 }) : null,
-            botInServer: true,
-            customOnly: false
+            name: runtimeGuild.name || `Server ${id}`,
+            memberCount: runtimeGuild.memberCount ?? null,
+            iconURL: typeof runtimeGuild.iconURL === 'function' ? runtimeGuild.iconURL({ extension: 'png', size: 64 }) : null,
+            botInServer: Boolean(sharedGuild),
+            customOnly: !sharedGuild
         };
     }
     const activeStorage = storage || ticketStore.getActiveStorage();
@@ -2231,7 +2249,7 @@ async function getDashboardAccess(client, req, guildId = null) {
         };
     }
 
-    const guild = client.guilds.cache.get(id);
+    const guild = getDashboardRuntimeGuild(client, id);
     const oauthPerms = getDashboardOauthPermissionSummary(req, id);
     if (!guild) {
         if (oauthPerms?.canAccessDashboard || getDashboardSessionGuildIds(req).includes(id)) {
@@ -2458,7 +2476,7 @@ function getDashboardGuild(client, req = null) {
 
 function getDashboardDiscordGuild(client, req = null) {
     const id = String(getDashboardGuild(client, req)?.id || '').trim();
-    return id ? (client?.guilds?.cache?.get?.(id) || null) : null;
+    return id ? getDashboardRuntimeGuild(client, id) : null;
 }
 
 function canManageGuild(client, req, guildId) {
@@ -2797,7 +2815,7 @@ async function getDashboardState(client, req = null) {
     const botConfig = ticketStore.getBotConfig(activeStorage);
     const ownerView = isStrictOwnerViewer(req);
     const guild = getDashboardGuild(client, req);
-    const discordGuild = guild?.id ? (client?.guilds?.cache?.get?.(guild.id) || null) : null;
+    const discordGuild = guild?.id ? getDashboardRuntimeGuild(client, guild.id) : null;
     const access = await getDashboardAccess(client, req, guild?.id || null);
     if (discordGuild) ticketStore.cleanupMissingTicketChannels(discordGuild, activeStorage);
     const [roleCatalog, channelCatalog, categoryCatalog] = await Promise.all([
@@ -3363,19 +3381,21 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             guilds = getDashboardSessionOauthGuilds(req)
                 .map(entry => {
                     const sharedGuild = client?.guilds?.cache?.get(entry.id) || null;
+                    const runtimeGuild = getDashboardRuntimeGuild(client, entry.id);
+                    const label = getDashboardGuildLabel(client, entry.id, activeStorage);
                     const customOnly = !sharedGuild && getCustomOnlyGuildIds(activeStorage).includes(String(entry.id));
                     const perms = summarizeOauthGuildPermissions(entry);
                     return {
                         id: entry.id,
-                        name: entry.name || sharedGuild?.name || getDashboardGuildLabel(client, entry.id, activeStorage).name || 'Unknown Server',
-                        memberCount: sharedGuild?.memberCount ?? null,
+                        name: entry.name || runtimeGuild?.name || label.name || 'Unknown Server',
+                        memberCount: runtimeGuild?.memberCount ?? null,
                         iconURL: entry.icon
                             ? `https://cdn.discordapp.com/icons/${entry.id}/${entry.icon}.png?size=64`
-                            : (typeof sharedGuild?.iconURL === 'function' ? sharedGuild.iconURL({ extension: 'png', size: 64 }) : getDashboardGuildLabel(client, entry.id, activeStorage).iconURL),
+                            : (typeof runtimeGuild?.iconURL === 'function' ? runtimeGuild.iconURL({ extension: 'png', size: 64 }) : label.iconURL),
                         botInServer: Boolean(sharedGuild),
                         customOnly,
                         ...perms,
-                        canAccessDashboard: Boolean(sharedGuild || customOnly) && perms.canAccessDashboard,
+                        canAccessDashboard: Boolean(runtimeGuild || customOnly) && perms.canAccessDashboard,
                         inviteUrl: !sharedGuild && !customOnly && perms.canAccessDashboard ? getBotInviteUrl(entry.id) : ''
                     };
                 })
@@ -3757,17 +3777,14 @@ async function handleApi(req, res, url, client, customBotManager = null) {
                 sendJson(res, 403, { error: 'Auto-resolution requires the Pro plan or higher.' });
                 return true;
             }
-            if (Boolean(body.aiSettings.conversation) && !plan.isCustom) {
-                sendJson(res, 403, { error: 'AI Conversation requires the Custom plan.' });
-                return true;
-            }
             next.aiSettings = typeof ticketStore.setGuildAiSettings === 'function'
                 ? ticketStore.setGuildAiSettings(guildId, body.aiSettings, activeStorage)
                 : {
                     enabled: Boolean(body.aiSettings.enabled),
+                    mode: String(body.aiSettings.mode || '').toLowerCase() === 'conversation' ? 'conversation' : 'response',
                     autoResolution: Boolean(body.aiSettings.autoResolution) && plan.isProOrHigher,
                     autoLearn: Boolean(body.aiSettings.autoLearn),
-                    conversation: Boolean(body.aiSettings.conversation) && plan.isCustom
+                    conversation: String(body.aiSettings.mode || '').toLowerCase() === 'conversation' || Boolean(body.aiSettings.conversation)
                 };
         }
 
@@ -3894,7 +3911,8 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             sendJson(res, 403, { error: 'Forbidden' });
             return true;
         }
-        const channel = await client.channels.fetch(channelId).catch(() => null);
+        const runtimeClient = getDashboardRuntimeClient(client, guildId);
+        const channel = await runtimeClient?.channels?.fetch?.(channelId).catch(() => null);
         if (!channel || channel.type !== ChannelType.GuildText || typeof channel.send !== 'function') {
             sendJson(res, 404, { error: 'Channel not found or not sendable.' });
             return true;
@@ -3907,7 +3925,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         const fakeInteraction = {
             guildId,
             channelId,
-            guild: channel.guild || client?.guilds?.cache?.get(guildId) || null,
+            guild: channel.guild || getDashboardRuntimeGuild(client, guildId) || null,
             channel,
             user: { id: getDashboardSessionUserId(req) || getBotOwnerId() || 'dashboard' },
             reply: async () => null,
@@ -4068,7 +4086,8 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             return true;
         }
 
-        const guild = client?.guilds?.cache?.get(guildId) || await client?.guilds?.fetch?.(guildId).catch(() => null);
+        const guild = getDashboardRuntimeGuild(client, guildId)
+            || await getDashboardRuntimeClient(client, guildId)?.guilds?.fetch?.(guildId).catch(() => null);
         if (!guild) {
             sendJson(res, 404, { error: 'Guild not found' });
             return true;
@@ -4494,7 +4513,8 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             return true;
         }
         if (categoryId && guildId) {
-            const guild = client?.guilds?.cache?.get(guildId) || await client?.guilds?.fetch?.(guildId).catch(() => null);
+            const guild = getDashboardRuntimeGuild(client, guildId)
+                || await getDashboardRuntimeClient(client, guildId)?.guilds?.fetch?.(guildId).catch(() => null);
             if (guild) {
                 const category = guild.channels.cache.get(categoryId) || await guild.channels.fetch(categoryId).catch(() => null);
                 if (!category || category.type !== ChannelType.GuildCategory) {
@@ -4684,7 +4704,11 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             return true;
         }
 
-        const channel = await client.channels.fetch(channelId).catch(() => null);
+        const selectedGuild = getDashboardGuild(client, req);
+        const ticket = ticketStore.getTicketByChannelId(channelId, ticketStore.getActiveStorage());
+        const runtimeGuildId = String(ticket?.guildId || selectedGuild?.id || '').trim();
+        const runtimeClient = getDashboardRuntimeClient(client, runtimeGuildId);
+        const channel = await runtimeClient?.channels?.fetch?.(channelId).catch(() => null);
         if (!channel || !channel.isTextBased()) {
             sendJson(res, 404, { error: 'Channel not found or not text based' });
             return true;
@@ -4714,8 +4738,9 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         const reason = String(body.reason || 'Mass closed via dashboard.').trim();
 
         const activeStorage = ticketStore.getActiveStorage();
-        const guild = getDashboardGuild(client, req);
-        const discordGuild = guild?.id ? (client?.guilds?.cache?.get?.(guild.id) || null) : null;
+        const guild = selectedGuild;
+        const discordGuild = guild?.id ? getDashboardRuntimeGuild(client, guild.id) : null;
+        const runtimeClient = guild?.id ? getDashboardRuntimeClient(client, guild.id) : client;
         if (!(await ensureDashboardPermission(client, req, guild?.id || null, 'canCloseTickets'))) {
             sendJson(res, 403, { error: 'Forbidden' });
             return true;
@@ -4738,7 +4763,7 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         const failed = [];
 
         for (const ticket of tickets) {
-            const channel = await client.channels.fetch(ticket.channelId).catch(() => null);
+            const channel = await runtimeClient?.channels?.fetch?.(ticket.channelId).catch(() => null);
             if (!channel || !channel.isTextBased()) {
                 failed.push({ channelId: ticket.channelId, error: 'Channel not found' });
                 continue;
@@ -4764,8 +4789,12 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             sendJson(res, 400, { error: 'Valid channelId and note are required' });
             return true;
         }
-        const channel = await client.channels.fetch(channelId).catch(() => null);
-        const guildId = channel?.guildId || getDashboardGuild(client, req)?.id || null;
+        const selectedGuild = getDashboardGuild(client, req);
+        const ticket = ticketStore.getTicketByChannelId(channelId, ticketStore.getActiveStorage());
+        const runtimeGuildId = String(ticket?.guildId || selectedGuild?.id || '').trim();
+        const runtimeClient = getDashboardRuntimeClient(client, runtimeGuildId);
+        const channel = await runtimeClient?.channels?.fetch?.(channelId).catch(() => null);
+        const guildId = channel?.guildId || runtimeGuildId || null;
         if (!(await ensureDashboardPermission(client, req, guildId, 'canEditNotes'))) {
             sendJson(res, 403, { error: 'Forbidden' });
             return true;
@@ -4806,7 +4835,8 @@ async function handleApi(req, res, url, client, customBotManager = null) {
         if (!Array.isArray(ticket.escalations)) ticket.escalations = [];
         ticket.escalations.push(entry);
         ticketStore.saveActiveStorage(activeStorage);
-        const channel = await client.channels.fetch(channelId).catch(() => null);
+        const runtimeClient = getDashboardRuntimeClient(client, guildId);
+        const channel = await runtimeClient?.channels?.fetch?.(channelId).catch(() => null);
         if (channel && channel.isTextBased()) {
             const guildConfig = ticketStore.getGuildConfig(guildId, activeStorage);
             const escalationRoleId = level === 'high'
@@ -4852,7 +4882,9 @@ async function handleApi(req, res, url, client, customBotManager = null) {
             sendJson(res, 400, { error: 'Invalid channel id or payload' });
             return true;
         }
-        const channel = await client.channels.fetch(channelId).catch(() => null);
+        const selectedGuild = getDashboardGuild(client, req);
+        const runtimeClient = getDashboardRuntimeClient(client, selectedGuild?.id || '');
+        const channel = await runtimeClient?.channels?.fetch?.(channelId).catch(() => null);
         if (!channel || !channel.isTextBased()) {
             sendJson(res, 404, { error: 'Channel not found or not text based' });
             return true;
@@ -5932,10 +5964,11 @@ function renderExclusionList(){
  function renderSettings(){
   const teams=Array.isArray(state.supportTeams)?state.supportTeams:[];
    const ai=state&&state.aiAccess?state.aiAccess:{plan:'none',enabled:false,statusLabel:'No AI subscription',trialRemainingDays:0};
-   const aiSettings=ai.settings||{enabled:false,autoResolution:false,autoLearn:false,conversation:false};
+   const aiSettings=ai.settings||{enabled:false,mode:'response',autoResolution:false,autoLearn:false,conversation:false};
+   const aiMode=String(aiSettings.mode||(aiSettings.conversation?'conversation':'response')).toLowerCase()==='conversation'?'conversation':'response';
    const aiSubToggleDisabled=!ai.hasAccess||!aiSettings.enabled;
-   const aiResolutionDisabled=!ai.hasAccess||!ai.isProOrHigher||!aiSettings.enabled;
-   const aiConversationDisabled=!ai.isCustom||!aiSettings.enabled;
+   const aiResolutionDisabled=!ai.hasAccess||!ai.isProOrHigher||!aiSettings.enabled||aiMode==='conversation';
+   const aiResponseDisabled=!ai.hasAccess||!aiSettings.enabled||aiMode==='conversation';
    const isOwner=Boolean(state&&state.access&&state.access.isOwner);
   const selectedName=(ui&&ui.selectedTeam)?String(ui.selectedTeam):'';
   const selectedTeam=teams.find(t=>t&&t.name===selectedName)||null;
@@ -5983,9 +6016,9 @@ function renderExclusionList(){
         : 'This server does not currently own AI features. Upgrade or ask the bot owner for access.')+'</p>'+
      '<div class="list" style="margin-top:12px">'+
        '<label class="ai-option"><input id="aiFeatureEnabled" type="checkbox" '+(aiSettings.enabled?'checked':'')+' '+(!ai.hasAccess?'disabled':'')+' /><div><strong>AI enabled</strong><div class="muted">Master switch for every AI action in this server.</div></div></label>'+
-       '<label class="ai-option"><input id="aiAutoResolution" type="checkbox" '+(aiSettings.autoResolution?'checked':'')+' '+(aiResolutionDisabled?'disabled':'')+' /><div><strong>Auto-resolution <span class="pill warn">Pro+</span></strong><div class="muted">Searches Roblox Developer Forum results and uses them to suggest likely fixes.</div></div></label>'+
-       '<label class="ai-option"><input id="aiAutoLearn" type="checkbox" '+(aiSettings.autoLearn?'checked':'')+' '+(aiSubToggleDisabled?'disabled':'')+' /><div><strong>Auto-learn</strong><div class="muted">Uses your tags and model knowledge to offer a concise first response when a ticket opens.</div></div></label>'+
-       '<label class="ai-option"><input id="aiConversation" type="checkbox" '+(aiSettings.conversation?'checked':'')+' '+(aiConversationDisabled?'disabled':'')+' /><div><strong>AI Conversation <span class="pill warn">Custom</span></strong><div class="muted">The AI asks follow-up questions, keeps short text context, and stores image summaries instead of images.</div></div></label>'+
+       '<label>AI Mode</label><select id="aiMode" '+(!ai.hasAccess||!aiSettings.enabled?'disabled':'')+'><option value="response" '+(aiMode==='response'?'selected':'')+'>AI suggested response</option><option value="conversation" '+(aiMode==='conversation'?'selected':'')+'>AI conversation agent</option></select><div class="help">Suggested response posts one first reply when a ticket opens. Conversation agent replies in normal text as users talk.</div>'+
+       '<label class="ai-option"><input id="aiAutoResolution" type="checkbox" '+(aiSettings.autoResolution?'checked':'')+' '+(aiResolutionDisabled?'disabled':'')+' /><div><strong>Auto-resolution <span class="pill warn">Pro+</span></strong><div class="muted">Searches Roblox Developer Forum results and uses them only for response mode.</div></div></label>'+
+       '<label class="ai-option"><input id="aiAutoLearn" type="checkbox" '+(aiSettings.autoLearn?'checked':'')+' '+(aiResponseDisabled?'disabled':'')+' /><div><strong>Auto-learn</strong><div class="muted">Uses saved tags and careful model knowledge for the first response.</div></div></label>'+
      '</div>'+
      '<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">'+
        (ai.hasAccess?'<button id="saveAiSettings" class="btn" type="button" style="width:auto">Save AI Settings</button>':'<button id="aiUpsell" class="btn-soft" type="button">Learn About AI Access</button>')+
@@ -6577,8 +6610,9 @@ function wire(){
  const saveExclusion=document.getElementById('saveExclusion');if(saveExclusion)saveExclusion.onclick=async()=>{try{const userId=(document.getElementById('exUserId')?.value||'').trim();const reason=(document.getElementById('exReason')?.value||'').trim();const ticketTypes=[...document.querySelectorAll('.exType:checked')].map(input=>input.value);await api('/api/exclusion/upsert',{method:'POST',body:JSON.stringify({guildId:state.guildId,userId,reason,ticketTypes})});note('Exclusion saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
  document.querySelectorAll('.removeExclusion').forEach(btn=>btn.onclick=async()=>{try{await api('/api/exclusion/delete',{method:'POST',body:JSON.stringify({guildId:state.guildId,userId:btn.dataset.user||''})});note('Exclusion removed.','ok');await boot()}catch(e){note(e.message,'danger')}});
   const aiUpsell=document.getElementById('aiUpsell');if(aiUpsell)aiUpsell.onclick=()=>{window.location='/pricing'};
-  const saveAiSettings=document.getElementById('saveAiSettings');if(saveAiSettings)saveAiSettings.onclick=async()=>{try{await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,aiSettings:{enabled:!!document.getElementById('aiFeatureEnabled')?.checked,autoResolution:!!document.getElementById('aiAutoResolution')?.checked,autoLearn:!!document.getElementById('aiAutoLearn')?.checked,conversation:!!document.getElementById('aiConversation')?.checked},setup:{step:4}})});note('AI settings saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
-  const aiFeatureEnabled=document.getElementById('aiFeatureEnabled');if(aiFeatureEnabled)aiFeatureEnabled.onchange=()=>{const on=!!aiFeatureEnabled.checked;const access=state&&state.aiAccess?state.aiAccess:{};const autoLearn=document.getElementById('aiAutoLearn');if(autoLearn)autoLearn.disabled=!on||!access.hasAccess;const autoRes=document.getElementById('aiAutoResolution');if(autoRes)autoRes.disabled=!on||!access.hasAccess||!access.isProOrHigher;const conv=document.getElementById('aiConversation');if(conv)conv.disabled=!on||!access.isCustom;};
+  const saveAiSettings=document.getElementById('saveAiSettings');if(saveAiSettings)saveAiSettings.onclick=async()=>{try{const mode=String(document.getElementById('aiMode')?.value||'response');await api('/api/guild-config',{method:'POST',body:JSON.stringify({guildId:state.guildId,aiSettings:{enabled:!!document.getElementById('aiFeatureEnabled')?.checked,mode,autoResolution:mode==='response'&&!!document.getElementById('aiAutoResolution')?.checked,autoLearn:mode==='response'&&!!document.getElementById('aiAutoLearn')?.checked,conversation:mode==='conversation'},setup:{step:4}})});note('AI settings saved.','ok');await boot()}catch(e){note(e.message,'danger')}};
+  function syncAiModeControls(){const enabled=document.getElementById('aiFeatureEnabled');const modeEl=document.getElementById('aiMode');const on=!!enabled?.checked;const mode=String(modeEl?.value||'response');const access=state&&state.aiAccess?state.aiAccess:{};if(modeEl)modeEl.disabled=!on||!access.hasAccess;const autoLearn=document.getElementById('aiAutoLearn');if(autoLearn)autoLearn.disabled=!on||!access.hasAccess||mode==='conversation';const autoRes=document.getElementById('aiAutoResolution');if(autoRes)autoRes.disabled=!on||!access.hasAccess||!access.isProOrHigher||mode==='conversation';}
+  const aiFeatureEnabled=document.getElementById('aiFeatureEnabled');if(aiFeatureEnabled)aiFeatureEnabled.onchange=syncAiModeControls;const aiModeEl=document.getElementById('aiMode');if(aiModeEl)aiModeEl.onchange=syncAiModeControls;
   const aiStartTrial=document.getElementById('aiStartTrial');if(aiStartTrial)aiStartTrial.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'start-trial',days:7})});note('AI free trial started for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const aiSetPlus=document.getElementById('aiSetPlus');if(aiSetPlus)aiSetPlus.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:'set-plan',plan:'plus'})});note('Plus enabled for this server.','ok');await boot()}catch(e){note(e.message,'danger')}};
  const aiToggleEnabled=document.getElementById('aiToggleEnabled');if(aiToggleEnabled)aiToggleEnabled.onclick=async()=>{try{await api('/api/owner/guild-ai',{method:'POST',body:JSON.stringify({guildId:state.guildId,action:(state&&state.aiAccess&&state.aiAccess.enabled)?'disable':'enable'})});note('AI access updated.','ok');await boot()}catch(e){note(e.message,'danger')}};
@@ -6789,6 +6823,8 @@ const authLoginBtn=document.getElementById('authLogin');if(authLoginBtn)authLogi
 }
 
 function startDashboard(client, customBotManager = null) {
+    dashboardCustomBotManager = customBotManager || null;
+
     if (!getDashboardEnabled()) {
         dashboardLog('Dashboard disabled via DASHBOARD_ENABLED=false.');
         return null;

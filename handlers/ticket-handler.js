@@ -664,12 +664,14 @@ async function getGeminiSuggestion(reasonText, matchedTags, options = {}) {
         const contextMessages = Array.isArray(options.contextMessages) ? options.contextMessages : [];
         const imageSummaries = Array.isArray(options.imageSummaries) ? options.imageSummaries : [];
         const prompt = [
-            'You are a formal support assistant for a Discord server.',
+            'You are a Discord support agent for this ticket system. Stay strictly grounded in the user message, recent conversation, saved tags, image summaries, and supplied links.',
+            'If the issue is unclear or you do not have enough information, ask exactly one focused follow-up question instead of guessing. Do not invent policies, account actions, prices, refunds, moderation outcomes, or technical facts.',
+            'Keep the reply under 120 words. Use plain normal support text. Do not include markdown tables.',
             options.conversation
-                ? 'Continue the support conversation. Ask one useful follow-up question when details are missing. Keep the reply concise and practical.'
+                ? 'Conversation mode: reply directly to the user as the support agent. Be helpful, specific, and ask one next question if needed.'
                 : matchedTags.length
-                    ? 'Provide a concise suggested response based on the user reason, matching tags, and relevant Roblox Developer Forum results.'
-                    : 'Provide a concise first-step suggested response using your general support knowledge. Do not invent server-specific policies or account actions.',
+                    ? 'Suggested-response mode: provide one concise first support response based only on the matched tags and supplied evidence.'
+                    : 'Suggested-response mode: provide a cautious first support response only if the user issue is specific. If it is not specific, ask one clarifying question.',
             `Reason: ${reasonText}`,
             `Matching tags: ${matchedTags.map(tag => tag.name).join(', ') || 'none'}`,
             forumLinks.length ? `Roblox Developer Forum results:\n${forumLinks.map(item => `- ${item.title}: ${item.url}`).join('\n')}` : '',
@@ -735,9 +737,9 @@ function isBasicRobloxIssue(reasonText) {
 
 function canAttemptAiFirstReply(aiSettings, matchedTags, reasonText, hasGemini) {
     const safeReason = String(reasonText || '').trim();
+    if (aiSettings.mode === 'conversation' || aiSettings.conversation) return false;
     if (matchedTags.length) return true;
     if (aiSettings.autoResolution && isBasicRobloxIssue(safeReason)) return true;
-    if (aiSettings.autoLearn && hasGemini && safeReason.length >= 12) return true;
     return false;
 }
 
@@ -778,6 +780,7 @@ async function sendAiPromptedResponse(channel, reasonText) {
     if (!guildAiAccess.hasAccess) return;
     const aiSettings = ticketStore.getGuildAiSettings(channel?.guild?.id || null, activeStorage);
     if (!aiSettings.enabled) return;
+    if (aiSettings.mode === 'conversation' || aiSettings.conversation) return;
 
     const safeReason = String(reasonText || '').trim();
     const matchedTags = collectTagMatches(safeReason, channel?.guild?.id || null);
@@ -793,7 +796,7 @@ async function sendAiPromptedResponse(channel, reasonText) {
         : [];
 
     let suggestion = '';
-    if (hasGemini) {
+    if (hasGemini && (matchedTags.length || forumLinks.length)) {
         suggestion = String(await getGeminiSuggestion(safeReason, aiSettings.autoLearn ? matchedTags : [], { forumLinks }) || '').trim();
     } else if (aiSettings.autoLearn && primaryTag?.description) {
         suggestion = String(primaryTag.description).trim();
@@ -873,7 +876,7 @@ async function handleAiConversationMessage(message, ticket, activeStorage = null
     const aiControl = ticketStore.getAiControl(storage);
     if (aiControl.manualDisabled) return false;
     const aiSettings = ticketStore.getGuildAiSettings(message?.guild?.id || ticket?.guildId || null, storage);
-    if (!aiSettings.enabled || !aiSettings.conversation) return false;
+    if (!aiSettings.enabled || !(aiSettings.mode === 'conversation' || aiSettings.conversation)) return false;
     if (ticket?.createdBy && String(ticket.createdBy) !== String(message.author?.id || '')) return false;
 
     const content = compactText(message.content, 1800);
@@ -911,12 +914,7 @@ async function handleAiConversationMessage(message, ticket, activeStorage = null
         messages: [{ role: 'assistant', content: responseText, createdAt: new Date().toISOString() }]
     }, storage);
 
-    const container = new ContainerBuilder()
-        .setAccentColor(0x667EF9)
-        .addTextDisplayComponents(new TextDisplayBuilder().setContent('## <:userrobot:1487431675570032681> AI Assistant'))
-        .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true))
-        .addTextDisplayComponents(new TextDisplayBuilder().setContent(responseText));
-    await message.channel.send({ flags: MessageFlags.IsComponentsV2, components: [container] }).catch(() => null);
+    await message.reply({ content: responseText, allowedMentions: { repliedUser: false } }).catch(() => null);
     return true;
 }
 

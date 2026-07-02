@@ -387,12 +387,12 @@ function getDefaultAiSettings(access = null) {
     const plan = String(access?.plan || '').trim();
     const hasAccess = Boolean(access?.hasAccess);
     const isProOrCustom = ['pro', 'custom', 'pro_trial', 'custom_trial'].includes(plan) && hasAccess;
-    const isCustom = ['custom', 'custom_trial'].includes(plan) && hasAccess;
     return {
         enabled: Boolean(hasAccess),
+        mode: 'response',
         autoResolution: Boolean(isProOrCustom),
         autoLearn: Boolean(hasAccess),
-        conversation: Boolean(isCustom)
+        conversation: false
     };
 }
 
@@ -402,13 +402,18 @@ function normalizeAiSettings(input, access = null) {
     const plan = String(access?.plan || '').trim();
     const hasAccess = Boolean(access?.hasAccess);
     const isProOrCustom = ['pro', 'custom', 'pro_trial', 'custom_trial'].includes(plan) && hasAccess;
-    const isCustom = ['custom', 'custom_trial'].includes(plan) && hasAccess;
     const enabled = Object.prototype.hasOwnProperty.call(raw, 'enabled') ? Boolean(raw.enabled) : defaults.enabled;
+    const requestedMode = String(raw.mode || '').trim().toLowerCase();
+    const legacyConversation = Boolean(raw.conversation);
+    const mode = hasAccess && (requestedMode === 'conversation' || (!requestedMode && legacyConversation))
+        ? 'conversation'
+        : 'response';
     return {
         enabled: hasAccess && enabled,
-        autoResolution: isProOrCustom && (Object.prototype.hasOwnProperty.call(raw, 'autoResolution') ? Boolean(raw.autoResolution) : defaults.autoResolution),
-        autoLearn: hasAccess && (Object.prototype.hasOwnProperty.call(raw, 'autoLearn') ? Boolean(raw.autoLearn) : defaults.autoLearn),
-        conversation: isCustom && (Object.prototype.hasOwnProperty.call(raw, 'conversation') ? Boolean(raw.conversation) : defaults.conversation)
+        mode,
+        autoResolution: mode === 'response' && isProOrCustom && (Object.prototype.hasOwnProperty.call(raw, 'autoResolution') ? Boolean(raw.autoResolution) : defaults.autoResolution),
+        autoLearn: mode === 'response' && hasAccess && (Object.prototype.hasOwnProperty.call(raw, 'autoLearn') ? Boolean(raw.autoLearn) : defaults.autoLearn),
+        conversation: mode === 'conversation'
     };
 }
 
