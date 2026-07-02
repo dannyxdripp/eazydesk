@@ -2148,6 +2148,7 @@ function getCustomOnlyGuildIds(storage = null) {
 function getKnownDashboardGuildIds(client, storage = null) {
     return [...new Set([
         ...(client?.guilds?.cache?.keys ? [...client.guilds.cache.keys()] : []),
+        ...(dashboardCustomBotManager?.getRuntimeGuildIds?.() || []),
         ...getCustomOnlyGuildIds(storage)
     ])];
 }
@@ -2510,7 +2511,10 @@ async function getCachedGuildCatalog(guild, kind, loader) {
     const key = `${guildId}:${kind}`;
     const now = Date.now();
     const cached = guildCatalogCache.get(key);
-    if (cached && (now - cached.createdAt) < GUILD_CATALOG_CACHE_TTL_MS) return cached.value;
+    if (cached && (now - cached.createdAt) < GUILD_CATALOG_CACHE_TTL_MS) {
+        const emptyCatalog = Array.isArray(cached.value) && cached.value.length === 0;
+        if (!emptyCatalog || (now - cached.createdAt) < 5_000) return cached.value;
+    }
     const value = await loader();
     guildCatalogCache.set(key, { createdAt: now, value });
     return value;
@@ -2731,8 +2735,9 @@ async function getRoleCatalog(client, req = null) {
     const guild = getDashboardDiscordGuild(client, req);
     if (!guild) return [];
     return getCachedGuildCatalog(guild, 'roles', async () => {
-        await guild.roles.fetch();
-        return guild.roles.cache
+        const fetched = await guild.roles.fetch().catch(() => null);
+        const roles = fetched?.values ? fetched : guild.roles.cache;
+        return roles
             .filter(r => r.id !== guild.id)
             .sort((a, b) => b.position - a.position)
             .map(r => ({ id: r.id, name: r.name, color: r.hexColor && r.hexColor !== '#000000' ? r.hexColor : '#99AAB5' }));
@@ -2743,8 +2748,9 @@ async function getTextChannelCatalog(client, req = null) {
     const guild = getDashboardDiscordGuild(client, req);
     if (!guild) return [];
     return getCachedGuildCatalog(guild, 'channels', async () => {
-        await guild.channels.fetch();
-        return guild.channels.cache
+        const fetched = await guild.channels.fetch().catch(() => null);
+        const channels = fetched?.values ? fetched : guild.channels.cache;
+        return channels
             .filter(ch => ch && typeof ch.isTextBased === 'function' && ch.isTextBased() && !ch.isThread())
             .sort((a, b) => {
                 const posA = Number(a.rawPosition || 0);
@@ -2760,8 +2766,9 @@ async function getCategoryCatalog(client, req = null) {
     const guild = getDashboardDiscordGuild(client, req);
     if (!guild) return [];
     return getCachedGuildCatalog(guild, 'categories', async () => {
-        await guild.channels.fetch();
-        return guild.channels.cache
+        const fetched = await guild.channels.fetch().catch(() => null);
+        const channels = fetched?.values ? fetched : guild.channels.cache;
+        return channels
             .filter(ch => ch && ch.type === ChannelType.GuildCategory)
             .sort((a, b) => {
                 const posA = Number(a.rawPosition || 0);

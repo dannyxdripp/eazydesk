@@ -560,8 +560,13 @@ function getStatus(guildId) {
 }
 
 function getRuntimeClient(guildId) {
-    const entry = clients.get(String(guildId || '').trim());
-    return entry?.client || null;
+    const id = String(guildId || '').trim();
+    const entry = clients.get(id);
+    if (entry?.client) return entry.client;
+    for (const runtime of clients.values()) {
+        if (runtime?.client?.guilds?.cache?.has?.(id)) return runtime.client;
+    }
+    return null;
 }
 
 function getRuntimeGuild(guildId) {
@@ -571,10 +576,22 @@ function getRuntimeGuild(guildId) {
     return runtimeClient?.guilds?.cache?.get?.(id) || null;
 }
 
+function getRuntimeGuildIds() {
+    const ids = new Set();
+    for (const [configuredGuildId, runtime] of clients.entries()) {
+        if (/^\d{17,20}$/.test(String(configuredGuildId))) ids.add(String(configuredGuildId));
+        for (const joinedId of runtime?.client?.guilds?.cache?.keys?.() || []) {
+            if (/^\d{17,20}$/.test(String(joinedId))) ids.add(String(joinedId));
+        }
+    }
+    return [...ids];
+}
+
 module.exports = {
     getStatus,
     getRuntimeClient,
     getRuntimeGuild,
+    getRuntimeGuildIds,
     start,
     stopGuild,
     syncAll,
