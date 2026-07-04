@@ -17,10 +17,15 @@ const {
 } = require('discord.js');
 const ticketStore = require('../utils/ticket-store');
 const { touchTicket, updateTicketChannelMetadata } = require('../utils/ticket-metadata');
-const { buildV2Notice } = require('../utils/components-v2-messages');
+const { buildV2Notice, stripCustomEmoji } = require('../utils/components-v2-messages');
 const closeRequestCommand = require('../commands/closerequest');
 const { resolveParentCategoryId: resolveDefaultParentCategoryId } = require('../utils/guild-defaults');
 const { formatBotPermissionGuide } = require('../utils/permission-messages');
+const {
+    isUnknownInteractionError,
+    safeDeferReply,
+    safeReply
+} = require('../utils/interaction-responder');
 
 const MANUAL_STATUSES = new Set(['available', 'increased_volume', 'reduced_assistance']);
 const INCREASED_THRESHOLD = 10;
@@ -50,6 +55,9 @@ const BOT_TICKET_CHANNEL_PERMISSIONS = [
 ];
 const PERMISSION_REPAIR_CACHE_TTL_MS = 60 * 1000;
 const permissionRepairCache = new Map();
+const AI_NOTICE_TTL_MS = 10 * 60 * 1000;
+const aiNoticeCache = new Map();
+const AI_FETCH_TIMEOUT_MS = Math.max(3000, Number(process.env.AI_FETCH_TIMEOUT_MS || 15000));
 
 function getAutomaticAvailabilityStatus(count) {
     if (count > REDUCED_THRESHOLD) return 'reduced_assistance';
@@ -83,13 +91,13 @@ function getEffectiveAvailability(storage, ticketTypeName, guildId = null) {
 function getAvailabilityMeta(status) {
     if (status === 'reduced_assistance') {
         return {
-            label: '<:reducedassistance:1477769722794610709> Reduced Assistance',
+            label: 'Reduced Assistance',
             notice: '```ansi\n\u001b[2;31m\u001b[2;42m\u001b[2;46m\u001b[2;47m\u001b[2;40m\u001b[2;33m\u001b[1;33m\u001b[1;31mSupport is currently experiencing high volumes of tickets. Urgent issues only. Describe your issue in detail so we can help you as soon as possible.\u001b[0m\u001b[1;33m\u001b[1;40m\u001b[0m\u001b[2;33m\u001b[2;40m\u001b[0m\u001b[2;31m\u001b[2;40m\u001b[0m\u001b[2;31m\u001b[2;47m\u001b[0m\u001b[2;31m\u001b[2;46m\u001b[0m\u001b[2;31m\u001b[2;42m\u001b[0m\u001b[2;31m\u001b[0m\n```'
         };
     }
     if (status === 'increased_volume') {
         return {
-            label: '<:limitedassistance:1477766529645805638> Limited Assistance',
+            label: 'Limited Assistance',
             notice: '```ansi\n\u001b[2;31m\u001b[2;42m\u001b[2;46m\u001b[2;47m\u001b[2;40m\u001b[2;33m\u001b[1;33m\u001b[1;31m\u001b[1;41m\u001b[1;37mDue to an increased volume of tickets, support is limited. Describe your issue in detail so that we can support you best.\u001b[0m\u001b[1;31m\u001b[1;41m\u001b[0m\u001b[1;31m\u001b[1;40m\u001b[0m\u001b[1;33m\u001b[1;40m\u001b[0m\u001b[2;33m\u001b[2;40m\u001b[0m\u001b[2;31m\u001b[2;40m\u001b[0m\u001b[2;31m\u001b[2;47m\u001b[0m\u001b[2;31m\u001b[2;46m\u001b[0m\u001b[2;31m\u001b[2;42m\u001b[0m\u001b[2;31m\u001b[0m\n```'
         };
     }
@@ -261,7 +269,6 @@ function buildOpenSupportRow(options = {}) {
         new ButtonBuilder()
             .setCustomId(customId)
             .setLabel(label)
-            .setEmoji({ id: '1477691338718974194', name: 'headset', animated: false })
             .setStyle(ButtonStyle.Secondary)
     );
 }
@@ -512,13 +519,8 @@ function parseComponentEmoji(rawEmoji) {
     const emoji = String(rawEmoji || '').trim();
     if (!emoji) return null;
     const custom = emoji.match(/^<(a?):([a-zA-Z0-9_]+):(\d{17,20})>$/);
-    if (custom) {
-        return {
-            animated: custom[1] === 'a',
-            name: custom[2],
-            id: custom[3]
-        };
-    }
+    if (custom) return null;
+    if (/^:?[a-zA-Z0-9_-]+:?$/.test(emoji)) return null;
     return { name: emoji };
 }
 
@@ -573,22 +575,17 @@ function resolvePanelDisplayStyle(panel) {
 }
 
 async function sendEphemeral(interaction, payload) {
-    const baseFlags = Number(payload?.flags || 0);
-    const response = { ...payload, flags: baseFlags | MessageFlags.Ephemeral };
-    if (interaction.deferred || interaction.replied) {
-        // `Ephemeral` can't be edited, but `IsComponentsV2` can.
-        const editableFlags = response.flags & ~MessageFlags.Ephemeral;
-        const { flags, ...editable } = response;
-        if (editableFlags) editable.flags = editableFlags;
-        return interaction.editReply(editable).catch(() => null);
-    }
-    return interaction.reply(response).catch(() => null);
+    return safeReply(interaction, payload).catch(error => {
+        if (!isUnknownInteractionError(error)) console.warn('[Interactions] Failed to send ephemeral response:', error?.message || error);
+        return null;
+    });
 }
 
 async function ensureEphemeralAck(interaction) {
-    if (!interaction || interaction.deferred || interaction.replied) return;
-    if (typeof interaction.deferReply !== 'function') return;
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => null);
+    return safeDeferReply(interaction, { flags: MessageFlags.Ephemeral }).catch(error => {
+        if (!isUnknownInteractionError(error)) console.warn('[Interactions] Failed to defer interaction:', error?.message || error);
+        return false;
+    });
 }
 
 function collectTagMatches(reasonText, guildId) {
@@ -631,6 +628,36 @@ function compactText(value, max = 1800) {
     return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = AI_FETCH_TIMEOUT_MS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs || AI_FETCH_TIMEOUT_MS)));
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function notifyAiConversationUnavailable(message, reason) {
+    const channelId = String(message?.channel?.id || 'unknown');
+    const key = `${channelId}:${reason}`;
+    const now = Date.now();
+    const last = Number(aiNoticeCache.get(key) || 0);
+    console.warn('[AI] Conversation unavailable:', {
+        reason,
+        guildId: message?.guild?.id || null,
+        channelId,
+        userId: message?.author?.id || null
+    });
+    if ((now - last) < AI_NOTICE_TTL_MS) return false;
+    aiNoticeCache.set(key, now);
+    await message.channel?.send?.({
+        content: 'AI conversation is temporarily unavailable, but your message has been saved in the ticket. A staff member can continue from here.',
+        allowedMentions: { parse: [] }
+    }).catch(() => null);
+    return true;
+}
+
 function robloxDevForumSearchUrl(query) {
     const q = encodeURIComponent(String(query || '').trim().slice(0, 160));
     return q ? `https://devforum.roblox.com/search?q=${q}` : 'https://devforum.roblox.com/';
@@ -640,9 +667,9 @@ async function searchRobloxDevForum(reasonText) {
     const query = compactText(reasonText, 180).replace(/\broblox\b/ig, '').trim() || compactText(reasonText, 180);
     if (!query) return [];
     try {
-        const response = await fetch(`https://devforum.roblox.com/search.json?q=${encodeURIComponent(query)}`, {
+        const response = await fetchWithTimeout(`https://devforum.roblox.com/search.json?q=${encodeURIComponent(query)}`, {
             headers: { Accept: 'application/json' }
-        });
+        }, 8000);
         if (!response.ok) return [];
         const data = await response.json().catch(() => ({}));
         const topics = Array.isArray(data?.topics) ? data.topics : [];
@@ -679,7 +706,7 @@ async function getGeminiSuggestion(reasonText, matchedTags, options = {}) {
             contextMessages.length ? `Recent conversation:\n${contextMessages.map(item => `${item.role}: ${item.content}`).join('\n')}` : ''
         ].join('\n');
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -687,10 +714,14 @@ async function getGeminiSuggestion(reasonText, matchedTags, options = {}) {
                 generationConfig: { temperature: 0.4, maxOutputTokens: 220 }
             })
         });
-        if (!response.ok) return null;
+        if (!response.ok) {
+            console.warn('[AI] Gemini request failed:', { status: response.status, statusText: response.statusText });
+            return null;
+        }
         const data = await response.json();
         return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
-    } catch {
+    } catch (error) {
+        console.warn('[AI] Gemini request error:', error?.name === 'AbortError' ? 'timeout' : (error?.message || error));
         return null;
     }
 }
@@ -701,12 +732,12 @@ async function summarizeImageAttachment(attachment) {
     const url = String(attachment?.url || '').trim();
     if (!apiKey || !url || !contentType.startsWith('image/')) return null;
     try {
-        const response = await fetch(url);
+        const response = await fetchWithTimeout(url, {}, 8000);
         if (!response.ok) return null;
         const arrayBuffer = await response.arrayBuffer();
         const base64 = Buffer.from(arrayBuffer).toString('base64');
         const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-        const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        const aiResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -851,7 +882,7 @@ async function sendAiPromptedResponse(channel, reasonText) {
     const container = new ContainerBuilder()
         .setAccentColor(0x667EF9)
         .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent('## <:userrobot:1487431675570032681> AI Suggested Response')
+            new TextDisplayBuilder().setContent('## AI Suggested Response')
         )
         .addSeparatorComponents(
             new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
@@ -878,6 +909,9 @@ async function handleAiConversationMessage(message, ticket, activeStorage = null
     const aiSettings = ticketStore.getGuildAiSettings(message?.guild?.id || ticket?.guildId || null, storage);
     if (!aiSettings.enabled || !(aiSettings.mode === 'conversation' || aiSettings.conversation)) return false;
     if (ticket?.createdBy && String(ticket.createdBy) !== String(message.author?.id || '')) return false;
+    if (!process.env.GEMINI_API_KEY) {
+        return notifyAiConversationUnavailable(message, 'missing_gemini_api_key');
+    }
 
     const content = compactText(message.content, 1800);
     const imageAttachments = [...(message.attachments?.values?.() || [])]
@@ -903,13 +937,16 @@ async function handleAiConversationMessage(message, ticket, activeStorage = null
         imageSummaries
     }, storage);
     const contextMessages = Array.isArray(entry?.messages) ? entry.messages.slice(-10) : [];
+    await message.channel?.sendTyping?.().catch(() => null);
     const responseText = compactText(await getGeminiSuggestion(userContent || 'The user uploaded an image.', [], {
         conversation: true,
         contextMessages,
         imageSummaries: Array.isArray(entry?.imageSummaries) ? entry.imageSummaries.slice(-5) : []
     }), 1800);
 
-    if (!responseText) return false;
+    if (!responseText) {
+        return notifyAiConversationUnavailable(message, 'empty_model_response');
+    }
     ticketStore.appendAiConversation(message.channel.id, {
         messages: [{ role: 'assistant', content: responseText, createdAt: new Date().toISOString() }]
     }, storage);
@@ -1146,7 +1183,7 @@ module.exports = {
 
             const createdContainer = new ContainerBuilder().addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(
-                    `<:ticket:1487471770406486076> **Ticket Created**\n> Your ticket has been created. View it here: ${ticketChannel}`
+                    `**Ticket Created**\n> Your ticket has been created. View it here: ${ticketChannel}`
                 )
             );
             await sendEphemeral(interaction, { flags: MessageFlags.IsComponentsV2, components: [createdContainer] });
@@ -1302,7 +1339,7 @@ module.exports = {
                 panelConfig.advisory ||
                 '**Before opening a ticket**\n> Share the goal, what you already tried, and any screenshots or files that can help.\n> Ticket history may be saved for moderation, training, and quality review.'
             ).trim();
-            const header = `# <:questions:1477710100889079909> ${panelName}`;
+            const header = `# ${stripCustomEmoji(panelName)}`;
 
             const panelContainer = new ContainerBuilder()
                 .setAccentColor(accentColor)
@@ -1454,11 +1491,16 @@ module.exports = {
             await this.showTicketReasonModal(interaction, selectedType, ticketConfig);
         } catch (error) {
             console.error('Error handling ticket type button:', error);
+            if (isUnknownInteractionError(error)) return null;
             return sendEphemeral(interaction, buildInfoMessage('Error', 'There was an error processing your ticket request.', 0xED4245));
         }
     },
 
     async showTicketReasonModal(interaction, selectedType, resolvedTicketConfig = null) {
+        if (interaction?.deferred || interaction?.replied) {
+            return sendEphemeral(interaction, buildInfoMessage('Ticket Request', 'This ticket request was already acknowledged. Please press the ticket button again.', 0xFEE75C));
+        }
+
         const ticketConfig = resolvedTicketConfig || ticketStore.findTicketTypeBySelectValue(selectedType, interaction.guildId);
         if (!ticketConfig) {
             return sendEphemeral(interaction, buildInfoMessage('Invalid Ticket Type', 'The selected ticket type is not valid.', 0xED4245));
@@ -1497,10 +1539,32 @@ module.exports = {
                     required: false
                 }
             });
-            return interaction.showModal(modalData);
+            return interaction.showModal(modalData).catch(error => {
+                if (isUnknownInteractionError(error)) {
+                    console.warn('[Tickets] Ticket modal interaction expired before Discord accepted it.', {
+                        guildId: interaction.guildId || null,
+                        channelId: interaction.channelId || null,
+                        userId: interaction.user?.id || null,
+                        selectedType
+                    });
+                    return null;
+                }
+                throw error;
+            });
         }
 
-        return interaction.showModal(modal);
+        return interaction.showModal(modal).catch(error => {
+            if (isUnknownInteractionError(error)) {
+                console.warn('[Tickets] Ticket modal interaction expired before Discord accepted it.', {
+                    guildId: interaction.guildId || null,
+                    channelId: interaction.channelId || null,
+                    userId: interaction.user?.id || null,
+                    selectedType
+                });
+                return null;
+            }
+            throw error;
+        });
     },
 
     async handleTicketReasonSubmit(interaction) {
@@ -1560,7 +1624,7 @@ module.exports = {
             await this.showTicketReasonModal(interaction, selectedType, ticketConfig);
         } catch (error) {
             console.error('Error handling ticket selection:', error);
-            if (error?.code === 10062) return null;
+            if (isUnknownInteractionError(error)) return null;
             const message = error?.code === 50013 || error?.status === 403
                 ? describeDiscordPermissionError(error, interaction.guild, null, interaction.channel)
                 : 'There was an error processing your ticket request.';

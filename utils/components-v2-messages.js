@@ -89,9 +89,16 @@ function inferKind(title, color) {
 }
 
 function kindEmoji(kind) {
-    if (kind === 'success') return '<:checkbox:1487433169157357688>';
-    if (kind === 'error') return '<:crossbox:1487433209871339602>';
+    if (kind === 'success') return '[OK]';
+    if (kind === 'error') return '[!]';
     return '';
+}
+
+function stripCustomEmoji(text) {
+    return String(text || '')
+        .replace(/<a?:([a-zA-Z0-9_]+):\d{17,20}>/g, ':$1:')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
 }
 
 function kindAccent(kind) {
@@ -107,8 +114,8 @@ function buildV2Notice(title, description = '', color = 0x5865F2, extra = {}) {
     }
 
     const kind = inferKind(title, color);
-    const safeTitle = String(title || '').trim();
-    const safeDescription = String(description || '').trim();
+    const safeTitle = stripCustomEmoji(title);
+    const safeDescription = stripCustomEmoji(description);
 
     const shouldAccent = kind === 'success' || kind === 'error';
     let accentColor = Number.isFinite(Number(color)) ? Number(color) : kindAccent(kind);
@@ -169,5 +176,6 @@ module.exports = {
     inferKind,
     isV2Supported,
     kindEmoji,
-    kindAccent
+    kindAccent,
+    stripCustomEmoji
 };

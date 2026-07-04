@@ -19,6 +19,12 @@ const { resolveEmbedByTitle } = require('./utils/embed-config');
 const { buildV2FromTemplate } = require('./utils/components-v2-messages');
 const storageMonitor = require('./utils/storage-monitor');
 const {
+    isUnknownInteractionError,
+    makeReplyAutoEdit,
+    safeDeferReply,
+    safeReply
+} = require('./utils/interaction-responder');
+const {
     TWELVE_HOURS_MS,
     getLastActivityMs,
     touchTicket,
@@ -234,6 +240,7 @@ const COMMAND_COOLDOWN_MS = Math.max(0, Number(process.env.COMMAND_COOLDOWN_MS |
 const COMMAND_BURST_WINDOW_MS = Math.max(1000, Number(process.env.COMMAND_BURST_WINDOW_MS || 10000));
 const COMMAND_BURST_MAX = Math.max(1, Number(process.env.COMMAND_BURST_MAX || 8));
 const COMMAND_SLOW_LOG_MS = Math.max(250, Number(process.env.COMMAND_SLOW_LOG_MS || 2500));
+const COMMAND_AUTO_DEFER_MS = Math.max(500, Number(process.env.COMMAND_AUTO_DEFER_MS || 1500));
 const TICKET_OPEN_COOLDOWN_MS = Math.max(0, Number(process.env.TICKET_OPEN_COOLDOWN_MS || 15000));
 const commandCooldowns = new Map();
 const commandBurstBuckets = new Map();
@@ -793,6 +800,7 @@ async function handleRuntimeInteraction(interaction, runtimeClient = client) {
         }
 
         const startedAt = Date.now();
+        let autoDeferTimer = null;
         try {
             const commandRateLimit = checkAndTrackCommandRateLimit(interaction);
             if (commandRateLimit.limited) {
@@ -803,7 +811,19 @@ async function handleRuntimeInteraction(interaction, runtimeClient = client) {
                 await interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
                 return;
             }
+            if (interaction.commandName !== 'feedback') {
+                makeReplyAutoEdit(interaction);
+                autoDeferTimer = setTimeout(() => {
+                    safeDeferReply(interaction, { flags: MessageFlags.Ephemeral }).catch(error => {
+                        if (!isUnknownInteractionError(error)) {
+                            console.warn(`[Commands] Auto-defer failed for /${interaction.commandName}:`, error?.message || error);
+                        }
+                    });
+                }, COMMAND_AUTO_DEFER_MS);
+                autoDeferTimer.unref?.();
+            }
             await command.execute(interaction);
+            if (autoDeferTimer) clearTimeout(autoDeferTimer);
             const durationMs = Date.now() - startedAt;
             if (durationMs >= COMMAND_SLOW_LOG_MS) {
                 console.warn(`[Commands] /${interaction.commandName} took ${durationMs}ms`, {
@@ -815,6 +835,7 @@ async function handleRuntimeInteraction(interaction, runtimeClient = client) {
                 });
             }
         } catch (error) {
+            if (autoDeferTimer) clearTimeout(autoDeferTimer);
             const durationMs = Date.now() - startedAt;
             console.error(`[Commands] /${interaction.commandName} failed after ${durationMs}ms`, {
                 guildId: interaction.guildId || null,
@@ -826,13 +847,9 @@ async function handleRuntimeInteraction(interaction, runtimeClient = client) {
                 errorStatus: error?.status
             });
             console.error(`[Event \u{1F514}] Error executing ${interaction.commandName}:`, error);
-            if (interaction.replied || interaction.deferred) {
-                const base = buildMessage('Command Error', 'There was an error while executing this command.', 0xED4245);
-                await interaction.followUp({ ...base, flags: MessageFlags.Ephemeral | base.flags }).catch(() => null);
-            } else {
-                const base = buildMessage('Command Error', 'There was an error while executing this command.', 0xED4245);
-                await interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags }).catch(() => null);
-            }
+            if (isUnknownInteractionError(error)) return;
+            const base = buildMessage('Command Error', 'There was an error while executing this command.', 0xED4245);
+            await safeReply(interaction, base).catch(() => null);
         }
     } else if (interaction.isModalSubmit()) {
         if (interaction.customId === feedbackCommand.MODAL_ID) {
@@ -902,6 +919,18 @@ async function handleRuntimeInteraction(interaction, runtimeClient = client) {
 }
 
 async function reportUnhandledInteractionError(interaction, error) {
+    if (isUnknownInteractionError(error)) {
+        console.warn('[Event \u{1F514}] Interaction expired before a response could be sent:', {
+            type: interaction?.type,
+            commandName: interaction?.commandName || null,
+            customId: interaction?.customId || null,
+            guildId: interaction?.guildId || null,
+            channelId: interaction?.channelId || null,
+            userId: interaction?.user?.id || null
+        });
+        return;
+    }
+
     console.error('[Event \u{1F514}] Unhandled interaction error:', {
         type: interaction?.type,
         commandName: interaction?.commandName || null,
@@ -916,13 +945,7 @@ async function reportUnhandledInteractionError(interaction, error) {
     }, error);
 
     const base = buildMessage('Interaction Error', 'That action failed before it could complete. Please try again in a moment.', 0xED4245);
-    try {
-        if (interaction?.replied || interaction?.deferred) {
-            await interaction.followUp({ ...base, flags: MessageFlags.Ephemeral | base.flags }).catch(() => null);
-        } else if (typeof interaction?.reply === 'function') {
-            await interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags }).catch(() => null);
-        }
-    } catch {}
+    await safeReply(interaction, base).catch(() => null);
 }
 
 function describeInteractionForLog(interaction) {

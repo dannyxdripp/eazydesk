@@ -44,12 +44,10 @@ function buildCloseRequestButtons() {
         new ButtonBuilder()
             .setCustomId(CLOSE_NOW_ID)
             .setLabel('Accept & Close')
-            .setEmoji({ id: '1487433169157357688', name: 'checkbox', animated: false })
             .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
             .setCustomId(CANCEL_ID)
             .setLabel('Deny & Keep Open')
-            .setEmoji({ id: '1487433209871339602', name: 'crossbox', animated: false })
             .setStyle(ButtonStyle.Secondary)
     );
 }
@@ -191,7 +189,7 @@ module.exports = {
             const safeReason = String(reason || 'No reason provided.').trim().slice(0, 900).replace(/`/g, "'");
             const timerLabel = formatDelay(timer);
             const lines = [
-                `<:closereq:1487472578908913794> **Close Request**`,
+                '**Close Request**',
                 `> ${interaction.user} has requested to close this ticket.`,
                 `> Reason: \`${safeReason}\``,
                 `> Auto-close in **${timerLabel}** unless denied.`,

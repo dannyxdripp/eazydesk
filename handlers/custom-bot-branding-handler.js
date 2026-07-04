@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { Client, GatewayIntentBits, ActivityType, REST, Routes } = require('discord.js');
 const ticketStore = require('../utils/ticket-store');
 const storageMonitor = require('../utils/storage-monitor');
+const { isUnknownInteractionError, safeReply } = require('../utils/interaction-responder');
 
 const clients = new Map();
 let hostClient = null;
@@ -277,6 +278,17 @@ function attachRuntimeHandlers(runtimeClient, targetGuildId) {
                 }
                 return result;
             } catch (error) {
+                if (isUnknownInteractionError(error)) {
+                    console.warn('[Custom Bot] Interaction expired before it could be acknowledged.', {
+                        targetGuildId,
+                        guildId: interaction?.guildId || null,
+                        channelId: interaction?.channelId || null,
+                        userId: interaction?.user?.id || null,
+                        customId: interaction?.customId || null,
+                        commandName: interaction?.commandName || null
+                    });
+                    return;
+                }
                 storageMonitor.reportCustomBotEvent('error', {
                     guildId: targetGuildId,
                     customId: interaction?.customId || null,
@@ -284,9 +296,8 @@ function attachRuntimeHandlers(runtimeClient, targetGuildId) {
                     reason: 'interaction handler failed'
                 }, error).catch(() => null);
                 if (interaction?.isRepliable?.()) {
-                    const payload = { content: 'That action failed before it could complete. Please try again in a moment.', ephemeral: true };
-                    if (interaction.replied || interaction.deferred) await interaction.followUp(payload).catch(() => null);
-                    else await interaction.reply(payload).catch(() => null);
+                    const payload = { content: 'That action failed before it could complete. Please try again in a moment.' };
+                    await safeReply(interaction, payload).catch(() => null);
                 }
             }
         });

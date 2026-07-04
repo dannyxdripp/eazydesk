@@ -214,7 +214,7 @@ function deleteTagByName(name, guildId = null, storage = null) {
 }
 
 function getActiveStorage() {
-    const data = readJson(ACTIVE_STORAGE_PATH, {});
+    const data = readJsonCached(ACTIVE_STORAGE_PATH, {});
     if (!Array.isArray(data.tickets)) data.tickets = [];
     if (!Array.isArray(data.staffStatsEvents)) data.staffStatsEvents = [];
     if (!Array.isArray(data.closeRequestReasonEvents)) data.closeRequestReasonEvents = [];
@@ -257,7 +257,7 @@ function getActiveStorage() {
 
 function saveActiveStorage(storage) {
     snapshotJsonBackup('active-storage', storage);
-    writeJsonAtomic(ACTIVE_STORAGE_PATH, storage);
+    writeJsonCached(ACTIVE_STORAGE_PATH, storage);
 }
 
 function findTicketTypeBySelectValue(value, guildId = null, storage = null) {

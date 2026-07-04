@@ -11,7 +11,7 @@ const RESPONSES = {
     invalidTeamDescription: 'Invalid support team specified.',
     configTitle: 'Configuration Error',
     configDescription: 'That team does not have a valid role configured in JSON.',
-    transferredBody: '<:transfer:1487470747097104575> **Ticket Transferred**\n> Ticket type changed from **{from}** to **{to}**\n-# Action by {user}',
+    transferredBody: '**Ticket Transferred**\n> Ticket type changed from **{from}** to **{to}**\n-# Action by {user}',
     warningTitle: 'Transfer Warning',
     warningDescription: 'Team permissions update failed. {details}',
     errorTitle: 'Command Error',
