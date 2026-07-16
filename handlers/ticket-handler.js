@@ -60,7 +60,6 @@ const aiNoticeCache = new Map();
 const AI_FETCH_TIMEOUT_MS = Math.max(3000, Number(process.env.AI_FETCH_TIMEOUT_MS || 15000));
 const AI_MODEL_COOLDOWN_MS = Math.max(60_000, Number(process.env.AI_MODEL_COOLDOWN_MS || 10 * 60 * 1000));
 const aiModelFailureCache = new Map();
-let geminiClientPromise = null;
 
 function getAutomaticAvailabilityStatus(count) {
     if (count > REDUCED_THRESHOLD) return 'reduced_assistance';
@@ -690,15 +689,6 @@ async function logGeminiFailure(model, response) {
     });
 }
 
-async function getGeminiClient() {
-    if (!geminiClientPromise) {
-        geminiClientPromise = import('@google/genai').then(({ GoogleGenAI }) => new GoogleGenAI({
-            apiKey: process.env.GEMINI_API_KEY
-        }));
-    }
-    return geminiClientPromise;
-}
-
 function extractInteractionText(interaction) {
     const direct = interaction?.output_text || interaction?.outputText;
     if (direct) return String(direct);
@@ -710,11 +700,35 @@ function extractInteractionText(interaction) {
 }
 
 async function createGeminiInteraction(model, input) {
-    const client = await getGeminiClient();
-    const request = client.interactions.create({
-        model,
-        store: false,
-        input
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return null;
+    const request = fetchWithTimeout('https://generativelanguage.googleapis.com/v1beta/interactions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey
+        },
+        body: JSON.stringify({
+            model,
+            store: false,
+            input,
+            generation_config: {
+                temperature: 0.4,
+                max_output_tokens: 220,
+                thinking_level: 'minimal',
+                thinking_summaries: 'none'
+            }
+        })
+    }, AI_FETCH_TIMEOUT_MS).then(async response => {
+        if (!response.ok) {
+            markGeminiModelFailure(model, response);
+            await logGeminiFailure(model, response);
+            const error = new Error(`Gemini interaction failed with ${response.status}`);
+            error.status = response.status;
+            error.aiLogged = true;
+            throw error;
+        }
+        return response.json().catch(() => ({}));
     });
     return Promise.race([
         request,
@@ -812,12 +826,14 @@ async function getGeminiSuggestion(reasonText, matchedTags, options = {}) {
             if (text) return text;
         } catch (error) {
             markGeminiModelFailureFromError(model, error);
-            console.warn('[AI] Gemini interaction failed:', {
-                model,
-                status: getGeminiErrorStatus(error) || null,
-                retryAfterSeconds: getGeminiErrorStatus(error) ? Math.round(AI_MODEL_COOLDOWN_MS / 1000) : 0,
-                detail: String(error?.message || error).slice(0, 220)
-            });
+            if (!error?.aiLogged) {
+                console.warn('[AI] Gemini interaction failed:', {
+                    model,
+                    status: getGeminiErrorStatus(error) || null,
+                    retryAfterSeconds: getGeminiErrorStatus(error) ? Math.round(AI_MODEL_COOLDOWN_MS / 1000) : 0,
+                    detail: String(error?.message || error).slice(0, 220)
+                });
+            }
         }
         return null;
     } catch (error) {
@@ -830,7 +846,7 @@ async function summarizeImageAttachment(attachment) {
     const apiKey = process.env.GEMINI_API_KEY;
     const contentType = String(attachment?.contentType || '').toLowerCase();
     const url = String(attachment?.url || '').trim();
-    if (!envFlag('AI_IMAGE_SUMMARY_ENABLED', false)) return null;
+    if (!envFlag('AI_IMAGE_SUMMARY_ENABLED', false) || !envFlag('AI_IMAGE_SUMMARY_LEGACY_GENERATE_CONTENT', false)) return null;
     if (!apiKey || !url || !contentType.startsWith('image/')) return null;
     try {
         const response = await fetchWithTimeout(url, {}, 8000);

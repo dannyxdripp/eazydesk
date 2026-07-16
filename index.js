@@ -96,18 +96,28 @@ function loginLog(message) {
 async function restoreStorageBeforeRuntime() {
     try {
         const timeoutMs = Math.max(0, Number(process.env.STARTUP_RESTORE_TIMEOUT_MS || 20000));
+        const handleRestoreResult = (result, late = false) => {
+            if (result?.restored) {
+                ticketStore.clearCaches?.();
+                appLog(`Restored ${result.restored} JSON file(s) from MEGA ${late ? 'after startup timeout' : 'before startup'}.`);
+            } else if (result?.skipped) {
+                appLog(`MEGA restore skipped: ${result.reason || 'not configured'}.`);
+            }
+        };
         const restorePromise = storageMonitor.restoreFromMegaIfConfigured();
         const result = timeoutMs > 0
             ? await Promise.race([
                 restorePromise,
-                new Promise(resolve => setTimeout(() => resolve({ skipped: true, reason: `restore timed out after ${timeoutMs}ms` }), timeoutMs))
+                new Promise(resolve => setTimeout(() => resolve({ timedOut: true, skipped: true, reason: `restore timed out after ${timeoutMs}ms` }), timeoutMs))
             ])
             : await restorePromise;
-        if (result?.restored) {
-            ticketStore.clearCaches?.();
-            appLog(`Restored ${result.restored} JSON file(s) from MEGA before startup.`);
-        } else if (result?.skipped) {
-            appLog(`MEGA restore skipped: ${result.reason || 'not configured'}.`);
+        if (result?.timedOut) {
+            appLog(`MEGA restore skipped: ${result.reason}. Discord login will continue.`);
+            restorePromise.then(lateResult => handleRestoreResult(lateResult, true)).catch(error => {
+                console.warn('[MEGA Backup] Late startup restore failed:', error?.message || error);
+            });
+        } else {
+            handleRestoreResult(result, false);
         }
     } catch (error) {
         console.warn('[MEGA Backup] Startup restore failed:', error?.message || error);

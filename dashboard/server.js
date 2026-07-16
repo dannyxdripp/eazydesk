@@ -637,6 +637,20 @@ function dashboardLog(message) { console.log(`[Dashboard \u{1F4E1}] ${message}`)
 function sendHtml(res, code, html) { if (!res.writableEnded) { res.writeHead(code, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(html); } }
 function sendJson(res, code, payload, headers = {}) { if (!res.writableEnded) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', ...headers }); res.end(JSON.stringify(payload)); } }
 
+function streamFileToResponse(res, filePath) {
+    const stream = fs.createReadStream(filePath);
+    stream.on('error', error => {
+        console.error('[Dashboard] File stream error:', error?.message || error);
+        if (!res.writableEnded) {
+            res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+            res.end('File stream failed');
+        } else {
+            try { res.destroy?.(); } catch {}
+        }
+    });
+    stream.pipe(res);
+}
+
 function safeNextPath(value) {
     const next = String(value || '').trim();
     if (!next) return '/';
@@ -6063,6 +6077,120 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
   .module-editor-title,.page-kicker{color:var(--dash-cyan)!important;letter-spacing:.13em!important;text-transform:uppercase!important;font-weight:900!important}
   @media(max-width:1100px){.layout{grid-template-columns:1fr}.app-sidebar{position:relative;height:auto}.main{padding:18px!important}.stat-strip{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
   @media(max-width:640px){.stat-strip{grid-template-columns:1fr!important}.topbar-right{width:100%}.status-pill{width:100%;justify-content:center}.sidebar-profile small{display:none}}
+  /* Lumen premium blue/cyan dashboard system */
+  :root{
+    --lumen-blue:#3B82F6;
+    --lumen-sky:#60A5FA;
+    --lumen-cyan:#6DD5FA;
+    --lumen-navy:#07111F;
+    --lumen-midnight:#0B1629;
+    --lumen-card:rgba(10,22,41,.72);
+    --lumen-card-2:rgba(13,29,52,.78);
+    --lumen-border:rgba(134,184,255,.16);
+    --lumen-border-hot:rgba(109,213,250,.42);
+    --lumen-text:#F8FBFF;
+    --lumen-muted:rgba(220,232,255,.70);
+    --lumen-soft:rgba(220,232,255,.48);
+    --lumen-green:#3EE58F;
+    --lumen-amber:#F5B84B;
+    --lumen-red:#F05263;
+    --lumen-shadow:0 18px 54px rgba(0,0,0,.34);
+    --lumen-glow:0 0 44px rgba(59,130,246,.16);
+    --dash-bg:var(--lumen-navy);
+    --dash-bg-2:var(--lumen-midnight);
+    --dash-panel:var(--lumen-card);
+    --dash-panel-2:var(--lumen-card-2);
+    --dash-panel-3:rgba(17,38,67,.92);
+    --dash-border:var(--lumen-border);
+    --dash-border-strong:var(--lumen-border-hot);
+    --dash-purple:var(--lumen-blue);
+    --dash-blue:var(--lumen-sky);
+    --dash-cyan:var(--lumen-cyan);
+    --dash-text:var(--lumen-text);
+    --dash-muted:var(--lumen-muted);
+    --dash-muted-2:var(--lumen-soft);
+    --dash-shadow:var(--lumen-shadow);
+    --dash-glow:var(--lumen-glow);
+    --ac:var(--lumen-blue);
+    --ac-soft:var(--lumen-cyan);
+    --tx:var(--lumen-text);
+    --mt:var(--lumen-muted);
+    --bd:var(--lumen-border);
+  }
+  html,body{font-family:Inter,Geist,"Plus Jakarta Sans","Segoe UI",system-ui,sans-serif!important;color:var(--lumen-text)!important}
+  body[data-theme],body:not([data-theme]){
+    background:
+      radial-gradient(900px 540px at 24% -10%,rgba(59,130,246,.28),transparent 62%),
+      radial-gradient(760px 500px at 96% 8%,rgba(109,213,250,.16),transparent 60%),
+      radial-gradient(800px 560px at 75% 112%,rgba(62,229,143,.06),transparent 62%),
+      linear-gradient(145deg,#050B15 0%,var(--lumen-navy) 46%,var(--lumen-midnight) 100%)!important;
+    min-height:100vh;
+  }
+  body:before{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;background-image:linear-gradient(rgba(109,213,250,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(109,213,250,.045) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(circle at 50% 10%,#000 0%,transparent 72%);opacity:.55}
+  body:after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(circle at 18% 22%,rgba(109,213,250,.12),transparent 4px),radial-gradient(circle at 72% 18%,rgba(96,165,250,.11),transparent 3px),radial-gradient(circle at 86% 58%,rgba(109,213,250,.08),transparent 3px),radial-gradient(circle at 38% 78%,rgba(96,165,250,.08),transparent 3px);background-size:420px 360px;animation:lumenParticles 18s linear infinite;opacity:.7}
+  @keyframes lumenParticles{from{transform:translateY(0)}to{transform:translateY(-90px)}}
+  .layout{grid-template-columns:292px minmax(0,1fr)!important}
+  .app-sidebar{padding:24px 18px!important;background:linear-gradient(180deg,rgba(7,17,31,.82),rgba(6,13,25,.64))!important;border-right:1px solid var(--lumen-border)!important;box-shadow:16px 0 48px rgba(0,0,0,.26)!important;backdrop-filter:blur(22px)!important}
+  .sidebar-brand{padding:8px 8px 18px!important;border-bottom:1px solid rgba(134,184,255,.12)!important}
+  .sidebar-logo{width:50px!important;height:50px!important;border-radius:16px!important;background:linear-gradient(135deg,rgba(59,130,246,.32),rgba(109,213,250,.16))!important;border-color:rgba(109,213,250,.34)!important;box-shadow:0 0 34px rgba(59,130,246,.20)!important}
+  .sidebar-brand strong{font-size:17px!important;font-weight:850!important}.sidebar-brand small,.side-section-title,.sidebar-profile small{color:var(--lumen-soft)!important}
+  .side-link{border-radius:14px!important;padding:12px 13px!important;color:rgba(220,232,255,.68)!important}
+  .side-link:hover{background:rgba(96,165,250,.075)!important;border-color:rgba(109,213,250,.20)!important;color:#fff!important;transform:translateX(3px)!important}
+  .side-link.active{background:linear-gradient(135deg,rgba(59,130,246,.24),rgba(109,213,250,.13))!important;border-color:rgba(109,213,250,.42)!important;box-shadow:0 0 0 1px rgba(109,213,250,.08),0 18px 40px rgba(59,130,246,.14)!important}
+  .side-icon,.nav-kicker{background:rgba(96,165,250,.10)!important;border-color:rgba(109,213,250,.18)!important;color:var(--lumen-cyan)!important}
+  .premium-card{background:linear-gradient(145deg,rgba(59,130,246,.24),rgba(109,213,250,.10))!important;border-color:rgba(109,213,250,.30)!important;box-shadow:0 0 42px rgba(59,130,246,.13)!important}
+  .premium-card a{color:#fff!important}
+  .main{padding:30px 38px 52px!important}
+  .topbar{top:18px!important;border-radius:22px!important;background:linear-gradient(180deg,rgba(12,28,50,.70),rgba(7,17,31,.50))!important;border:1px solid rgba(134,184,255,.16)!important;box-shadow:0 18px 54px rgba(0,0,0,.26),0 0 40px rgba(59,130,246,.08)!important;backdrop-filter:blur(24px)!important}
+  .brand-mini{border-radius:15px!important;background:rgba(96,165,250,.10)!important;border:1px solid rgba(109,213,250,.20)!important;box-shadow:0 0 24px rgba(59,130,246,.10)!important}
+  .title{font-size:clamp(28px,3.4vw,38px)!important;font-weight:900!important;letter-spacing:0!important;text-shadow:none!important}
+  .title,.page-hero h3,.welcome h3{background:linear-gradient(135deg,#fff 35%,var(--lumen-cyan));-webkit-background-clip:text;background-clip:text;color:transparent!important}
+  .muted,.help,.list-meta,.nav-sub,.page-hero p{color:var(--lumen-muted)!important;line-height:1.65!important}
+  .page-shell{gap:20px!important;animation:lumenIn .24s ease both}
+  @keyframes lumenIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .card,.item,.page-hero,.stat-tile,.module-option,.list-btn,details.acc,.pricing-card,.pricing-cta,.pricing-table,.preview-shell,.preview-embed,.controller-card,.server-card{
+    border-radius:18px!important;
+    background:linear-gradient(180deg,rgba(13,29,52,.78),rgba(8,19,35,.70))!important;
+    border:1px solid var(--lumen-border)!important;
+    box-shadow:var(--lumen-shadow),inset 0 1px 0 rgba(255,255,255,.045)!important;
+    backdrop-filter:blur(18px)!important;
+  }
+  .card:hover,.item:hover,.stat-tile:hover,.module-option:hover,.list-btn:hover,.pricing-card:hover{
+    transform:translateY(-3px)!important;
+    border-color:var(--lumen-border-hot)!important;
+    background:linear-gradient(180deg,rgba(15,36,64,.84),rgba(9,23,42,.76))!important;
+    box-shadow:0 22px 62px rgba(0,0,0,.30),0 0 34px rgba(59,130,246,.11)!important;
+  }
+  .page-hero{position:relative;overflow:hidden;padding:28px!important}
+  .page-hero:before,.welcome:before{content:"";position:absolute;inset:auto -10% -55% 10%;height:90%;background:radial-gradient(circle,rgba(109,213,250,.18),transparent 64%);pointer-events:none}
+  .page-hero > *,.welcome > *{position:relative}
+  .page-kicker,.module-editor-title,.pricing-kicker{color:var(--lumen-cyan)!important;letter-spacing:.14em!important;text-transform:uppercase!important;font-weight:900!important}
+  .stat-strip{gap:18px!important}.stat-tile{min-height:138px!important;padding:22px!important}
+  .stat-tile strong{font-size:clamp(30px,3.4vw,42px)!important;background:linear-gradient(135deg,#fff,var(--lumen-sky));-webkit-background-clip:text;background-clip:text;color:transparent!important}
+  .stat-tile:before{background:radial-gradient(circle,rgba(109,213,250,.20),transparent 62%)!important}
+  .btn,.invite-action{background:linear-gradient(135deg,var(--lumen-blue),var(--lumen-cyan))!important;border:1px solid rgba(174,221,255,.34)!important;color:#fff!important;border-radius:14px!important;font-weight:850!important;box-shadow:0 14px 34px rgba(59,130,246,.24),0 0 24px rgba(109,213,250,.08)!important}
+  .btn:hover,.invite-action:hover{transform:translateY(-2px)!important;filter:brightness(1.05)!important;box-shadow:0 18px 42px rgba(59,130,246,.30),0 0 34px rgba(109,213,250,.14)!important}
+  .btn-soft,.topnav-btn,.server-icon-btn{background:rgba(96,165,250,.075)!important;border:1px solid rgba(134,184,255,.15)!important;color:var(--lumen-text)!important;border-radius:14px!important}
+  .btn-soft:hover,.topnav-btn:hover{background:rgba(96,165,250,.12)!important;border-color:rgba(109,213,250,.32)!important;transform:translateY(-2px)!important}
+  .btn-danger{background:rgba(240,82,99,.10)!important;border:1px solid rgba(240,82,99,.38)!important;color:#ffe9ed!important;box-shadow:0 0 24px rgba(240,82,99,.10)!important}
+  input,select,textarea,.cs-trigger,.ms-trigger{min-height:46px!important;border-radius:14px!important;background:rgba(5,13,25,.76)!important;border:1px solid rgba(134,184,255,.16)!important;color:var(--lumen-text)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.035)!important}
+  input:focus,select:focus,textarea:focus,.custom-select.open .cs-trigger,.role-ms.open .ms-trigger{border-color:rgba(109,213,250,.55)!important;box-shadow:0 0 0 3px rgba(59,130,246,.16),0 0 30px rgba(109,213,250,.10)!important}
+  input::placeholder,textarea::placeholder{color:rgba(220,232,255,.42)!important}
+  .cs-menu,.ms-menu,.topnav-menu{background:linear-gradient(180deg,rgba(13,29,52,.98),rgba(7,17,31,.96))!important;border:1px solid rgba(134,184,255,.18)!important;border-radius:16px!important;box-shadow:0 24px 70px rgba(0,0,0,.42),0 0 28px rgba(59,130,246,.08)!important;backdrop-filter:blur(22px)!important}
+  .cs-opt,.ms-item,.topnav-item{background:rgba(96,165,250,.06)!important;border-color:transparent!important;color:var(--lumen-text)!important;border-radius:12px!important}
+  .cs-opt:hover,.ms-item:hover,.topnav-item:hover,.cs-opt.active{background:linear-gradient(135deg,rgba(59,130,246,.18),rgba(109,213,250,.09))!important;border-color:rgba(109,213,250,.28)!important}
+  .pill,.role,.ms-chip{background:rgba(96,165,250,.08)!important;border:1px solid rgba(134,184,255,.16)!important;color:var(--lumen-text)!important;border-radius:999px!important}
+  .pill.ok{background:rgba(62,229,143,.10)!important;border-color:rgba(62,229,143,.30)!important;color:#dfffee!important}.pill.warn{background:rgba(245,184,75,.12)!important;border-color:rgba(245,184,75,.32)!important;color:#fff3d1!important}.pill.danger{background:rgba(240,82,99,.12)!important;border-color:rgba(240,82,99,.32)!important;color:#ffe3e8!important}
+  .status-pill{background:rgba(62,229,143,.10)!important;border-color:rgba(62,229,143,.24)!important}.status-dot{background:var(--lumen-green)!important;box-shadow:0 0 14px rgba(62,229,143,.85)!important}
+  .module-options{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))!important;gap:18px!important}.module-option{min-height:150px!important}.module-option:after{content:"->";position:absolute;right:18px;bottom:16px;color:var(--lumen-cyan);opacity:0;transform:translateX(-4px);transition:all .18s ease}.module-option:hover:after{opacity:1;transform:none}
+  .lumen-analytics{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(280px,.75fr);gap:20px}
+  .lumen-chart-card canvas{width:100%;height:260px;display:block}
+  .lumen-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:16px}
+  .lumen-tabs{display:flex;gap:8px;flex-wrap:wrap}.lumen-tabs .btn-soft{width:auto;padding:8px 11px}
+  .lumen-status-list{display:grid;gap:10px}.lumen-status-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-radius:14px;border:1px solid rgba(134,184,255,.12);background:rgba(96,165,250,.05)}
+  @media(max-width:1100px){.lumen-analytics{grid-template-columns:1fr}.layout{grid-template-columns:1fr!important}.app-sidebar{height:auto!important;position:relative!important}.main{padding:20px!important}}
+  @media(max-width:720px){.main{padding:14px!important}.topbar{top:8px!important;align-items:flex-start!important}.topbar-right{width:100%!important}.stat-strip{grid-template-columns:1fr!important}.lumen-card-head{display:grid}.card,.page-hero{padding:16px!important}}
+  @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
  </style></head>
 <body>
  <div id="auth" class="auth"><div class="auth-card"><h3>Dashboard Login</h3><div class="muted" style="margin-bottom:10px">Sign in with Discord to continue.</div><a id="authDiscord" class="btn" href="/login" style="display:block;text-align:center;text-decoration:none">Sign in with Discord</a><div class="muted" style="margin:12px 0 6px">or use a token</div><label>Token</label><input id="authToken" type="password" /><div class="row" style="margin-top:10px"><button id="authLogin" class="btn">Login</button></div><div id="authMsg" class="notice danger"></div></div></div>
@@ -6898,6 +7026,13 @@ function renderOverview(){
  const limited=avail.filter(a=>a&&a.status==='increased_volume').length;
  const topReasons=Array.isArray(state&&state.statistics&&state.statistics.topCloseReasons)?state.statistics.topCloseReasons.slice(0,4):[];
  const tags=Array.isArray(state&&state.statistics&&state.statistics.tagUsage)?state.statistics.tagUsage.slice(0,6):[];
+ const tickets=Array.isArray(state&&state.tickets)?state.tickets.slice(0,5):[];
+ const modulesReady=[
+  ['Tickets',Number(totals.activeTickets||0)+' active','/tickets'],
+  ['Panels',state&&state.guildConfigSummary&&state.guildConfigSummary.panelConfig?'Configured':'Ready','/panels'],
+  ['AI',state&&state.aiAccess&&state.aiAccess.hasAccess?'Available':'Free','/settings'],
+  ['Logs',state&&state.transcripts&&state.transcripts.length?String(state.transcripts.length)+' saved':'No entries','/transcripts']
+ ];
  const imgs=Array.isArray(state&&state.botConfig&&state.botConfig.homeImages)?state.botConfig.homeImages:[];
  const img0=esc(imgs[0]||''),img1=esc(imgs[1]||''),img2=esc(imgs[2]||'');
  const hour=(new Date()).getHours();
@@ -6917,12 +7052,18 @@ function renderOverview(){
   : '';
 
  return '<div class="page-shell">'+
-  '<div class="card page-hero welcome"><div class="page-hero-head"><div><div class="page-kicker">Overview</div><h3>'+greet+', welcome back.</h3><p>Keep an eye on queue pressure, jump into the right module quickly, and only surface the things that need attention.</p></div><div class="page-pill-row">'+pill(totals.activeTickets||0)+' '+pill(limited)+' '+pill(reduced)+'</div></div></div>'+
+  '<div class="card page-hero welcome"><div class="page-hero-head"><div><div class="page-kicker">Lumen Command Center</div><h3>'+greet+', welcome back.</h3><p>A clean operations view for tickets, automation, analytics, and server health. Jump into the module that needs attention without losing context.</p><div class="row" style="grid-template-columns:auto auto;justify-content:start;margin-top:18px"><button type="button" class="btn qa" data-go="/tickets" style="width:auto">Open Queue</button><button type="button" class="btn-soft qa" data-go="/commands/ticket-types" style="width:auto">Manage Modules</button></div></div><div class="page-pill-row">'+pill(totals.activeTickets||0)+' '+pill(limited)+' '+pill(reduced)+'</div></div></div>'+
   '<div class="stat-strip">'+
    '<div class="stat-tile"><div class="muted">Active tickets</div><strong>'+Number(totals.activeTickets||0)+'</strong></div>'+
    '<div class="stat-tile"><div class="muted">Closed (14d)</div><strong>'+Number(totals.totalClosed||0)+'</strong></div>'+
    '<div class="stat-tile"><div class="muted">Limited types</div><strong>'+limited+'</strong></div>'+
    '<div class="stat-tile"><div class="muted">Reduced types</div><strong>'+reduced+'</strong></div>'+
+  '</div>'+
+  '<div class="lumen-analytics">'+
+   '<div class="card lumen-chart-card"><div class="lumen-card-head"><div><h3 style="margin:0">Activity Overview</h3><div class="muted">Claimed and closed ticket activity over recent days.</div></div><div class="lumen-tabs"><button type="button" class="btn-soft statsView" data-chart="bar">Bars</button><button type="button" class="btn-soft statsView" data-chart="line">Line</button><button type="button" class="btn-soft statsView" data-chart="area">Area</button></div></div><canvas id="statsChart"></canvas></div>'+
+   '<div class="card"><div class="lumen-card-head"><div><h3 style="margin:0">System Status</h3><div class="muted">Operational readiness for this server.</div></div><span class="pill ok">Online</span></div><div class="lumen-status-list">'+
+    modulesReady.map(m=>'<button type="button" class="lumen-status-row btn-soft qa" data-go="'+esc(m[2])+'"><span><strong>'+esc(m[0])+'</strong><div class="muted">'+esc(m[1])+'</div></span><span class="pill">Open</span></button>').join('')+
+   '</div></div>'+
   '</div>'+
   '<div class="grid">'+
   '<div class="card"><h3>Quick Actions</h3><p class="muted">Open the next place you are likely to need without digging through menus.</p>'+
@@ -6934,6 +7075,10 @@ function renderOverview(){
     '<button type="button" class="btn-soft qa" data-go="/embed-editor">Branding</button>'+
    '</div>'+
   '</div>'+
+
+  '<div class="card"><h3>Recent Events</h3><div class="list" style="margin-top:10px">'+
+   (tickets.length?tickets.map(t=>'<div class="item"><div class="item-top"><strong>#'+esc(t.channelName||t.channelId||'ticket')+'</strong><span class="pill">'+esc(t.ticketType||'Ticket')+'</span></div><div class="muted">'+esc(t.createdBy?'Opened by '+t.createdBy:'Open ticket')+(t.claimedBy?' - claimed by '+esc(t.claimedBy):'')+'</div></div>').join(''):'<div class="muted">No recent ticket events yet.</div>')+
+  '</div></div>'+
 
   imagesCard+
   tutorialCard+
@@ -7061,7 +7206,7 @@ function startDashboard(client, customBotManager = null) {
                     'Last-Modified': lastModified,
                     'Content-Length': stat.size
                 });
-                fs.createReadStream(resolved).pipe(res);
+                streamFileToResponse(res, resolved);
                 return;
             }
 
@@ -7570,7 +7715,7 @@ function startDashboard(client, customBotManager = null) {
                 };
                 if (wantsDownload) headers['Content-Disposition'] = `attachment; filename="${channelId}.html"`;
                 res.writeHead(200, headers);
-                fs.createReadStream(filePath).pipe(res);
+                streamFileToResponse(res, filePath);
                 return;
             }
 
@@ -7611,7 +7756,7 @@ function startDashboard(client, customBotManager = null) {
                 };
                 if (wantsDownload) headers['Content-Disposition'] = `attachment; filename="${id}.html"`;
                 res.writeHead(200, headers);
-                fs.createReadStream(filePath).pipe(res);
+                streamFileToResponse(res, filePath);
                 return;
             }
 

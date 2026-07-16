@@ -8,6 +8,7 @@ const {
 const ticketStore = require('../utils/ticket-store');
 const { buildV2Notice } = require('../utils/components-v2-messages');
 const { resolveAppealsChannelId } = require('../utils/guild-defaults');
+const { isUnknownInteractionError } = require('../utils/interaction-responder');
 
 const MODAL_ID = 'feedback:modal';
 const RATING_ID = 'feedback:rating';
@@ -108,7 +109,17 @@ module.exports = {
                 }
             );
 
-        return interaction.showModal(modal);
+        return interaction.showModal(modal).catch(error => {
+            if (isUnknownInteractionError(error)) {
+                console.warn('[Feedback] Feedback modal interaction expired before Discord accepted it.', {
+                    guildId: interaction.guildId || null,
+                    channelId: interaction.channelId || null,
+                    userId: interaction.user?.id || null
+                });
+                return null;
+            }
+            throw error;
+        });
     },
 
     async handleModalSubmit(interaction) {
