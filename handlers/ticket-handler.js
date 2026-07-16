@@ -58,6 +58,9 @@ const permissionRepairCache = new Map();
 const AI_NOTICE_TTL_MS = 10 * 60 * 1000;
 const aiNoticeCache = new Map();
 const AI_FETCH_TIMEOUT_MS = Math.max(3000, Number(process.env.AI_FETCH_TIMEOUT_MS || 15000));
+const AI_MODEL_COOLDOWN_MS = Math.max(60_000, Number(process.env.AI_MODEL_COOLDOWN_MS || 10 * 60 * 1000));
+const aiModelFailureCache = new Map();
+let geminiClientPromise = null;
 
 function getAutomaticAvailabilityStatus(count) {
     if (count > REDUCED_THRESHOLD) return 'reduced_assistance';
@@ -628,6 +631,12 @@ function compactText(value, max = 1800) {
     return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
+function envFlag(name, fallback = false) {
+    const raw = String(process.env[name] ?? '').trim().toLowerCase();
+    if (!raw) return Boolean(fallback);
+    return ['1', 'true', 'yes', 'on'].includes(raw);
+}
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = AI_FETCH_TIMEOUT_MS) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs || AI_FETCH_TIMEOUT_MS)));
@@ -636,6 +645,95 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = AI_FETCH_TIMEOUT_
     } finally {
         clearTimeout(timer);
     }
+}
+
+function getGeminiModelCandidates({ vision = false } = {}) {
+    const configured = String(process.env.GEMINI_MODEL_CANDIDATES || '')
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean);
+    const defaultModel = String(process.env.GEMINI_MODEL || 'gemini-3.5-flash').trim();
+    return [...new Set([
+        defaultModel,
+        ...configured
+    ].filter(Boolean))];
+}
+
+function getAvailableGeminiModels(options = {}) {
+    const now = Date.now();
+    return getGeminiModelCandidates(options).filter(model => {
+        const blockedUntil = Number(aiModelFailureCache.get(model) || 0);
+        return !blockedUntil || blockedUntil <= now;
+    });
+}
+
+function markGeminiModelFailure(model, response) {
+    const status = Number(response?.status || 0);
+    if (![401, 403, 404, 429].includes(status)) return;
+    const blockedUntil = Date.now() + AI_MODEL_COOLDOWN_MS;
+    aiModelFailureCache.set(model, blockedUntil);
+}
+
+async function logGeminiFailure(model, response) {
+    const status = Number(response?.status || 0);
+    let detail = '';
+    try {
+        const body = await response.clone().json();
+        detail = body?.error?.message ? String(body.error.message).slice(0, 220) : '';
+    } catch {}
+    console.warn('[AI] Gemini request failed:', {
+        model,
+        status,
+        statusText: response?.statusText || '',
+        retryAfterSeconds: [401, 403, 404, 429].includes(status) ? Math.round(AI_MODEL_COOLDOWN_MS / 1000) : 0,
+        detail
+    });
+}
+
+async function getGeminiClient() {
+    if (!geminiClientPromise) {
+        geminiClientPromise = import('@google/genai').then(({ GoogleGenAI }) => new GoogleGenAI({
+            apiKey: process.env.GEMINI_API_KEY
+        }));
+    }
+    return geminiClientPromise;
+}
+
+function extractInteractionText(interaction) {
+    const direct = interaction?.output_text || interaction?.outputText;
+    if (direct) return String(direct);
+    const steps = Array.isArray(interaction?.steps) ? interaction.steps : [];
+    const last = steps.at ? steps.at(-1) : steps[steps.length - 1];
+    const content = Array.isArray(last?.content) ? last.content : [];
+    const text = content.map(part => part?.text || '').filter(Boolean).join('\n');
+    return text || null;
+}
+
+async function createGeminiInteraction(model, input) {
+    const client = await getGeminiClient();
+    const request = client.interactions.create({
+        model,
+        store: false,
+        input
+    });
+    return Promise.race([
+        request,
+        new Promise((_, reject) => setTimeout(() => {
+            const error = new Error(`Gemini interaction timed out after ${AI_FETCH_TIMEOUT_MS}ms`);
+            error.name = 'AbortError';
+            reject(error);
+        }, AI_FETCH_TIMEOUT_MS))
+    ]);
+}
+
+function getGeminiErrorStatus(error) {
+    return Number(error?.status || error?.code || error?.response?.status || 0);
+}
+
+function markGeminiModelFailureFromError(model, error) {
+    const status = getGeminiErrorStatus(error);
+    if (![401, 403, 404, 429].includes(status)) return;
+    aiModelFailureCache.set(model, Date.now() + AI_MODEL_COOLDOWN_MS);
 }
 
 async function notifyAiConversationUnavailable(message, reason) {
@@ -686,17 +784,8 @@ async function getGeminiSuggestion(reasonText, matchedTags, options = {}) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return null;
     try {
-        const modelCandidates = [
-            process.env.GEMINI_MODEL,
-            ...(String(process.env.GEMINI_MODEL_CANDIDATES || '')
-                .split(',')
-                .map(item => item.trim())
-                .filter(Boolean)),
-            'gemini-2.5-flash',
-            'gemini-2.0-flash',
-            'gemini-1.5-flash'
-        ].filter(Boolean);
-        const models = [...new Set(modelCandidates)];
+        const models = getAvailableGeminiModels();
+        if (!models.length) return null;
         const forumLinks = Array.isArray(options.forumLinks) ? options.forumLinks : [];
         const contextMessages = Array.isArray(options.contextMessages) ? options.contextMessages : [];
         const imageSummaries = Array.isArray(options.imageSummaries) ? options.imageSummaries : [];
@@ -716,22 +805,19 @@ async function getGeminiSuggestion(reasonText, matchedTags, options = {}) {
             contextMessages.length ? `Recent conversation:\n${contextMessages.map(item => `${item.role}: ${item.content}`).join('\n')}` : ''
         ].join('\n');
 
-        for (const model of models) {
-            const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { temperature: 0.4, maxOutputTokens: 220 }
-                })
-            });
-            if (!response.ok) {
-                console.warn('[AI] Gemini request failed:', { model, status: response.status, statusText: response.statusText });
-                continue;
-            }
-            const data = await response.json();
-            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+        const model = models[0];
+        try {
+            const interaction = await createGeminiInteraction(model, prompt);
+            const text = extractInteractionText(interaction);
             if (text) return text;
+        } catch (error) {
+            markGeminiModelFailureFromError(model, error);
+            console.warn('[AI] Gemini interaction failed:', {
+                model,
+                status: getGeminiErrorStatus(error) || null,
+                retryAfterSeconds: getGeminiErrorStatus(error) ? Math.round(AI_MODEL_COOLDOWN_MS / 1000) : 0,
+                detail: String(error?.message || error).slice(0, 220)
+            });
         }
         return null;
     } catch (error) {
@@ -744,30 +830,37 @@ async function summarizeImageAttachment(attachment) {
     const apiKey = process.env.GEMINI_API_KEY;
     const contentType = String(attachment?.contentType || '').toLowerCase();
     const url = String(attachment?.url || '').trim();
+    if (!envFlag('AI_IMAGE_SUMMARY_ENABLED', false)) return null;
     if (!apiKey || !url || !contentType.startsWith('image/')) return null;
     try {
         const response = await fetchWithTimeout(url, {}, 8000);
         if (!response.ok) return null;
         const arrayBuffer = await response.arrayBuffer();
         const base64 = Buffer.from(arrayBuffer).toString('base64');
-        const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-        const aiResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [
-                        { text: 'Summarize this support-ticket image in one short sentence. Do not store or refer to the image itself.' },
-                        { inlineData: { mimeType: contentType, data: base64 } }
-                    ]
-                }],
-                generationConfig: { temperature: 0.2, maxOutputTokens: 80 }
-            })
-        });
-        if (!aiResponse.ok) return null;
-        const data = await aiResponse.json().catch(() => ({}));
-        const summary = compactText(data?.candidates?.[0]?.content?.parts?.[0]?.text, 500);
-        return summary ? { summary, url } : null;
+        for (const model of getAvailableGeminiModels({ vision: true })) {
+            const aiResponse = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [
+                            { text: 'Summarize this support-ticket image in one short sentence. Do not store or refer to the image itself.' },
+                            { inlineData: { mimeType: contentType, data: base64 } }
+                        ]
+                    }],
+                    generationConfig: { temperature: 0.2, maxOutputTokens: 80 }
+                })
+            });
+            if (!aiResponse.ok) {
+                markGeminiModelFailure(model, aiResponse);
+                await logGeminiFailure(model, aiResponse);
+                continue;
+            }
+            const data = await aiResponse.json().catch(() => ({}));
+            const summary = compactText(data?.candidates?.[0]?.content?.parts?.[0]?.text, 500);
+            if (summary) return { summary, url };
+        }
+        return null;
     } catch {
         return null;
     }
@@ -784,6 +877,7 @@ function canAttemptAiFirstReply(aiSettings, matchedTags, reasonText, hasGemini) 
     const safeReason = String(reasonText || '').trim();
     if (aiSettings.mode === 'conversation' || aiSettings.conversation) return false;
     if (matchedTags.length) return true;
+    if (hasGemini && aiSettings.autoLearn && safeReason.length >= 12) return true;
     if (aiSettings.autoResolution && isBasicRobloxIssue(safeReason)) return true;
     return false;
 }
@@ -836,12 +930,12 @@ async function sendAiPromptedResponse(channel, reasonText) {
     if (!canAttemptAiFirstReply(aiSettings, matchedTags, safeReason, hasGemini)) return;
 
     const primaryTag = matchedTags[0] || null;
-    const forumLinks = aiSettings.autoResolution && isBasicRobloxIssue(safeReason)
+    const forumLinks = aiSettings.autoResolution && envFlag('AI_EXTERNAL_LOOKUPS_ENABLED', false) && isBasicRobloxIssue(safeReason)
         ? await searchRobloxDevForum(safeReason)
         : [];
 
     let suggestion = '';
-    if (hasGemini && (matchedTags.length || forumLinks.length)) {
+    if (hasGemini && (aiSettings.autoLearn || matchedTags.length || forumLinks.length)) {
         suggestion = String(await getGeminiSuggestion(safeReason, aiSettings.autoLearn ? matchedTags : [], { forumLinks }) || '').trim();
     } else if (aiSettings.autoLearn && primaryTag?.description) {
         suggestion = String(primaryTag.description).trim();
@@ -939,11 +1033,14 @@ async function handleAiConversationMessage(message, ticket, activeStorage = null
         if (summary) imageSummaries.push(summary);
     }
 
+    const imageOnlyNotice = imageAttachments.length && !imageSummaries.length
+        ? `[User uploaded ${imageAttachments.length === 1 ? 'an image' : `${imageAttachments.length} images`}. Ask them to describe the relevant details if needed.]`
+        : '';
     const userContent = [
         content,
         imageSummaries.length
             ? `[Image summary: ${imageSummaries.map(item => item.summary).join(' | ')}]`
-            : ''
+            : imageOnlyNotice
     ].filter(Boolean).join('\n');
 
     const entry = ticketStore.appendAiConversation(message.channel.id, {

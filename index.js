@@ -95,7 +95,14 @@ function loginLog(message) {
 
 async function restoreStorageBeforeRuntime() {
     try {
-        const result = await storageMonitor.restoreFromMegaIfConfigured();
+        const timeoutMs = Math.max(0, Number(process.env.STARTUP_RESTORE_TIMEOUT_MS || 20000));
+        const restorePromise = storageMonitor.restoreFromMegaIfConfigured();
+        const result = timeoutMs > 0
+            ? await Promise.race([
+                restorePromise,
+                new Promise(resolve => setTimeout(() => resolve({ skipped: true, reason: `restore timed out after ${timeoutMs}ms` }), timeoutMs))
+            ])
+            : await restorePromise;
         if (result?.restored) {
             ticketStore.clearCaches?.();
             appLog(`Restored ${result.restored} JSON file(s) from MEGA before startup.`);
