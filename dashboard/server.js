@@ -62,7 +62,9 @@ function parseRoleIdList(value) {
         .filter(roleId => /^\d{17,20}$/.test(roleId));
 }
 const GUILD_CATALOG_CACHE_TTL_MS = 60 * 1000;
+const DASHBOARD_CLEANUP_TTL_MS = 60 * 1000;
 const guildCatalogCache = new Map();
+const dashboardCleanupCache = new Map();
 const staffActionRateLimits = new Map();
 
 const DEFAULT_TUTORIALS = [
@@ -143,7 +145,7 @@ const DEFAULT_DOC_SECTIONS = [
     },
     {
         title: 'AI Feature Controls',
-        body: 'Servers that own AI features can toggle AI on or off from Settings. Auto-resolution looks for Roblox Developer Forum results, auto-learn uses saved tags and model knowledge for first replies, and Custom servers can enable AI Conversation for short contextual follow-up replies. Image uploads are summarized into short text and the original image is not retained in conversation context.'
+        body: 'Servers that own AI features can toggle AI on or off from Settings. Auto-resolution looks for Roblox Developer Forum results, auto-learn uses saved tags and model knowledge for first replies, and AI Conversation can send short contextual follow-up replies. Image uploads are summarized into short text and the original image is not retained in conversation context.'
     }
 ];
 
@@ -1590,7 +1592,7 @@ function createSetupHtml(req = null) {
         '<div class=\"item\"><div><strong>Immediate Escalation Role</strong><div class=\"muted\">'+esc(readLabel(immediateEscalationRoleId))+'</div></div></div>'+
         '<div class=\"item\"><div><strong>Role Permanence</strong><div class=\"muted\">'+(rolePermanence.checked?'Enabled':'Disabled')+'</div></div></div>'+
         '<div class=\"item\"><div><strong>Tutorial</strong><div class=\"muted\">'+(tutorialEnabled.checked?'Enabled':'Disabled')+'</div></div></div>';}
-      async function loadCatalogs(){const gid=guildSelect.value;const suffix=gid?('?guildId='+encodeURIComponent(gid)):'';const ch=await api('/api/channels'+suffix);const cats=await api('/api/categories'+suffix);const roles=await api('/api/roles'+suffix);catalogs.channels=Array.isArray(ch.channels)?ch.channels:[];catalogs.categories=Array.isArray(cats.categories)?cats.categories:[];catalogs.roles=Array.isArray(roles.roles)?roles.roles:[];fillSelect(parentCategoryId,catalogs.categories,'Not set',null);const texts=catalogs.channels.filter(c=>c.type==='text');fillSelect(appealsChannelId,texts,'Not set',null);fillSelect(transcriptsChannelId,texts,'Not set',null);fillSelect(managerRoleId,catalogs.roles,'Optional',null);fillSelect(highEscalationRoleId,catalogs.roles,'Optional',null);fillSelect(immediateEscalationRoleId,catalogs.roles,'Optional',null)}
+      async function loadCatalogs(){const gid=guildSelect.value;const suffix=gid?('?guildId='+encodeURIComponent(gid)):'';const [ch,cats,roles]=await Promise.all([api('/api/channels'+suffix),api('/api/categories'+suffix),api('/api/roles'+suffix)]);catalogs.channels=Array.isArray(ch.channels)?ch.channels:[];catalogs.categories=Array.isArray(cats.categories)?cats.categories:[];catalogs.roles=Array.isArray(roles.roles)?roles.roles:[];fillSelect(parentCategoryId,catalogs.categories,'Not set',null);const texts=catalogs.channels.filter(c=>c.type==='text');fillSelect(appealsChannelId,texts,'Not set',null);fillSelect(transcriptsChannelId,texts,'Not set',null);fillSelect(managerRoleId,catalogs.roles,'Optional',null);fillSelect(highEscalationRoleId,catalogs.roles,'Optional',null);fillSelect(immediateEscalationRoleId,catalogs.roles,'Optional',null)}
       async function loadGuilds(){const data=await api('/api/my/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];guildSelect.innerHTML=guilds.map(g=>'<option value=\"'+esc(g.id)+'\">'+esc(g.name)+' ('+esc(g.id)+')</option>').join('')||'<option value=\"\">No guilds found</option>';const preset=qs.get('guild');if(preset&&guilds.some(g=>g.id===preset))guildSelect.value=preset;refreshSetupSelect(guildSelect,'Select a server');syncPageState()}
       async function loadConfig(){const gid=guildSelect.value; if(!gid) return; const data=await api('/api/guild-config?guildId='+encodeURIComponent(gid)); const c=data.config||{}; parentCategoryId.value=c.parentCategoryId||''; appealsChannelId.value=c.appealsChannelId||''; transcriptsChannelId.value=c.transcriptsChannelId||''; managerRoleId.value=c.managerRoleId||''; highEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.high)||''; immediateEscalationRoleId.value=(c.escalationRoles&&c.escalationRoles.immediate)||''; rolePermanence.checked=c.rolePermanence!==false; tutorialEnabled.checked=!!c.tutorialEnabled; refreshAllSetupSelects(); setupCompleted=Boolean(c&&c.setup&&c.setup.completed); const canOverrideCompleted=Boolean(data&&data.access&&(data.access.isOwner||data.access.canFullDashboard||data.access.level==='owner')); setLocked(setupCompleted&&!canOverrideCompleted); const requestedPage=Number(qs.get('page')||0); const configStep=Number(c&&c.setup&&c.setup.step)||1; gotoStep(setupCompleted?4:(requestedPage||configStep));}
       async function saveConfig(extra){const payload={...configPayload(),...(extra||{})};await api('/api/guild-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})}
@@ -2824,7 +2826,14 @@ async function getDashboardState(client, req = null) {
     const guild = getDashboardGuild(client, req);
     const discordGuild = guild?.id ? getDashboardRuntimeGuild(client, guild.id) : null;
     const access = await getDashboardAccess(client, req, guild?.id || null);
-    if (discordGuild) ticketStore.cleanupMissingTicketChannels(discordGuild, activeStorage);
+    if (discordGuild) {
+        const cleanupKey = String(discordGuild.id || '');
+        const now = Date.now();
+        if (!dashboardCleanupCache.has(cleanupKey) || (now - dashboardCleanupCache.get(cleanupKey)) > DASHBOARD_CLEANUP_TTL_MS) {
+            dashboardCleanupCache.set(cleanupKey, now);
+            ticketStore.cleanupMissingTicketChannels(discordGuild, activeStorage);
+        }
+    }
     const [roleCatalog, channelCatalog, categoryCatalog] = await Promise.all([
         getRoleCatalog(client, req),
         getTextChannelCatalog(client, req),
@@ -5141,6 +5150,44 @@ function topNavItem(path, label, group, description) {
     )}</span><span class="topnav-copy"><strong>${label}</strong><span>${description}</span></span></span><span class="tag">${group}</span></button>`;
 }
 
+function renderSideNavItem(currentPath, path, label, group, iconName) {
+    const active = currentPath === path || (path === '/overview' && currentPath === '/');
+    return `<a class="side-link${active ? ' active' : ''}" href="${escapeHtml(path)}" data-side-group="${escapeHtml(group)}"><span class="side-icon">${dashboardIcon(iconName || 'dashboard')}</span><span>${escapeHtml(label)}</span></a>`;
+}
+
+function renderDashboardSidebar(currentPath) {
+    const mainLinks = [
+        ['/overview', 'Dashboard', 'main', 'home'],
+        ['/dashboard', 'Servers', 'main', 'servers'],
+        ['/commands/ticket-types', 'Commands', 'main', 'panels'],
+        ['/availability', 'Auto Moderation', 'main', 'diagnostics'],
+        ['/commands/tag', 'Custom Responses', 'main', 'tag'],
+        ['/panels', 'Scheduled Messages', 'main', 'panels'],
+        ['/transcripts', 'Logs', 'main', 'transcripts']
+    ];
+    const settingsLinks = [
+        ['/settings', 'Bot Settings', 'settings', 'setup'],
+        ['/commands/feedback', 'Permissions', 'settings', 'feedback'],
+        ['/embed-editor', 'Integrations', 'settings', 'embed'],
+        ['/pricing', 'Premium', 'settings', 'pricing']
+    ];
+    const renderLinks = links => links.map(link => renderSideNavItem(currentPath, ...link)).join('');
+    return `<aside class="sidebar app-sidebar">
+        <div class="sidebar-brand">
+            <span class="sidebar-logo"><img src="/assets/sync.png" alt="${escapeHtml(BRAND_NAME)}" /></span>
+            <span><strong>${escapeHtml(BRAND_NAME)}</strong><small>Discord Bot</small></span>
+        </div>
+        <div class="side-section"><div class="side-section-title">Main Navigation</div>${renderLinks(mainLinks)}</div>
+        <div class="side-section"><div class="side-section-title">Settings</div>${renderLinks(settingsLinks)}</div>
+        <div class="premium-card">
+            <strong>Upgrade to Premium</strong>
+            <span>Unlock analytics, automation, AI tools and branded customisation.</span>
+            <a href="/upgrade">Upgrade</a>
+        </div>
+        <div class="sidebar-profile"><span class="status-dot"></span><span>Online</span><small>All systems operational</small></div>
+    </aside>`;
+}
+
 function createUiHtml(currentPath) {
     const pageTitle = pageTitleForPath(currentPath);
     const activeGroup =
@@ -5928,6 +5975,60 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
   @media(max-width:1100px){.split{grid-template-columns:1fr}}
   @media(max-width:900px){.main{padding:18px}.topbar{align-items:flex-start}.row{grid-template-columns:1fr}.split,#app > .split,.question-builder{grid-template-columns:1fr}.owner-summary{grid-template-columns:1fr}.topbar-right{width:100%;justify-content:stretch}.topbar-right > *{flex:1 1 180px}.pricing-card{min-height:0}}
   @media(max-width:560px){.main{padding:12px}.card{padding:14px}.item-top{align-items:flex-start}.controller-actions,.row{display:grid;grid-template-columns:1fr;width:100%}.btn,.btn-soft,.btn-danger{width:100%}.topnav-menu{left:0;right:auto;min-width:min(320px,calc(100vw - 28px))}}
+  /* Modern Discord bot dashboard shell */
+  :root{
+    --dash-bg:#070816;
+    --dash-panel:rgba(15,18,36,.82);
+    --dash-panel-2:rgba(20,24,48,.74);
+    --dash-border:rgba(164,174,255,.15);
+    --dash-purple:#8b5cf6;
+    --dash-blue:#3b82f6;
+    --dash-cyan:#22d3ee;
+    --dash-green:#22c55e;
+    --dash-orange:#f59e0b;
+  }
+  body[data-theme="dark"],body:not([data-theme]),body[data-theme="diamond"]{
+    background:
+      radial-gradient(900px 520px at 20% -8%,rgba(139,92,246,.20),transparent 62%),
+      radial-gradient(760px 460px at 98% 8%,rgba(34,211,238,.12),transparent 58%),
+      radial-gradient(780px 520px at 80% 110%,rgba(34,197,94,.08),transparent 60%),
+      linear-gradient(145deg,#050611,#080b1d 52%,#07111f);
+  }
+  .layout{display:grid!important;grid-template-columns:280px minmax(0,1fr);min-height:100vh}
+  .app-sidebar{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:18px;padding:22px 16px;background:linear-gradient(180deg,rgba(11,13,29,.94),rgba(8,10,24,.88));border-right:1px solid var(--dash-border);box-shadow:18px 0 70px rgba(0,0,0,.28);overflow:auto;z-index:20}
+  .app-sidebar:before{display:none}
+  .sidebar-brand{display:flex;align-items:center;gap:12px;padding:8px 8px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+  .sidebar-logo{width:48px;height:48px;border-radius:17px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(139,92,246,.28),rgba(59,130,246,.16));border:1px solid rgba(168,85,247,.35);box-shadow:0 0 34px rgba(139,92,246,.25)}
+  .sidebar-logo img{width:30px;height:30px;object-fit:contain}
+  .sidebar-brand strong{display:block;font-size:16px;letter-spacing:.01em}
+  .sidebar-brand small{display:block;color:var(--mt);font-size:12px;margin-top:2px}
+  .side-section{display:grid;gap:8px}
+  .side-section-title{padding:0 10px;font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:rgba(226,232,255,.48);font-weight:850}
+  .side-link{display:flex;align-items:center;gap:12px;padding:12px 13px;border-radius:14px;color:rgba(226,232,255,.66);text-decoration:none;border:1px solid transparent;background:transparent;transition:transform .18s ease,border-color .18s ease,background .18s ease,color .18s ease,box-shadow .18s ease}
+  .side-link:hover{transform:translateX(3px);color:#fff;background:rgba(255,255,255,.055);border-color:rgba(139,92,246,.24)}
+  .side-link.active{color:#fff;background:linear-gradient(135deg,rgba(139,92,246,.24),rgba(59,130,246,.13));border-color:rgba(139,92,246,.52);box-shadow:0 0 0 1px rgba(34,211,238,.08),0 14px 34px rgba(139,92,246,.16)}
+  .side-icon{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.08);color:var(--dash-cyan)}
+  .side-icon svg{width:17px;height:17px}
+  .premium-card{margin-top:auto;padding:16px;border-radius:18px;background:linear-gradient(145deg,rgba(139,92,246,.28),rgba(59,130,246,.15));border:1px solid rgba(168,85,247,.34);box-shadow:0 0 40px rgba(139,92,246,.18)}
+  .premium-card strong,.premium-card span{display:block}.premium-card span{margin-top:6px;color:rgba(226,232,255,.74);font-size:12px;line-height:1.5}.premium-card a{display:inline-flex;margin-top:12px;color:#fff;text-decoration:none;font-weight:850}
+  .sidebar-profile{display:flex;align-items:center;gap:8px;padding:12px;border-radius:16px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);font-size:13px;font-weight:800}.sidebar-profile small{margin-left:auto;color:rgba(226,232,255,.55);font-weight:600}
+  .status-dot{width:9px;height:9px;border-radius:999px;background:var(--dash-green);box-shadow:0 0 14px rgba(34,197,94,.9);display:inline-block}
+  .status-pill{display:inline-flex;align-items:center;gap:8px;width:auto;padding:10px 13px;border-radius:999px;border:1px solid rgba(34,197,94,.22);background:rgba(34,197,94,.10);font-size:13px;font-weight:850}
+  .main{max-width:none!important;width:100%;padding:28px 34px 42px!important}
+  .topbar{position:sticky;top:18px;z-index:10;border-radius:22px!important;padding:18px 20px!important;background:linear-gradient(180deg,rgba(15,18,36,.80),rgba(9,11,26,.68))!important;border:1px solid var(--dash-border)!important;box-shadow:0 22px 70px rgba(0,0,0,.32),0 0 42px rgba(139,92,246,.08)!important;backdrop-filter:blur(18px)}
+  .title{font-size:34px!important;font-weight:900!important;text-shadow:0 0 26px rgba(139,92,246,.20)}
+  .card,.item,.page-hero,.stat-tile,.module-option,.list-btn,details.acc{border-radius:18px!important;background:linear-gradient(180deg,var(--dash-panel),rgba(11,14,31,.72))!important;border:1px solid var(--dash-border)!important;box-shadow:0 20px 60px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.06)!important}
+  .card:hover,.item:hover,.stat-tile:hover,.module-option:hover,.list-btn:hover{transform:translateY(-3px)!important;border-color:rgba(139,92,246,.38)!important;box-shadow:0 26px 70px rgba(0,0,0,.34),0 0 34px rgba(139,92,246,.12)!important}
+  .stat-strip{grid-template-columns:repeat(4,minmax(180px,1fr))!important;gap:18px!important}
+  .stat-tile{position:relative;overflow:hidden;padding:20px!important}.stat-tile:before{content:"";position:absolute;inset:auto -20% -45% -20%;height:80%;background:radial-gradient(circle,rgba(34,211,238,.20),transparent 60%);pointer-events:none}.stat-tile strong{font-size:34px!important}
+  input,select,textarea,.cs-trigger,.ms-trigger{border-radius:13px!important;background:rgba(4,7,19,.72)!important;border:1px solid rgba(164,174,255,.15)!important}
+  input:focus,select:focus,textarea:focus{border-color:rgba(139,92,246,.72)!important;box-shadow:0 0 0 3px rgba(139,92,246,.18),0 0 28px rgba(139,92,246,.12)!important}
+  .btn{border-radius:14px!important;background:linear-gradient(135deg,var(--dash-purple),var(--dash-blue))!important;box-shadow:0 15px 34px rgba(139,92,246,.24)!important}
+  .btn-soft{border-radius:14px!important;background:rgba(255,255,255,.055)!important;border-color:rgba(164,174,255,.14)!important}
+  .pill{border-radius:999px!important;background:rgba(255,255,255,.06)!important;border-color:rgba(164,174,255,.14)!important}
+  .module-options{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))!important}.module-option{min-height:132px!important}.module-option .pill.ok,.pill.ok{color:#dfffee!important;border-color:rgba(34,197,94,.32)!important;background:rgba(34,197,94,.12)!important}
+  @media(max-width:1100px){.layout{grid-template-columns:1fr}.app-sidebar{position:relative;height:auto}.main{padding:18px!important}.stat-strip{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+  @media(max-width:640px){.stat-strip{grid-template-columns:1fr!important}.topbar-right{width:100%}.status-pill{width:100%;justify-content:center}.sidebar-profile small{display:none}}
  </style></head>
 <body>
  <div id="auth" class="auth"><div class="auth-card"><h3>Dashboard Login</h3><div class="muted" style="margin-bottom:10px">Sign in with Discord to continue.</div><a id="authDiscord" class="btn" href="/login" style="display:block;text-align:center;text-decoration:none">Sign in with Discord</a><div class="muted" style="margin:12px 0 6px">or use a token</div><label>Token</label><input id="authToken" type="password" /><div class="row" style="margin-top:10px"><button id="authLogin" class="btn">Login</button></div><div id="authMsg" class="notice danger"></div></div></div>
@@ -5936,6 +6037,10 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
 <script>
  let currentPath=${JSON.stringify(currentPath)},tokenKey='dashboard_token_ui',defaultEmbedTemplates=${JSON.stringify(DEFAULT_EMBED_TEMPLATES)};
 const app=document.getElementById('app'),notice=document.getElementById('notice'),auth=document.getElementById('auth'),authDiscord=document.getElementById('authDiscord'),authToken=document.getElementById('authToken'),authMsg=document.getElementById('authMsg');
+ const ensureAppSidebar=()=>{if(document.querySelector('.app-sidebar'))return;const layout=document.querySelector('.layout');if(!layout)return;const side=document.createElement('aside');side.className='sidebar app-sidebar';side.innerHTML=${JSON.stringify(renderDashboardSidebar(currentPath).replace(/^<aside[^>]*>|<\/aside>$/g, ''))};layout.insertBefore(side,layout.firstChild)};
+ ensureAppSidebar();
+ const ensureHeaderActions=()=>{const right=document.querySelector('.topbar-right');if(!right||document.querySelector('.status-pill'))return;const status=document.createElement('span');status.className='status-pill';status.innerHTML='<span class="status-dot"></span>Online';const invite=document.createElement('a');invite.className='btn invite-action';invite.href='/dashboard';invite.title='Invite Bot';invite.innerHTML='<span class="btn-icon">${dashboardIcon('servers')}</span><span>Invite Bot</span>';right.insertBefore(invite,right.firstChild);right.insertBefore(status,invite)};
+ ensureHeaderActions();
  const themeKey='dash_theme';
  const hackerUnlockKey='dash_hacker_unlocked';
  const isHackerUnlocked=()=>{try{return localStorage.getItem(hackerUnlockKey)==='true'}catch{return false}};
@@ -5944,7 +6049,8 @@ const app=document.getElementById('app'),notice=document.getElementById('notice'
   document.body.dataset.hackerUnlocked=isHackerUnlocked()?'true':'false';
   let state=null;
   let ui=(()=>{try{const raw=sessionStorage.getItem('dash_ui');const parsed=raw?JSON.parse(raw):{};return parsed&&typeof parsed==='object'?parsed:{};}catch{return {}}})();
- const saveUi=()=>{try{sessionStorage.setItem('dash_ui',JSON.stringify(ui||{}))}catch{}};
+  let bootPromise=null;
+  const saveUi=()=>{try{sessionStorage.setItem('dash_ui',JSON.stringify(ui||{}))}catch{}};
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const createToastContainer=()=>{let container=document.getElementById('toast-container');if(!container){container=document.createElement('div');container.id='toast-container';container.className='toast-container';document.body.appendChild(container)}return container};
 const note=(t,m='info')=>{const container=createToastContainer();if(!t||!String(t).trim()){notice.textContent='';notice.className='notice';return}notice.textContent='';notice.className='notice';const kind=['ok','danger','warn','info'].includes(m)?m:'info';const toast=document.createElement('div');toast.className='toast toast-'+kind;const icon=kind==='ok'?'OK':kind==='danger'?'!':kind==='warn'?'!':'i';const title={ok:'Saved',danger:'Error',warn:'Warning',info:'Notice'}[kind]||'Notice';toast.innerHTML='<span class="toast-icon">'+icon+'</span><div class="toast-content"><strong class="toast-title">'+title+'</strong><div class="toast-message">'+esc(t)+'</div></div><button class="toast-close" type="button" aria-label="Dismiss">x</button>';const close=()=>{toast.style.animation='toastSlideOut 180ms ease forwards';setTimeout(()=>{toast.remove();if(container.children.length===0)container.style.display='none'},180)};const closeBtn=toast.querySelector('.toast-close');if(closeBtn)closeBtn.onclick=close;container.appendChild(toast);container.style.display='flex';setTimeout(close,4000)};
@@ -6435,7 +6541,7 @@ function renderDocs(){
     '<div class="item"><div><strong>Branding</strong><div class="muted">Enterprise/custom servers can edit server identity, embed templates, and preview the bot message before saving.</div></div></div>'+
      '<div class="item"><div><strong>Recommended bot permissions</strong><div class="muted">Create Instant Invite, View Channels, Send Messages, Embed Links, Attach Files, Read Message History, Use Slash Commands, Manage Channels, Manage Roles, Create Public Threads, Send Messages in Threads. Add Manage Messages only if you want cleanup/moderation actions. Administrator is not required.</div></div></div>'+
      '<div class="item"><div><strong>Ticket type examples</strong><div class="muted">New servers start with no preset ticket types. Suggested documentation examples: General Support, Billing, Bug Report, Purchase Help, Partnership, Staff Report, Appeal, and Roblox Studio Help. Use channel format <code>ticket-{number}</code> when ticket-1, ticket-2, and ticket-3 should mean ticket IDs.</div></div></div>'+
-     '<div class="item"><div><strong>AI feature switches</strong><div class="muted">Settings includes a master AI switch, auto-resolution, auto-learn, and Custom-only AI Conversation. Conversation mode stores recent text and short image summaries, not the image files themselves.</div></div></div>'+
+     '<div class="item"><div><strong>AI feature switches</strong><div class="muted">Settings includes a master AI switch, auto-resolution, auto-learn, and AI Conversation for servers with AI access. Conversation mode stores recent text and short image summaries, not the image files themselves.</div></div></div>'+
    '</div></div>'
  ):'';
   return '<div class="grid">'+
@@ -6821,7 +6927,7 @@ function renderPageHero(path){
 function render(){const access=(state&&state.access)||{};const plan=(state&&state.aiAccess)||{};const allowed=new Set(['/documentation','/tutorials','/pricing','/upgrade','/privacy','/terms']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/panels','/commands/tag','/tickets','/transcripts','/commands/feedback','/pricing','/upgrade'].forEach(p=>allowed.add(p));if(plan.isPlusOrHigher)allowed.add('/statistics');if(plan.isCustom)allowed.add('/embed-editor')}else{if(access.isManager||access.isStaff||access.canManageSettings||access.canViewTickets)allowed.add('/overview');if(access.canManageTicketTypes){allowed.add('/settings');allowed.add('/commands/ticket-types');allowed.add('/panels');if(plan.isCustom)allowed.add('/embed-editor')}if(plan.isPlusOrHigher&&access.canManageTicketTypes)allowed.add('/statistics');if(access.canManageAvailability)allowed.add('/availability');if(access.canViewTickets||access.canManageEscalations)allowed.add('/tickets');if(access.canViewTranscripts)allowed.add('/transcripts')}let html='';if(!allowed.has(currentPath)){html='<div class="card"><h3>Access Restricted</h3><p class="muted">This module is not available for your current role or server plan.</p></div>'}else if(currentPath==='/overview')html=renderOverview();else if(currentPath==='/settings')html=renderPageHero(currentPath)+renderSettings();else if(currentPath==='/availability')html=renderPageHero(currentPath)+renderAvailability();else if(currentPath==='/tutorials')html=renderPageHero(currentPath)+renderTutorials();else if(currentPath==='/commands/ticket-types')html=renderPageHero(currentPath)+renderTypes();else if(currentPath==='/panels')html=renderPageHero(currentPath)+renderPanels();else if(currentPath==='/commands/tag')html=renderPageHero(currentPath)+renderTags();else if(currentPath==='/tickets')html=renderPageHero(currentPath)+renderTickets();else if(currentPath==='/transcripts')html=renderPageHero(currentPath)+renderTranscripts();else if(currentPath==='/commands/feedback')html=renderPageHero(currentPath)+renderFeedback();else if(currentPath==='/commands/appeal')html=renderPageHero(currentPath)+renderAppeal();else if(currentPath==='/statistics')html=renderPageHero(currentPath)+renderStats();else if(currentPath==='/embed-editor')html=renderPageHero(currentPath)+renderBranding();else if(currentPath==='/pricing')html=renderPageHero(currentPath)+renderPricing();else if(currentPath==='/upgrade')html=renderPageHero(currentPath)+renderUpgrade();else html=renderPageHero(currentPath)+renderDocs();document.title=${JSON.stringify(BRAND_NAME + ' - ')}+({"/overview":"Home","/settings":"Settings","/availability":"Availability","/tutorials":"Tutorials","/commands/ticket-types":"Ticket Types","/panels":"Panels","/commands/tag":"Tags","/tickets":"Tickets","/transcripts":"Transcripts","/commands/feedback":"Feedback","/statistics":"Statistics","/embed-editor":"Branding","/pricing":"Pricing","/upgrade":"Upgrade","/documentation":"Documentation","/privacy":"Privacy","/terms":"Terms"}[currentPath]||'Dashboard');renderAnnouncementBar();app.classList.add('swap');requestAnimationFrame(()=>{app.innerHTML=html;requestAnimationFrame(()=>{app.classList.remove('swap');wire();if(window.localizePlanPrices)window.localizePlanPrices()})})}
 function showUpgradeCelebration(plan){const label=String(plan||'Plus');let overlay=document.getElementById('upgradeOverlay');if(!overlay){overlay=document.createElement('div');overlay.id='upgradeOverlay';overlay.className='upgrade-overlay';overlay.innerHTML='<canvas class="upgrade-confetti" id="upgradeConfetti"></canvas><div class="upgrade-card"><div class="page-kicker">Upgrade complete</div><h2 id="upgradeTitle"></h2><div class="muted">You\\'ve unlocked:</div><ul id="upgradeList"></ul><button class="btn" id="upgradeClose" style="margin-top:18px">Continue</button></div>';document.body.appendChild(overlay)}const title=document.getElementById('upgradeTitle');const list=document.getElementById('upgradeList');if(title)title.textContent='You\\'ve upgraded to '+label+'!';const items=label==='Custom'?['White-label bot branding','Diamond dashboard theme','Custom bot instance controls','Everything in Plus and Pro']:label==='Pro'?['Statistics','Advanced operations','Priority support controls']:['Statistics','Improved analytics','Premium dashboard modules'];if(list)list.innerHTML=items.map(x=>'<li>'+esc(x)+'</li>').join('');overlay.classList.add('show');const canvas=document.getElementById('upgradeConfetti');if(canvas&&canvas.getContext){const ctx=canvas.getContext('2d');const dpr=Math.max(1,window.devicePixelRatio||1);canvas.width=Math.floor(window.innerWidth*dpr);canvas.height=Math.floor(window.innerHeight*dpr);canvas.style.width=window.innerWidth+'px';canvas.style.height=window.innerHeight+'px';ctx.setTransform(dpr,0,0,dpr,0,0);const pieces=Array.from({length:180},(_,i)=>({x:Math.random()*window.innerWidth,y:window.innerHeight+Math.random()*80,vx:(Math.random()-.5)*5,vy:-(4+Math.random()*7),g:.08+Math.random()*.04,s:5+Math.random()*9,r:Math.random()*6,c:['#67e8f9','#d9f99d','#fef08a','#c4b5fd','#f8fafc'][i%5]}));let frame=0;(function tick(){ctx.clearRect(0,0,window.innerWidth,window.innerHeight);pieces.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=p.g;p.r+=.12;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.r);ctx.fillStyle=p.c;ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s*.65);ctx.restore()});frame++;if(frame<210&&overlay.classList.contains('show'))requestAnimationFrame(tick);else ctx.clearRect(0,0,window.innerWidth,window.innerHeight)})()}const close=document.getElementById('upgradeClose');if(close)close.onclick=()=>overlay.classList.remove('show')}
 function handlePlanExperience(){const plan=(state&&state.aiAccess)||{};if(!plan.hasAccess||!plan.grantedAt)return;const key='dash_upgrade_seen_'+String(state.guildId||'global');const marker=String(plan.plan||'')+'@'+String(plan.grantedAt||'');try{if(localStorage.getItem(key)!==marker){localStorage.setItem(key,marker);showUpgradeCelebration(plan.planLabel||'upgrade')}}catch{}}
-async function boot(){state=await api('/api/state'+(location.search||''));handlePlanExperience();render()}
+async function boot(){if(bootPromise)return bootPromise;bootPromise=(async()=>{state=await api('/api/state'+(location.search||''));handlePlanExperience();render()})().finally(()=>{bootPromise=null});return bootPromise}
 const refreshStateBtn=document.getElementById('refreshStateBtn');if(refreshStateBtn)refreshStateBtn.onclick=async()=>{try{await boot();note('Dashboard refreshed.','ok')}catch(e){note(e.message,'danger')}};
 const authLoginBtn=document.getElementById('authLogin');if(authLoginBtn)authLoginBtn.onclick=async()=>{try{localStorage.setItem(tokenKey,authToken.value.trim());await api('/api/auth/login',{method:'POST',body:JSON.stringify({token:authToken.value.trim()})});auth.style.display='none';authMsg.textContent='';await boot()}catch(e){authMsg.textContent=e.message||'Login failed'}};
 (function(){try{if(authDiscord)authDiscord.href='/login?next='+encodeURIComponent(location.pathname+location.search)}catch{}})();
@@ -6874,7 +6980,13 @@ function startDashboard(client, customBotManager = null) {
                     return;
                 }
 
-                if (!fs.existsSync(resolved) || fs.statSync(resolved).isDirectory()) {
+                let stat;
+                try {
+                    stat = await fs.promises.stat(resolved);
+                } catch {
+                    stat = null;
+                }
+                if (!stat || stat.isDirectory()) {
                     res.writeHead(404);
                     res.end('Not found');
                     return;
@@ -6897,8 +7009,25 @@ function startDashboard(client, customBotManager = null) {
                                     ? 'image/x-icon'
                                     : 'application/octet-stream';
 
-                res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'public, max-age=86400' });
-                res.end(fs.readFileSync(resolved));
+                const etag = `W/"${stat.size}-${Math.floor(stat.mtimeMs)}"`;
+                const lastModified = stat.mtime.toUTCString();
+                if (req.headers['if-none-match'] === etag || req.headers['if-modified-since'] === lastModified) {
+                    res.writeHead(304, {
+                        'Cache-Control': 'public, max-age=604800',
+                        ETag: etag,
+                        'Last-Modified': lastModified
+                    });
+                    res.end();
+                    return;
+                }
+                res.writeHead(200, {
+                    'Content-Type': contentType,
+                    'Cache-Control': 'public, max-age=604800',
+                    ETag: etag,
+                    'Last-Modified': lastModified,
+                    'Content-Length': stat.size
+                });
+                fs.createReadStream(resolved).pipe(res);
                 return;
             }
 

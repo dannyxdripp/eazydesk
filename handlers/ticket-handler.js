@@ -686,7 +686,17 @@ async function getGeminiSuggestion(reasonText, matchedTags, options = {}) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return null;
     try {
-        const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+        const modelCandidates = [
+            process.env.GEMINI_MODEL,
+            ...(String(process.env.GEMINI_MODEL_CANDIDATES || '')
+                .split(',')
+                .map(item => item.trim())
+                .filter(Boolean)),
+            'gemini-2.5-flash',
+            'gemini-2.0-flash',
+            'gemini-1.5-flash'
+        ].filter(Boolean);
+        const models = [...new Set(modelCandidates)];
         const forumLinks = Array.isArray(options.forumLinks) ? options.forumLinks : [];
         const contextMessages = Array.isArray(options.contextMessages) ? options.contextMessages : [];
         const imageSummaries = Array.isArray(options.imageSummaries) ? options.imageSummaries : [];
@@ -706,20 +716,24 @@ async function getGeminiSuggestion(reasonText, matchedTags, options = {}) {
             contextMessages.length ? `Recent conversation:\n${contextMessages.map(item => `${item.role}: ${item.content}`).join('\n')}` : ''
         ].join('\n');
 
-        const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.4, maxOutputTokens: 220 }
-            })
-        });
-        if (!response.ok) {
-            console.warn('[AI] Gemini request failed:', { status: response.status, statusText: response.statusText });
-            return null;
+        for (const model of models) {
+            const response = await fetchWithTimeout(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0.4, maxOutputTokens: 220 }
+                })
+            });
+            if (!response.ok) {
+                console.warn('[AI] Gemini request failed:', { model, status: response.status, statusText: response.statusText });
+                continue;
+            }
+            const data = await response.json();
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+            if (text) return text;
         }
-        const data = await response.json();
-        return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+        return null;
     } catch (error) {
         console.warn('[AI] Gemini request error:', error?.name === 'AbortError' ? 'timeout' : (error?.message || error));
         return null;
@@ -903,7 +917,7 @@ async function sendAiPromptedResponse(channel, reasonText) {
 async function handleAiConversationMessage(message, ticket, activeStorage = null) {
     const storage = activeStorage || ticketStore.getActiveStorage();
     const guildAiAccess = ticketStore.getEffectiveGuildAiAccess(message?.guild?.id || ticket?.guildId || null, storage);
-    if (!guildAiAccess.hasAccess || !['custom', 'custom_trial'].includes(String(guildAiAccess.plan || ''))) return false;
+    if (!guildAiAccess.hasAccess) return false;
     const aiControl = ticketStore.getAiControl(storage);
     if (aiControl.manualDisabled) return false;
     const aiSettings = ticketStore.getGuildAiSettings(message?.guild?.id || ticket?.guildId || null, storage);
