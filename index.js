@@ -365,8 +365,8 @@ async function handleOwnerPrefixCommand(message, input, activeStorage) {
     }
 
     if (command === 'dashboard') {
-        const port = Number(process.env.DASHBOARD_PORT || 3100);
-        const host = String(process.env.DASHBOARD_HOST || (process.env.DASHBOARD_TOKEN ? '0.0.0.0' : '127.0.0.1')).trim();
+        const port = Number(process.env.PORT || process.env.DASHBOARD_PORT || 3100);
+        const host = String(process.env.DASHBOARD_HOST || (process.env.PORT || process.env.RENDER || process.env.RENDER_EXTERNAL_URL ? '0.0.0.0' : (process.env.DASHBOARD_TOKEN ? '0.0.0.0' : '127.0.0.1'))).trim();
         const localUrl = `http://localhost:${port}/overview`;
         const bindUrl = `http://${host}:${port}/overview`;
         const dashboardUrl = `${baseUrl}/dashboard`;
@@ -726,10 +726,10 @@ for (const file of commandFiles) {
     }
 }
 
-const runtimeReady = restoreStorageBeforeRuntime().then(() => {
-    // Start dashboard after storage restore so ephemeral hosts can recover data first.
-    startDashboard(client, customBotBrandingHandler);
-});
+// Bind the web port immediately so hosts like Render can detect the service while
+// storage restore and Discord login continue warming up.
+startDashboard(client, customBotBrandingHandler);
+const runtimeReady = restoreStorageBeforeRuntime();
 
 const missingRequiredEnvVars = getMissingRequiredEnvVars();
 if (missingRequiredEnvVars.length) {
