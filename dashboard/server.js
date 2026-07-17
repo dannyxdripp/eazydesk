@@ -739,10 +739,8 @@ function createHomeHtml(options = {}) {
 </head>
 <body class="home">
   <div class="bg">
-    <div class="orb o1"></div>
-    <div class="orb o2"></div>
-    <div class="orb o3"></div>
     <div class="grid"></div>
+    <div class="particles"></div>
   </div>
 
   <header class="top">
@@ -766,25 +764,47 @@ function createHomeHtml(options = {}) {
 
   <main class="hero">
     ${announcementHtml}
-    <section class="hero-card">
-      <div class="kicker">Support &bull; Tickets &bull; Automations</div>
-      <h1>Run support like a <span class="accent">pro.</span></h1>
-      <p>
-        Manage all the things for your bot with our new and improved sleek dashboard, no more bulky commands or confusing setups. Get it all in one place, and back doing what you do best.
-      </p>
-      <div class="cta">
-        <a class="btn primary" href="/dashboard">Visit your Dashboard</a>
-        ${inviteUrl ? `<a class="btn ghost" href="${inviteUrl}" target="_blank" rel="noreferrer">Invite the Bot</a>` : ''}
-        <a class="btn ghost" href="/documentation">Documentation</a>
+    <section class="hero-card hero-split">
+      <div class="hero-copy">
+        <div class="kicker">Support &bull; Tickets &bull; Automations</div>
+        <h1>Powerful. Modern. <span class="accent">Reliable.</span></h1>
+        <p>
+          Run tickets, staff handoffs, transcripts, AI support, and custom branded bots from one polished command center built for Discord communities.
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="/dashboard">Open Dashboard</a>
+          ${inviteUrl ? `<a class="btn ghost" href="${inviteUrl}" target="_blank" rel="noreferrer">Invite Bot</a>` : ''}
+          <a class="btn ghost" href="/documentation">Read Docs</a>
+        </div>
+        <div class="proof-row" aria-label="Product highlights">
+          <span>Custom bot runtime</span>
+          <span>Transcript archive</span>
+          <span>Staff controls</span>
+        </div>
+        <div class="note">
+          <span class="pill">${securityNote}</span>
+        </div>
       </div>
-      <div class="quick-access" aria-label="Quick access">
-        ${inviteUrl ? `<a class="quick-card" href="${inviteUrl}" target="_blank" rel="noreferrer"><span>Invite</span><strong>Add eazyDesk to a server</strong></a>` : ''}
-        ${supportLink ? `<a class="quick-card" href="${supportLink}" target="_blank" rel="noreferrer"><span>Support</span><strong>Join our support server</strong></a>` : ''}
-        <a class="quick-card" href="/pricing"><span>Plans</span><strong>Upgrade plans</strong></a>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="visual-platform"></div>
+        <div class="visual-logo"><img src="/assets/sync.png" alt="" /></div>
+        <div class="dashboard-preview">
+          <div class="preview-top"><span></span><span></span><span></span></div>
+          <div class="preview-body">
+            <div class="preview-line wide"></div>
+            <div class="preview-metrics"><b></b><b></b><b></b></div>
+            <div class="preview-ticket"></div>
+            <div class="preview-ticket short"></div>
+          </div>
+        </div>
       </div>
-      <div class="note">
-        <span class="pill">${securityNote}</span>
-      </div>
+    </section>
+
+    <section class="quick-access" aria-label="Quick access">
+      ${inviteUrl ? `<a class="quick-card" href="${inviteUrl}" target="_blank" rel="noreferrer"><span>Invite</span><strong>Add eazyDesk to a server</strong></a>` : ''}
+      ${supportLink ? `<a class="quick-card" href="${supportLink}" target="_blank" rel="noreferrer"><span>Support</span><strong>Join our support server</strong></a>` : ''}
+      <a class="quick-card" href="/pricing"><span>Plans</span><strong>Upgrade plans</strong></a>
+      <a class="quick-card" href="/tutorials"><span>Tutorials</span><strong>Staff onboarding guides</strong></a>
     </section>
 
     <section class="feature-grid">
@@ -856,38 +876,76 @@ function createHomeHtml(options = {}) {
 </html>`;
 }
 
-function baseDashboardPage({ title, body, script = '', ownerView = false, staffView = false, showStaffLink = false, meta = null }) {
+function baseDashboardPage({ title, body, script = '', ownerView = false, staffView = false, showStaffLink = false, publicView = false, meta = null }) {
     const siteAnnouncement = normalizeSiteAnnouncement(ticketStore.getBotConfig()?.siteAnnouncement);
     const announcementLabel = siteAnnouncement.type === 'promotional' ? 'Promotion' : siteAnnouncement.type === 'warning' ? 'Warning' : 'Announcement';
     const announcementHtml = siteAnnouncement.enabled
         ? `<div class="wrap" style="padding-top:14px;padding-bottom:0"><div class="card announcement-${siteAnnouncement.type}" style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px"><div><strong>${escapeHtml(announcementLabel)}</strong><div class="muted">${escapeHtml(siteAnnouncement.text)}</div></div>${siteAnnouncement.ctaLabel && siteAnnouncement.linkUrl ? `<a class="btn primary" href="${escapeHtml(siteAnnouncement.linkUrl)}" target="_blank" rel="noreferrer">${escapeHtml(siteAnnouncement.ctaLabel)}</a>` : ''}</div></div>`
         : '';
+    const inviteUrl = getBotInviteUrl();
+    const supportUrl = String(process.env.SUPPORT_SERVER_URL || process.env.DISCORD_SUPPORT_URL || '').trim();
+    const supportLink = /^https?:\/\//i.test(supportUrl) ? supportUrl : '';
+    const publicNavHtml = `
+      <a class="btn" href="/"><span class="btn-icon">${dashboardIcon('home')}</span><span>Home</span></a>
+      <a class="btn" href="/pricing"><span class="btn-icon">${dashboardIcon('pricing')}</span><span>Plans</span></a>
+      <a class="btn" href="/documentation"><span class="btn-icon">${dashboardIcon('docs')}</span><span>Docs</span></a>
+      <a class="btn" href="/tutorials"><span class="btn-icon">${dashboardIcon('docs')}</span><span>Tutorials</span></a>
+      ${supportLink ? `<a class="btn" href="${escapeHtml(supportLink)}" target="_blank" rel="noreferrer"><span class="btn-icon">${dashboardIcon('staff')}</span><span>Support</span></a>` : ''}
+      <a class="btn" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Dashboard</span></a>
+      ${inviteUrl ? `<a class="btn nav-accent" href="${escapeHtml(inviteUrl)}" target="_blank" rel="noreferrer"><span class="btn-icon">${dashboardIcon('invite')}</span><span>Invite Bot</span></a>` : ''}
+    `;
+    const privateNavHtml = `
+      <a class="btn nav-accent" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Servers</span></a>
+      ${showStaffLink ? `<a class="btn" href="/staff"><span class="btn-icon">${dashboardIcon('staff')}</span><span>Staff</span></a>` : ''}
+      ${ownerView ? `<a class="btn" href="/owner"><span class="btn-icon">${dashboardIcon('owner')}</span><span>Owner</span></a>` : ''}
+      ${ownerView ? `<a class="btn" href="/overview"><span class="btn-icon">${dashboardIcon('dashboard')}</span><span>Dashboard</span></a>` : ''}
+      ${ownerView ? `<a class="btn" href="/setup"><span class="btn-icon">${dashboardIcon('setup')}</span><span>Setup</span></a>` : ''}
+      ${ownerView ? `<a class="btn" href="/custom-bots"><span class="btn-icon">${dashboardIcon('embed')}</span><span>Custom Bots</span></a>` : ''}
+      <div id="themeNav" class="theme-nav">
+        <button id="themeBtn" class="btn" type="button"><span class="btn-icon">${dashboardIcon('diagnostics')}</span><span>Theme</span></button>
+        <div class="theme-menu">
+          <button class="theme-item" type="button" data-theme-item="dark">Dark</button>
+          <button class="theme-item" type="button" data-theme-item="light">Light</button>
+          <button class="theme-item" type="button" data-theme-item="ocean">Ocean</button>
+          <button class="theme-item" type="button" data-theme-item="sunset">Sunset</button>
+          <button class="theme-item theme-secret" type="button" data-theme-item="hacker">Hacker</button>
+        </div>
+      </div>
+      <a class="btn" href="/logout"><span class="btn-icon">${dashboardIcon('logout')}</span><span>Logout</span></a>
+    `;
     const css = `
     :root{color-scheme:dark;--bg:#0b1020;--bg2:#090d1a;--panel:rgba(17,20,36,.78);--tx:#f7f8ff;--mut:rgba(247,248,255,.66);--bd:rgba(255,255,255,.10);--acc:#38bdf8;--acc2:#60a5fa;--shadow:0 18px 50px rgba(0,0,0,.55);--cardGlow:0 0 0 1px rgba(96,165,250,.12) inset,0 20px 50px rgba(8,15,35,.45);--cardOutline:rgba(96,165,250,.24)}
-    *{box-sizing:border-box}html,body{font-family:"Inter","Readex Pro","Segoe UI",system-ui,-apple-system,sans-serif}body{margin:0;background:radial-gradient(700px 380px at 20% 10%,rgba(56,189,248,.18),transparent 55%),radial-gradient(650px 360px at 78% 20%,rgba(37,99,235,.16),transparent 60%),linear-gradient(180deg,var(--bg),var(--bg2));color:var(--tx);font:14px/1.45 "Inter","Readex Pro","Segoe UI",system-ui,-apple-system,sans-serif}
+    *{box-sizing:border-box}html,body{font-family:"Inter","Readex Pro","Segoe UI",system-ui,-apple-system,sans-serif}body{margin:0;min-height:100vh;background:radial-gradient(980px 520px at 48% -6%,rgba(59,130,246,.22),transparent 58%),radial-gradient(760px 430px at 86% 14%,rgba(109,213,250,.11),transparent 64%),linear-gradient(180deg,var(--bg),var(--bg2));color:var(--tx);font:14px/1.45 "Inter","Readex Pro","Segoe UI",system-ui,-apple-system,sans-serif}
+    body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.045) 1px,transparent 1px);background-size:74px 74px;mask-image:radial-gradient(72% 62% at 50% 24%,rgba(0,0,0,.75),transparent 72%);opacity:.16}
+    body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(560px 260px at 50% 16%,rgba(96,165,250,.12),transparent 68%),radial-gradient(620px 360px at 12% 54%,rgba(34,211,238,.06),transparent 72%);opacity:.9}
     body[data-theme="light"]{--bg:#f7f0e4;--bg2:#f3e6d0;--panel:rgba(255,250,243,.82);--tx:#111827;--mut:rgba(17,24,39,.66);--bd:rgba(17,24,39,.12);--acc:#2563eb;--acc2:#38bdf8;--shadow:0 16px 40px rgba(17,24,39,.12);--cardGlow:0 0 0 1px rgba(37,99,235,.10) inset,0 18px 38px rgba(17,24,39,.12);--cardOutline:rgba(37,99,235,.22);background:radial-gradient(700px 380px at 20% 10%,rgba(56,189,248,.14),transparent 55%),radial-gradient(650px 360px at 78% 20%,rgba(37,99,235,.12),transparent 60%),linear-gradient(180deg,var(--bg),var(--bg2))}
     body[data-theme="ocean"]{--bg:#061421;--bg2:#071b2c;--panel:rgba(10,29,44,.80);--tx:#ecfeff;--mut:rgba(236,254,255,.68);--bd:rgba(125,211,252,.14);--acc:#22d3ee;--acc2:#14b8a6;--shadow:0 18px 44px rgba(3,10,22,.52);--cardGlow:0 0 0 1px rgba(34,211,238,.14) inset,0 22px 56px rgba(4,16,28,.50);--cardOutline:rgba(34,211,238,.28);background:radial-gradient(760px 420px at 16% 12%,rgba(34,211,238,.18),transparent 58%),radial-gradient(680px 360px at 82% 18%,rgba(20,184,166,.15),transparent 62%),linear-gradient(180deg,var(--bg),var(--bg2))}
     body[data-theme="sunset"]{--bg:#1b1020;--bg2:#2a1422;--panel:rgba(43,19,31,.78);--tx:#fff7ed;--mut:rgba(255,247,237,.72);--bd:rgba(251,146,60,.16);--acc:#fb7185;--acc2:#fb923c;--shadow:0 18px 48px rgba(30,10,20,.52);--cardGlow:0 0 0 1px rgba(251,146,60,.14) inset,0 22px 54px rgba(31,10,18,.52);--cardOutline:rgba(251,146,60,.28);background:radial-gradient(720px 400px at 18% 10%,rgba(251,113,133,.18),transparent 58%),radial-gradient(650px 340px at 82% 18%,rgba(251,146,60,.15),transparent 62%),linear-gradient(180deg,var(--bg),var(--bg2))}
     body[data-theme="hacker"]{--bg:#020607;--bg2:#010b07;--panel:rgba(0,12,7,.84);--tx:#d7ffe9;--mut:rgba(215,255,233,.72);--bd:rgba(0,255,136,.18);--acc:#00ff88;--acc2:#00e5ff;--shadow:0 18px 48px rgba(0,0,0,.62);--cardGlow:0 0 0 1px rgba(0,255,136,.14) inset,0 22px 54px rgba(0,0,0,.58);--cardOutline:rgba(0,255,136,.28);background:radial-gradient(720px 400px at 18% 10%,rgba(0,255,136,.16),transparent 58%),radial-gradient(650px 340px at 82% 18%,rgba(0,229,255,.12),transparent 62%),linear-gradient(180deg,var(--bg),var(--bg2));font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
     a{color:inherit}
-    .wrap{max-width:1050px;margin:0 auto;padding:18px}
-    .top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--bd);backdrop-filter:blur(8px);position:sticky;top:0;background:rgba(8,10,20,.64);z-index:10}
+    .wrap{max-width:1120px;margin:0 auto;padding:28px 18px}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--bd);border-radius:22px;backdrop-filter:blur(18px);position:sticky;top:14px;background:rgba(7,17,31,.72);box-shadow:0 18px 54px rgba(0,0,0,.28);z-index:10;max-width:1180px;margin:14px auto 0}
     .brand{display:flex;align-items:center;gap:10px;text-decoration:none}
     .brand img{width:28px;height:28px}
     .title{font-size:18px;font-weight:800;letter-spacing:.2px}
-    .nav{display:flex;gap:10px;flex-wrap:wrap}
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 12px;border-radius:14px;border:1px solid var(--bd);background:rgba(255,255,255,.03);text-decoration:none;cursor:pointer;transition:transform .15s ease,border-color .2s ease,background .2s ease,box-shadow .2s ease;box-shadow:0 10px 24px rgba(0,0,0,.18),0 0 0 1px rgba(255,255,255,.02) inset;font-weight:700}
-    .btn:hover{transform:translateY(-1px);border-color:var(--cardOutline);background:color-mix(in srgb,var(--acc) 12%, transparent);box-shadow:0 14px 28px rgba(0,0,0,.20),0 0 18px color-mix(in srgb,var(--acc) 24%, transparent)}
+    .nav{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
+    .btn,.btn-soft,.btn-danger{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 12px;border-radius:14px;border:1px solid var(--bd);background:rgba(255,255,255,.03);color:var(--tx);text-decoration:none;cursor:pointer;transition:transform .15s ease,border-color .2s ease,background .2s ease,box-shadow .2s ease;box-shadow:0 10px 24px rgba(0,0,0,.18),0 0 0 1px rgba(255,255,255,.02) inset;font-weight:700;font:inherit}
+    .btn:hover,.btn-soft:hover,.btn-danger:hover{transform:translateY(-1px);border-color:var(--cardOutline);background:color-mix(in srgb,var(--acc) 12%, transparent);box-shadow:0 14px 28px rgba(0,0,0,.20),0 0 18px color-mix(in srgb,var(--acc) 24%, transparent)}
     .btn.primary{background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 22%, transparent),color-mix(in srgb,var(--acc2) 12%, transparent));border-color:var(--cardOutline)}
+    .btn-soft{background:color-mix(in srgb,var(--panel) 82%, rgba(255,255,255,.03));border-color:var(--bd)}
+    .btn-danger{background:color-mix(in srgb,#ef4444 10%, transparent);border-color:rgba(239,68,68,.34);color:#fecaca}
     .btn.nav-accent{background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 28%, transparent),color-mix(in srgb,var(--acc2) 18%, transparent));border-color:color-mix(in srgb,var(--acc) 40%, white 6%);box-shadow:0 14px 30px rgba(0,0,0,.22),0 0 24px color-mix(in srgb,var(--acc) 24%, transparent)}
     .btn-icon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;opacity:.95}
     .btn-icon svg{width:18px;height:18px;display:block}
     .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
     @media(max-width:860px){.grid{grid-template-columns:1fr}.nav{justify-content:flex-end}}
-    .card{border:1px solid var(--bd);background:linear-gradient(180deg,color-mix(in srgb,var(--panel) 95%, rgba(255,255,255,.02)),color-mix(in srgb,var(--panel) 85%, rgba(0,0,0,.10)));box-shadow:var(--cardGlow);border-radius:18px;padding:14px}
+    .card{border:1px solid var(--bd);background:linear-gradient(180deg,color-mix(in srgb,var(--panel) 95%, rgba(255,255,255,.02)),color-mix(in srgb,var(--panel) 85%, rgba(0,0,0,.10)));box-shadow:var(--cardGlow);border-radius:18px;padding:16px;backdrop-filter:blur(14px);transition:border-color .18s ease,background .18s ease,transform .18s ease}
+    .card:hover{border-color:color-mix(in srgb,var(--acc) 20%, var(--bd))}
     .muted{color:var(--mut)}
-    label{display:block;margin:10px 0 6px;color:rgba(247,248,255,.75);font-size:12px}
-    select,input{width:100%;padding:10px 11px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(5,8,20,.78);color:var(--tx)}
+    label{display:block;margin:10px 0 6px;color:var(--mut);font-size:12px;font-weight:760}
+    select,input,textarea{width:100%;padding:10px 11px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(5,8,20,.72);color:var(--tx);outline:none;box-shadow:0 0 0 1px rgba(255,255,255,.02) inset;transition:border-color .18s ease,box-shadow .18s ease,background .18s ease;font:inherit}
+    select:focus,input:focus,textarea:focus{border-color:color-mix(in srgb,var(--acc) 48%, transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 16%, transparent);background:rgba(5,8,20,.86)}
+    textarea{min-height:120px;resize:vertical}
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     .list{margin-top:12px;display:grid;gap:10px}
     .server-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -896,6 +954,16 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     @media(max-width:1100px){.server-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
     @media(max-width:700px){.server-grid{grid-template-columns:1fr}.server-card{min-height:auto}}
     .item{border:1px solid rgba(255,255,255,.10);background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.03));border-radius:18px;padding:14px;display:flex;justify-content:space-between;gap:12px;align-items:center;box-shadow:0 0 0 1px rgba(255,255,255,.02) inset,0 0 24px color-mix(in srgb,var(--acc) 8%, transparent)}
+    .page-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap;padding:24px}
+    .page-hero h1,.page-hero h2{margin:0 0 8px;font-size:clamp(28px,4vw,48px);line-height:1.04;letter-spacing:0}
+    .page-hero .muted{max-width:760px;font-size:15px;line-height:1.65}
+    .hero-stat-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    .hero-stat{min-width:128px;padding:10px 12px;border-radius:16px;border:1px solid color-mix(in srgb,var(--acc) 22%, transparent);background:color-mix(in srgb,var(--acc) 8%, transparent)}
+    .hero-stat strong{display:block;font-size:18px}
+    .hero-stat span{color:var(--mut);font-size:12px}
+    .legal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+    .legal-card{min-height:160px}
+    .custom-bot-layout{grid-template-columns:minmax(320px,.78fr) minmax(0,1.22fr);align-items:start}
     .item.can-manage{border-color:var(--cardOutline);box-shadow:0 0 0 1px color-mix(in srgb,var(--acc) 10%, transparent) inset,0 0 26px color-mix(in srgb,var(--acc) 16%, transparent)}
     .item strong{font-size:14px}
     .pill{padding:3px 10px;border-radius:999px;border:1px solid color-mix(in srgb,var(--acc) 35%, transparent);background:color-mix(in srgb,var(--acc) 12%, transparent);color:var(--tx);font-size:12px;box-shadow:0 0 16px color-mix(in srgb,var(--acc) 12%, transparent)}
@@ -988,7 +1056,7 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     .party-emoji.e1{left:8%;bottom:-40px}.party-emoji.e2{left:30%;bottom:-60px;animation-delay:1s}.party-emoji.e3{left:60%;bottom:-50px;animation-delay:1.8s}.party-emoji.e4{left:82%;bottom:-70px;animation-delay:.4s}
     @keyframes floatReward{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-18px) rotate(2deg)}}
     @keyframes partyFly{0%{transform:translateY(0) rotate(0deg);opacity:0}12%{opacity:.9}100%{transform:translateY(-78vh) rotate(320deg);opacity:0}}
-    @media(max-width:900px){.pricing-grid,.pricing-faq{grid-template-columns:1fr}.pricing-card.featured{transform:none}.preview-cards{grid-template-columns:1fr}.pricing-table table{min-width:0}}
+    @media(max-width:900px){.top{position:relative;top:auto;margin:10px 12px 0;align-items:flex-start;flex-direction:column}.nav{justify-content:flex-start}.pricing-grid,.pricing-faq,.custom-bot-layout{grid-template-columns:1fr}.pricing-card.featured{transform:none}.preview-cards{grid-template-columns:1fr}.pricing-table table{min-width:0}.page-hero{padding:18px}.page-hero h1,.page-hero h2{font-size:32px}}
     .err{color:#fecaca;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.10);padding:10px 12px;border-radius:14px}
     `;
 
@@ -1004,25 +1072,9 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
 </head>
 <body>
   <header class="top">
-    <a class="brand" href="/"><img src="/assets/sync.png" alt="logo" /><div class="title">${String(title || 'Dashboard')}</div></a>
+    <a class="brand" href="/"><img src="/assets/sync.png" alt="logo" /><div class="title">${escapeHtml(title || 'Dashboard')}</div></a>
     <nav class="nav">
-      <a class="btn nav-accent" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Servers</span></a>
-      ${showStaffLink ? `<a class="btn" href="/staff"><span class="btn-icon">${dashboardIcon('staff')}</span><span>Staff</span></a>` : ''}
-      ${ownerView ? `<a class="btn" href="/owner"><span class="btn-icon">${dashboardIcon('owner')}</span><span>Owner</span></a>` : ''}
-      ${ownerView ? `<a class="btn" href="/overview"><span class="btn-icon">${dashboardIcon('dashboard')}</span><span>Dashboard</span></a>` : ''}
-      ${ownerView ? `<a class="btn" href="/setup"><span class="btn-icon">${dashboardIcon('setup')}</span><span>Setup</span></a>` : ''}
-      ${ownerView ? `<a class="btn" href="/custom-bots"><span class="btn-icon">${dashboardIcon('embed')}</span><span>Custom Bots</span></a>` : ''}
-      <div id="themeNav" class="theme-nav">
-        <button id="themeBtn" class="btn" type="button"><span class="btn-icon">${dashboardIcon('diagnostics')}</span><span>Theme</span></button>
-        <div class="theme-menu">
-          <button class="theme-item" type="button" data-theme-item="dark">Dark</button>
-          <button class="theme-item" type="button" data-theme-item="light">Light</button>
-          <button class="theme-item" type="button" data-theme-item="ocean">Ocean</button>
-          <button class="theme-item" type="button" data-theme-item="sunset">Sunset</button>
-          <button class="theme-item theme-secret" type="button" data-theme-item="hacker">Hacker</button>
-        </div>
-      </div>
-      <a class="btn" href="/logout"><span class="btn-icon">${dashboardIcon('logout')}</span><span>Logout</span></a>
+      ${publicView ? publicNavHtml : privateNavHtml}
     </nav>
   </header>
   ${announcementHtml}
@@ -1053,11 +1105,11 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
 function createControllerHtml(req = null) {
     const body = `
       <div class="controller-shell">
-      <div class="card controller-hero">
+      <div class="card controller-hero page-hero">
         <div>
           <div class="pricing-kicker">Controller</div>
-          <h2>Server operations</h2>
-          <div class="muted">Open dashboards, jump into setup, manage ticket queues, and toggle custom branded bots from one clean control surface.</div>
+          <h1>Server operations.</h1>
+          <div class="muted">Open dashboards, jump into setup, inspect ticket queues, and manage custom branded bot runtimes from one clean control surface.</div>
         </div>
         <div class="controller-actions">
           <a class="btn primary" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Servers</span></a>
@@ -1099,11 +1151,11 @@ function createControllerHtml(req = null) {
 function createCustomBotsHtml(req = null) {
     const body = `
       <div class="controller-shell">
-        <div class="card controller-hero">
+        <div class="card controller-hero page-hero">
           <div>
             <div class="pricing-kicker">Custom Bots</div>
-            <h2>Branded bot setup</h2>
-            <div class="muted">Add custom-only servers, save branded bot tokens, and sync commands without needing the public bot in that server.</div>
+            <h1>Branded bot setup.</h1>
+            <div class="muted">Add custom-only servers, save branded bot credentials, sync commands, and keep branded runtimes visible even when the public bot is absent.</div>
           </div>
           <div class="controller-actions">
             <a class="btn subtle" href="/controller"><span class="btn-icon">${dashboardIcon('diagnostics')}</span><span>Controller</span></a>
@@ -1112,7 +1164,7 @@ function createCustomBotsHtml(req = null) {
         </div>
         <div id="customBotError" class="err" style="display:none"></div>
         <div id="customBotSuccess" class="card" style="display:none;padding:12px 14px"></div>
-        <div class="grid" style="grid-template-columns:minmax(320px,.78fr) minmax(0,1.22fr);align-items:start">
+        <div class="grid custom-bot-layout">
           <div class="card">
             <strong>Add or update a custom server</strong>
             <div class="muted" style="margin-top:6px">Use this when a server should run only the branded custom bot. The public bot is not required for dashboard visibility.</div>
@@ -1175,9 +1227,22 @@ function createServerPickerHtml(options = {}) {
     const showStaffLink = Boolean(options.showStaffLink);
     const req = options.req || null;
     const body = `
-      <div class="card">
-        <h2 style="margin:0 0 6px">Server Access</h2>
-        <div class="muted">This shows the servers your Discord account is in, whether the bot is in them too, and what elevated permissions you have in each server.</div>
+      <div class="controller-shell">
+        <section class="card page-hero">
+          <div>
+            <div class="pricing-kicker">Servers</div>
+            <h1>Choose a workspace.</h1>
+            <div class="muted">See every server your Discord account can reach, including custom-only bot runtimes, setup status, and dashboard permissions.</div>
+            <div class="hero-stat-row">
+              <div class="hero-stat"><strong id="serverVisibleStat">--</strong><span>visible servers</span></div>
+              <div class="hero-stat"><strong id="serverReadyStat">--</strong><span>dashboard ready</span></div>
+            </div>
+          </div>
+          <div class="controller-actions">
+            ${ownerView ? `<a class="btn subtle" href="/controller"><span class="btn-icon">${dashboardIcon('diagnostics')}</span><span>Controller</span></a>` : ''}
+            ${showStaffLink ? `<a class="btn subtle" href="/staff"><span class="btn-icon">${dashboardIcon('staff')}</span><span>Staff</span></a>` : ''}
+          </div>
+        </section>
         <div id="guildError" class="err" style="display:none;margin-top:12px"></div>
         <div id="guildList" class="list server-grid"></div>
       </div>
@@ -1187,6 +1252,8 @@ function createServerPickerHtml(options = {}) {
       const ownerView=${JSON.stringify(ownerView)};
       const list=document.getElementById('guildList');
       const err=document.getElementById('guildError');
+      const visibleStat=document.getElementById('serverVisibleStat');
+      const readyStat=document.getElementById('serverReadyStat');
       function esc(s){return String(s||'').replace(/[&<>\"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;' }[m]))}
       const csrfToken=${JSON.stringify(getDashboardSessionCsrfToken(req) || '')};
       async function api(path,opt){const headers={...(opt&&opt.headers||{})};if(csrfToken&&String((opt&&opt.method)||'GET').toUpperCase()!=='GET')headers['x-csrf-token']=csrfToken;const r=await fetch(path,{credentials:'include',...(opt||{}),headers});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
@@ -1200,7 +1267,7 @@ function createServerPickerHtml(options = {}) {
         '</div>'+
         '<div class="row">'+renderAction(g)+'</div>'+
       '</div>'}
-      async function load(){try{const data=await api('/api/dashboard/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="muted">No servers found for this account.</div>'}catch(e){err.style.display='block';err.textContent=e.message}}load();
+      async function load(){try{const data=await api('/api/dashboard/guilds');const guilds=Array.isArray(data.guilds)?data.guilds:[];if(visibleStat)visibleStat.textContent=String(guilds.length);if(readyStat)readyStat.textContent=String(guilds.filter(g=>(g.botInServer||g.customOnly)&&g.canAccessDashboard).length);list.innerHTML=guilds.length?guilds.map(item).join(''):'<div class="card empty-state"><strong>No servers found</strong><div class="muted">No Discord servers are available for this account yet.</div></div>'}catch(e){err.style.display='block';err.textContent=e.message}}load();
     `;
 
     return baseDashboardPage({ title: 'Servers', body, script, ownerView, showStaffLink });
@@ -1210,9 +1277,18 @@ function createStaffHtml(options = {}) {
     const ownerView = Boolean(options.ownerView);
     const req = options.req || null;
     const body = `
-      <div class="card">
-        <h2 style="margin:0 0 6px">Staff Operations</h2>
-        <div class="muted">Senior staff can inspect guild health, run safe repairs, create handoff invites, and take restricted operational actions with audit logging and rate limits.</div>
+      <div class="controller-shell staff-console">
+        <section class="card page-hero">
+          <div>
+            <div class="pricing-kicker">Staff</div>
+            <h1>Operations console.</h1>
+            <div class="muted">Inspect guild health, run safe repairs, create handoff invites, and review operational signals with audit logging and rate limits.</div>
+          </div>
+          <div class="controller-actions">
+            <a class="btn primary" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Servers</span></a>
+            ${ownerView ? `<a class="btn subtle" href="/owner"><span class="btn-icon">${dashboardIcon('owner')}</span><span>Owner</span></a>` : ''}
+          </div>
+        </section>
         <div id="staffError" class="err" style="display:none;margin-top:12px"></div>
         <div id="staffSuccess" class="card" style="display:none;margin-top:12px;padding:12px 14px"></div>
         <div id="staffSummary" class="grid" style="margin-top:12px"></div>
@@ -1282,9 +1358,18 @@ function createStaffHtml(options = {}) {
 
 function createOwnerHtml(req = null) {
     const body = `
-      <div class="card owner-console">
-        <h2 style="margin:0 0 6px">Owner Console</h2>
-        <div class="muted">Owner includes every staff capability, plus plan grants, AI access, live viewers, API requests, and audit history.</div>
+      <div class="owner-console">
+        <section class="card page-hero">
+          <div>
+            <div class="pricing-kicker">Owner</div>
+            <h1>Control center.</h1>
+            <div class="muted">Manage plans, AI access, custom bot operations, public content, live viewers, API requests, backups, and audit history.</div>
+          </div>
+          <div class="controller-actions">
+            <a class="btn primary" href="/controller"><span class="btn-icon">${dashboardIcon('diagnostics')}</span><span>Controller</span></a>
+            <a class="btn subtle" href="/custom-bots"><span class="btn-icon">${dashboardIcon('embed')}</span><span>Custom Bots</span></a>
+          </div>
+        </section>
         <div id="ownerError" class="err" style="display:none;margin-top:12px"></div>
         <div id="ownerSuccess" class="card" style="display:none;margin-top:12px;padding:12px 14px"></div>
         <div id="ownerContent" class="owner-summary" style="margin-top:12px"></div>
@@ -1413,11 +1498,12 @@ function createSetupHtml(req = null) {
         @media(max-width:940px){.setup-grid,.setup-steps,.setup-choice-grid{grid-template-columns:1fr}.setup-panel{min-height:auto}}
       </style>
       <div class="setup-shell">
-        <div class="card setup-hero">
+        <div class="card setup-hero page-hero">
           <div class="setup-header">
             <div>
-              <div class="setup-title">Server Setup</div>
-              <div class="muted setup-sub">A shorter onboarding flow for getting a server live. Pick the server, choose the channels, set the key roles, then finish once.</div>
+              <div class="pricing-kicker">Setup</div>
+              <div class="setup-title">Server setup.</div>
+              <div class="muted setup-sub">A guided onboarding flow for getting a server live. Pick the server, choose channels, set the key roles, then finish once.</div>
             </div>
             <a class="btn" id="setupOpenDashboardLink" href="/dashboard">Server Access</a>
           </div>
@@ -1729,17 +1815,24 @@ function createLegalHtml(type = 'privacy') {
             ['Contact', 'Questions about this policy can be raised through the official support server.']
         ];
     const body = `
-      <div class="card" style="max-width:980px;margin:0 auto">
-        <div class="pricing-kicker">Legal</div>
-        <h1 style="margin:0 0 8px">${title}</h1>
-        <div class="muted">Last updated: ${updated}</div>
-        <div class="list" style="margin-top:18px">
-          ${sections.map(([heading, text]) => `<div class="item" style="display:block"><strong>${heading}</strong><div class="muted" style="margin-top:8px;line-height:1.7">${text}</div></div>`).join('')}
-        </div>
-        <div class="row" style="margin-top:18px"><a class="btn" href="/">Home</a><a class="btn-soft" href="/dashboard">Dashboard</a></div>
+      <div class="controller-shell legal-page">
+        <section class="card page-hero">
+          <div>
+            <div class="pricing-kicker">Legal</div>
+            <h1>${title}</h1>
+            <div class="muted">Last updated: ${updated}. Clear terms for dashboard access, Discord ticket data, transcripts, subscriptions, and custom branded bot operations.</div>
+          </div>
+          <div class="controller-actions">
+            <a class="btn primary" href="/dashboard"><span class="btn-icon">${dashboardIcon('servers')}</span><span>Dashboard</span></a>
+            <a class="btn subtle" href="/"><span class="btn-icon">${dashboardIcon('home')}</span><span>Home</span></a>
+          </div>
+        </section>
+        <section class="legal-grid">
+          ${sections.map(([heading, text]) => `<article class="card legal-card"><strong>${heading}</strong><div class="muted" style="margin-top:8px;line-height:1.7">${text}</div></article>`).join('')}
+        </section>
       </div>
     `;
-    return baseDashboardPage({ title, body, ownerView: false, showStaffLink: false, meta: publicMetaForPath(isTerms ? '/terms' : '/privacy') });
+    return baseDashboardPage({ title, body, ownerView: false, showStaffLink: false, publicView: true, meta: publicMetaForPath(isTerms ? '/terms' : '/privacy') });
 }
 
 function normalizeDocSections(input) {
@@ -7379,6 +7472,7 @@ function startDashboard(client, customBotManager = null) {
                     `,
                     ownerView: false,
                     showStaffLink: false,
+                    publicView: true,
                     meta: publicMetaForPath('/pricing')
                 });
             }            function createUpgradePage(req = null) {
@@ -7392,6 +7486,7 @@ function startDashboard(client, customBotManager = null) {
                     '</section>',
                     ownerView: false,
                     showStaffLink: false,
+                    publicView: true,
                     meta: publicMetaForPath('/upgrade')
                 });
             }
