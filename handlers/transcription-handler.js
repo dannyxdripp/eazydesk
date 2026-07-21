@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { AttachmentBuilder, MessageFlags } = require('discord.js');
-const { buildV2Notice } = require('../utils/components-v2-messages');
+const { MessageFlags } = require('discord.js');
 const { getTranscriptsDir, ensureDir } = require('../utils/storage-paths');
 const { resolveTranscriptsChannelId } = require('../utils/guild-defaults');
 const { getPublicBaseUrl } = require('../utils/public-url');
@@ -15,6 +14,104 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function discordTimestamp(value) {
+    const parsed = Date.parse(String(value || ''));
+    if (!Number.isFinite(parsed)) return '';
+    return `<t:${Math.floor(parsed / 1000)}:F>`;
+}
+
+function userDisplay(userId, fallback = 'System') {
+    const id = String(userId || '').trim();
+    return /^\d{17,20}$/.test(id) ? `<@${id}>` : fallback;
+}
+
+function safeInlineCode(value, fallback = 'Unknown') {
+    const text = String(value || '').trim() || fallback;
+    return `\`${text.replace(/`/g, "'").slice(0, 900)}\``;
+}
+
+function resolveTranscriptTicketId(channel, archiveEntry = null) {
+    const channelName = String(archiveEntry?.channelName || channel?.name || '').trim();
+    const numberMatch = channelName.match(/(?:^|[-_#])(\d{1,8})(?:$|[-_])/);
+    if (numberMatch) return `#${numberMatch[1]}`;
+    return channelName ? `#${channelName}` : `#${channel?.id || 'unknown'}`;
+}
+
+function buildTranscriptOverviewPayload(channel, options = {}) {
+    const archiveEntry = options.archiveEntry || null;
+    const baseUrl = String(options.baseUrl || getPublicBaseUrl() || 'https://eazydesk.onrender.com').trim();
+    const publicToken = String(archiveEntry?.publicToken || '').trim();
+    const transcriptUrl = String(options.transcriptUrl || (publicToken
+        ? `${baseUrl}/t/${encodeURIComponent(publicToken)}`
+        : `${baseUrl}/transcripts/${channel.id}`)).trim();
+    const guildName = String(channel.guild?.name || archiveEntry?.guildName || 'this server').trim();
+    const guildUrl = channel.guild?.id ? `https://discord.com/channels/${channel.guild.id}` : baseUrl;
+    const closedAt = archiveEntry?.closedAt || archiveEntry?.archivedAt || new Date().toISOString();
+    const ticketId = resolveTranscriptTicketId(channel, archiveEntry);
+    const buttonUrl = /^https?:\/\//i.test(baseUrl) ? baseUrl : 'https://eazydesk.onrender.com/';
+
+    return {
+        flags: MessageFlags.IsComponentsV2,
+        components: [
+            {
+                type: 17,
+                components: [
+                    {
+                        type: 9,
+                        components: [
+                            {
+                                type: 10,
+                                content: `## Your Ticket Overview\nSent from ${guildName} [Here](${guildUrl})`
+                            }
+                        ],
+                        accessory: {
+                            type: 2,
+                            style: 5,
+                            label: 'Open eazyDesk',
+                            url: buttonUrl
+                        }
+                    }
+                ]
+            }
+        ],
+        embeds: [
+            {
+                color: 0x3B82F6,
+                fields: [
+                    { name: 'Ticket ID', value: safeInlineCode(ticketId), inline: true },
+                    { name: 'Channel ID', value: safeInlineCode(channel.id), inline: true },
+                    { name: 'Ticket Type', value: safeInlineCode(archiveEntry?.ticketType || 'General Support'), inline: true },
+                    { name: 'Claimed By', value: archiveEntry?.claimedBy ? userDisplay(archiveEntry.claimedBy) : '`Unclaimed`', inline: true },
+                    { name: 'Closed By', value: archiveEntry?.closedBy ? userDisplay(archiveEntry.closedBy) : '`System`', inline: true },
+                    { name: 'Closed At', value: discordTimestamp(closedAt) || safeInlineCode(closedAt), inline: true },
+                    { name: 'View your transcript', value: `[Transcript](${transcriptUrl})` }
+                ]
+            }
+        ]
+    };
+}
+
+function buildTranscriptOverviewFallback(channel, options = {}) {
+    const payload = buildTranscriptOverviewPayload(channel, options);
+    const fields = payload.embeds?.[0]?.fields || [];
+    const details = fields.map(field => `**${field.name}**\n${field.value}`).join('\n\n');
+    payload.components[0].components.push(
+        { type: 14, divider: true, spacing: 1 },
+        { type: 10, content: details }
+    );
+    delete payload.embeds;
+    return payload;
+}
+
+async function sendTranscriptOverview(target, channel, options = {}) {
+    const payload = buildTranscriptOverviewPayload(channel, options);
+    try {
+        await target.send(payload);
+    } catch (error) {
+        await target.send(buildTranscriptOverviewFallback(channel, options));
+    }
 }
 
 function formatTimestamp(date) {
@@ -369,34 +466,25 @@ module.exports = {
                 throw new Error('Transcripts channel not found.');
             }
 
-            // Generate transcript URL
             const baseUrl = String(getPublicBaseUrl() || 'https://eazydesk.onrender.com').trim();
             const publicToken = String(archiveEntry?.publicToken || '').trim();
             const transcriptUrl = publicToken
                 ? `${baseUrl}/t/${encodeURIComponent(publicToken)}`
                 : `${baseUrl}/transcripts/${channel.id}`;
-            
-            // Build message with link
-            const transcriptMessage = `**Ticket Transcript:** [${channel.name}](${transcriptUrl})\n**Channel ID:** \`${channel.id}\`\n**View:** ${transcriptUrl}`;
-            const base = buildV2Notice('Ticket Transcript', transcriptMessage, 0x5865F2);
 
-            // Send to transcripts channel with link
-            await transcriptsChannel.send({
-                ...base,
-                flags: MessageFlags.IsComponentsV2,
-                components: base.components || []
+            await sendTranscriptOverview(transcriptsChannel, channel, {
+                archiveEntry,
+                baseUrl,
+                transcriptUrl
             }).catch(() => null);
 
             // Send DM to user if provided
             if (user && typeof user.send === 'function') {
                 try {
-                    const userMessage = `Your ticket transcript for **#${channel.name}** is ready.\n\nView: ${transcriptUrl}`;
-                    const files = fs.existsSync(transcriptPath)
-                        ? [new AttachmentBuilder(transcriptPath, { name: `${channel.id}.html` })]
-                        : [];
-                    await user.send({
-                        content: userMessage,
-                        files
+                    await sendTranscriptOverview(user, channel, {
+                        archiveEntry,
+                        baseUrl,
+                        transcriptUrl
                     }).catch(() => null);
                 } catch {
                     // Silently fail if user cannot be DMed

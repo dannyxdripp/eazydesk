@@ -60,6 +60,16 @@ const aiNoticeCache = new Map();
 const AI_FETCH_TIMEOUT_MS = Math.max(3000, Number(process.env.AI_FETCH_TIMEOUT_MS || 15000));
 const AI_MODEL_COOLDOWN_MS = Math.max(60_000, Number(process.env.AI_MODEL_COOLDOWN_MS || 10 * 60 * 1000));
 const aiModelFailureCache = new Map();
+const AI_SUPPORT_AGENT_NAMES = [
+    'Nova',
+    'Astra',
+    'Echo',
+    'Vega',
+    'Orion',
+    'Lyra',
+    'Mira',
+    'Sol'
+];
 
 function getAutomaticAvailabilityStatus(count) {
     if (count > REDUCED_THRESHOLD) return 'reduced_assistance';
@@ -630,6 +640,111 @@ function compactText(value, max = 1800) {
     return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
+function normalizeIntentText(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/<a?:[a-z0-9_]+:\d{17,20}>/g, ' ')
+        .replace(/[^\p{L}\p{N}\s']/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function isCloseTicketIntent(value) {
+    const text = normalizeIntentText(value);
+    if (!text) return false;
+    if (/\b(don't|dont|do not|not|never)\s+close\b/.test(text)) return false;
+    if (/^(close|close ticket|close this ticket|close the ticket|please close|pls close|you can close|can close|ticket can be closed|close it|close now|finish and close|resolved close)$/i.test(text)) return true;
+    return /\b(close|shut)\s+(this\s+)?(ticket|case|support)\b/.test(text) ||
+        /\b(ticket|case|support)\s+(can\s+be\s+)?(closed|shut)\b/.test(text) ||
+        /\bmark\s+(this\s+)?(ticket|case|support)\s+(as\s+)?(closed|resolved)\b/.test(text);
+}
+
+function isIssueSolvedIntent(value) {
+    const text = normalizeIntentText(value);
+    if (!text || isCloseTicketIntent(text)) return false;
+    if (/\b(not|isn't|isnt|wasn't|wasnt|still|doesn't|doesnt|didn't|didnt)\s+(fixed|solved|resolved|working|done)\b/.test(text)) return false;
+    if (/\b(still|not)\s+(need|needs|needing|require|requires|requiring)\s+(help|support|assistance)\b/.test(text)) return false;
+    return /\b(fixed|solved|resolved|works now|working now|all good|that's all|thats all|that worked|that fixed it|issue is gone|problem is gone|no more help needed|don't need help|dont need help)\b/.test(text) ||
+        /^(thanks|thank you|ty|cheers|perfect|great|awesome|nice),?\s*(it\s+)?(worked|works|fixed|solved|resolved)\b/.test(text);
+}
+
+function randomAiSupportAgentName() {
+    const configured = String(process.env.AI_SUPPORT_AGENT_NAMES || '')
+        .split(',')
+        .map(name => name.trim())
+        .filter(Boolean);
+    const names = configured.length ? configured : AI_SUPPORT_AGENT_NAMES;
+    return names[Math.floor(Math.random() * names.length)] || 'Nova';
+}
+
+function buildAiSupportIntroMessage(agentName = randomAiSupportAgentName()) {
+    const container = new ContainerBuilder()
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent('## <:userrobot:1487431675570032681> AI Support Agent')
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
+        )
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `Hi there! I'm ${agentName}, and I'll be assisting you today! Please describe your issue and I'll be right with you!\n-# If your problem is solved at any point of the ticket, please say "Close ticket" and I'll sort out all the rest, thanks!`
+            )
+        );
+
+    return {
+        flags: MessageFlags.IsComponentsV2,
+        components: [container]
+    };
+}
+
+function buildAiClosurePrompt() {
+    const closeButton = new ButtonBuilder()
+        .setStyle(ButtonStyle.Success)
+        .setLabel('Close Ticket')
+        .setCustomId(AI_RESOLVED_BUTTON_ID);
+    const supportButton = new ButtonBuilder()
+        .setStyle(ButtonStyle.Secondary)
+        .setLabel('Keep Open')
+        .setCustomId(AI_SUPPORT_BUTTON_ID);
+
+    const container = new ContainerBuilder()
+        .setAccentColor(0x57F287)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent('## AI Support Agent')
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
+        )
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent('It sounds like this issue is solved. If you are finished, say **Close ticket** or press **Close Ticket** and I will close this ticket with the normal transcript.')
+        )
+        .addActionRowComponents(
+            new ActionRowBuilder().addComponents(closeButton, supportButton)
+        );
+
+    return {
+        flags: MessageFlags.IsComponentsV2,
+        components: [container]
+    };
+}
+
+function shouldSendAiSupportIntro(channel, storage = null) {
+    const activeStorage = storage || ticketStore.getActiveStorage();
+    const guildId = channel?.guild?.id || null;
+    const guildAiAccess = ticketStore.getEffectiveGuildAiAccess(guildId, activeStorage);
+    if (!guildAiAccess.hasAccess || guildAiAccess.expiredTrial) return false;
+    const aiControl = ticketStore.getAiControl(activeStorage);
+    if (aiControl.manualDisabled) return false;
+    const aiSettings = ticketStore.getGuildAiSettings(guildId, activeStorage);
+    return Boolean(aiSettings.enabled && (aiSettings.mode === 'conversation' || aiSettings.conversation));
+}
+
+async function sendAiSupportIntro(channel, storage = null) {
+    if (!shouldSendAiSupportIntro(channel, storage)) return false;
+    await channel.send(buildAiSupportIntroMessage()).catch(() => null);
+    return true;
+}
+
 function envFlag(name, fallback = false) {
     const raw = String(process.env[name] ?? '').trim().toLowerCase();
     if (!raw) return Boolean(fallback);
@@ -808,7 +923,7 @@ async function getGeminiSuggestion(reasonText, matchedTags, options = {}) {
             'If the issue is unclear or you do not have enough information, ask exactly one focused follow-up question instead of guessing. Do not invent policies, account actions, prices, refunds, moderation outcomes, or technical facts.',
             'Keep the reply under 120 words. Use plain normal support text. Do not include markdown tables.',
             options.conversation
-                ? 'Conversation mode: reply directly to the user as the support agent. Be helpful, specific, and ask one next question if needed.'
+                ? 'Conversation mode: reply directly to the user as the support agent. Be helpful, specific, and ask one next question if needed. If the user says the issue is solved or your answer fully resolves it, ask them to reply "Close ticket" so the ticket can be closed with a transcript.'
                 : matchedTags.length
                     ? 'Suggested-response mode: provide one concise first support response based only on the matched tags and supplied evidence.'
                     : 'Suggested-response mode: provide a cautious first support response only if the user issue is specific. If it is not specific, ask one clarifying question.',
@@ -1043,6 +1158,20 @@ async function handleAiConversationMessage(message, ticket, activeStorage = null
         .slice(0, 3);
     if (!content && !imageAttachments.length) return false;
 
+    if (isCloseTicketIntent(content)) {
+        await closeRequestCommand.closeTicketWithTranscript(
+            message.channel,
+            'Closed by requester using AI support close command.',
+            message.author.id
+        );
+        return true;
+    }
+
+    if (isIssueSolvedIntent(content)) {
+        await message.channel?.send?.(buildAiClosurePrompt()).catch(() => null);
+        return true;
+    }
+
     const imageSummaries = [];
     for (const attachment of imageAttachments) {
         const summary = await summarizeImageAttachment(attachment);
@@ -1093,6 +1222,9 @@ module.exports = {
     saveActiveStorage: ticketStore.saveActiveStorage,
     loadTicketTypes: ticketStore.getTicketTypes,
     handleAiConversationMessage,
+    isCloseTicketIntent,
+    isIssueSolvedIntent,
+    buildAiSupportIntroMessage,
 
     async createTicket(interaction, ticketType, parentCategoryId, options = {}) {
         const permissionContext = {
@@ -1307,6 +1439,9 @@ module.exports = {
             activeStorage.tickets.push(nextTicket);
             ticketStore.saveActiveStorage(activeStorage);
             await updateTicketChannelMetadata(ticketChannel, nextTicket);
+            await sendAiSupportIntro(ticketChannel, activeStorage).catch(error => {
+                console.warn('[AI] Intro message failed:', error?.message || error);
+            });
 
             const createdContainer = new ContainerBuilder().addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(

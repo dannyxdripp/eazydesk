@@ -1008,6 +1008,23 @@ async function handleRuntimeMessage(message) {
         touchTicket(ticket, message.author.id);
         if (shouldPersistNow) ticketStore.saveActiveStorage(activeStorage);
 
+        if (ticketHandler.isCloseTicketIntent(message.content)) {
+            if (ticket.createdBy && String(ticket.createdBy) !== String(message.author.id)) {
+                await message.reply(buildMessage('Permission Denied', 'Only the ticket opener can close this ticket by message. Staff can use the normal close command or close controls.', 0xED4245)).catch(() => null);
+                return;
+            }
+
+            await closeRequestCommand.closeTicketWithTranscript(
+                message.channel,
+                'Closed by requester using "Close ticket".',
+                message.author.id
+            ).catch(async error => {
+                console.error('[Tickets] Message close failed:', error);
+                await message.reply(buildMessage('Close Failed', error.permissionMessage || 'Could not close this ticket. Check my channel permissions and try again.', 0xED4245)).catch(() => null);
+            });
+            return;
+        }
+
         const aiHandled = await ticketHandler.handleAiConversationMessage(message, ticket, activeStorage).catch(error => {
             console.warn('[AI] Conversation handler failed:', error?.message || error);
             return false;
