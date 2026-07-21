@@ -678,6 +678,91 @@ function getUnifiedDashboardCss() {
       backdrop-filter:blur(16px)!important;
     }
     .top,.topbar{border-radius:16px!important;top:10px!important}
+    .wrap{width:min(1180px,calc(100% - 40px))!important;max-width:none!important;padding:44px 0 70px!important}
+    .layout{display:grid!important;grid-template-columns:280px minmax(0,1fr)!important;min-height:100vh!important;background:transparent!important}
+    .main{padding:24px 26px 58px!important;min-width:0!important}
+    .topbar{
+      position:sticky!important;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:space-between!important;
+      gap:18px!important;
+      margin-bottom:22px!important;
+      min-height:72px!important;
+      padding:12px 14px!important;
+      z-index:30!important;
+    }
+    .topbar-left,.topbar-right{display:flex!important;align-items:center!important;gap:12px!important;min-width:0!important}
+    .titles{min-width:0!important}.title{letter-spacing:-.02em!important}.topbar .muted{font-size:13px!important}
+    .sidebar,.app-sidebar{
+      position:sticky!important;
+      top:0!important;
+      height:100vh!important;
+      padding:20px 14px!important;
+      border-radius:0!important;
+      border-width:0 1px 0 0!important;
+      box-shadow:none!important;
+      overflow:auto!important;
+    }
+    .sidebar-brand{display:flex!important;align-items:center!important;gap:12px!important;margin:0 0 22px!important;padding:8px!important}
+    .sidebar-brand strong{display:block!important;color:var(--site-text)!important}
+    .sidebar-brand small{display:block!important;color:var(--site-muted)!important}
+    .side-section{display:grid!important;gap:7px!important;margin:0 0 22px!important}
+    .side-section-title{font-size:11px!important;font-weight:900!important;letter-spacing:.12em!important;text-transform:uppercase!important;margin:0 8px 4px!important}
+    .side-link{
+      display:flex!important;
+      align-items:center!important;
+      gap:10px!important;
+      min-height:42px!important;
+      padding:10px 11px!important;
+      border-radius:10px!important;
+      border:1px solid transparent!important;
+      font-weight:760!important;
+      text-decoration:none!important;
+    }
+    .premium-card,.sidebar-profile{
+      border:1px solid var(--site-line)!important;
+      border-radius:16px!important;
+      background:rgba(96,165,250,.10)!important;
+      padding:14px!important;
+      box-shadow:none!important;
+    }
+    .premium-card{display:grid!important;gap:9px!important;margin-top:16px!important}
+    .premium-card span,.sidebar-profile small{color:var(--site-muted)!important}
+    .premium-card a{display:inline-flex!important;justify-content:center!important;border-radius:10px!important;padding:10px 12px!important;background:linear-gradient(135deg,var(--site-blue),var(--site-cyan))!important;color:#fff!important;font-weight:850!important;text-decoration:none!important}
+    .sidebar-profile{display:grid!important;grid-template-columns:auto 1fr!important;gap:4px 8px!important;align-items:center!important;margin-top:14px!important}
+    .sidebar-profile small{grid-column:2!important}
+    .grid,.split,.page-shell{gap:18px!important}
+    .card,.item,.pricing-card,.pricing-preview,.preview-frame{
+      border-radius:18px!important;
+    }
+    .card h3,.item strong,.list-title{letter-spacing:-.01em!important}
+    .stat-strip{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))!important;gap:12px!important}
+    .stat-tile{
+      border:1px solid var(--site-line)!important;
+      border-radius:16px!important;
+      background:rgba(96,165,250,.10)!important;
+      padding:16px!important;
+    }
+    .page-hero,.welcome{
+      border-radius:22px!important;
+      padding:28px!important;
+      background:radial-gradient(620px 280px at 12% 0%,rgba(96,165,250,.20),transparent 64%),linear-gradient(180deg,rgba(18,32,56,.88),rgba(10,22,40,.76))!important;
+    }
+    .topnav-menu,.cs-menu,.ms-menu{
+      border-radius:16px!important;
+      padding:8px!important;
+    }
+    .topnav-item,.cs-opt,.ms-item{
+      border-radius:10px!important;
+      padding:10px!important;
+    }
+    @media(max-width:1100px){
+      .layout{grid-template-columns:1fr!important}
+      .sidebar,.app-sidebar{position:relative!important;height:auto!important;border-width:0 0 1px 0!important}
+      .main{padding:18px!important}
+      .topbar{position:relative!important;top:auto!important;align-items:flex-start!important}
+    }
     .card:hover,.item:hover,.pricing-card:hover,.feature:hover,.quick-card:hover,.shot:hover{
       transform:none!important;
       border-color:var(--site-line-strong)!important;
@@ -901,101 +986,287 @@ function createHomeHtml(options = {}) {
     <div class="particles"></div>
   </div>
 
-  <header class="top">
-    <div class="brand">
-      <img src="/assets/sync.png" alt="eazyDesk" />
-      <div class="brand-text">
-        <div class="brand-title">eazyDesk</div>
-        <div class="brand-sub">Support your customers with ease.</div>
-      </div>
+  <div class="nav-wrap">
+    <div class="container">
+      <header class="top">
+        <a class="brand" href="/">
+          <img src="/assets/sync.png" alt="eazyDesk" />
+          <div class="brand-text">
+            <div class="brand-title">eazyDesk</div>
+            <div class="brand-sub">Support your customers with ease.</div>
+          </div>
+        </a>
+        <nav class="nav">
+          <a class="nav-link" href="#platform">Platform</a>
+          <a class="nav-link" href="#features">Modules</a>
+          <a class="nav-link" href="#automation">Automation</a>
+          <a class="nav-link" href="/pricing">Plans</a>
+          <a class="nav-link" href="/documentation">Docs</a>
+          ${supportLink ? `<a class="nav-link" href="${supportLink}" target="_blank" rel="noreferrer">Support</a>` : ''}
+          <a class="nav-link nav-login" href="/dashboard">Dashboard</a>
+          ${inviteUrl ? `<a class="nav-link nav-cta" href="${inviteUrl}" target="_blank" rel="noreferrer">Invite Bot</a>` : ''}
+        </nav>
+      </header>
     </div>
-    <nav class="nav">
-      ${inviteUrl ? `<a class="nav-link" href="${inviteUrl}" target="_blank" rel="noreferrer">Invite Bot</a>` : ''}
-      ${supportLink ? `<a class="nav-link" href="${supportLink}" target="_blank" rel="noreferrer">Support</a>` : ''}
-      <a class="nav-link" href="/pricing">Plans</a>
-      <a class="nav-link" href="/documentation">Documentation</a>
-      <a class="nav-link" href="/privacy">Privacy</a>
-      <a class="nav-link" href="/terms">Terms</a>
-      <a class="nav-link" href="/dashboard">Dashboard</a>
-    </nav>
-  </header>
+  </div>
 
-  <main class="hero">
-    ${announcementHtml}
-    <section class="hero-card hero-split">
-      <div class="hero-copy">
-        <div class="kicker">Support &bull; Tickets &bull; Automations</div>
-        <h1>Powerful. Modern. <span class="accent">Reliable.</span></h1>
-        <p>
-          Run tickets, staff handoffs, transcripts, AI support, and custom branded bots from one polished command center built for Discord communities.
-        </p>
-        <div class="cta">
-          <a class="btn primary" href="/dashboard">Open Dashboard</a>
-          ${inviteUrl ? `<a class="btn ghost" href="${inviteUrl}" target="_blank" rel="noreferrer">Invite Bot</a>` : ''}
-          <a class="btn ghost" href="/documentation">Read Docs</a>
+  <main>
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          ${announcementHtml}
+          <span class="eyebrow">Discord ticket infrastructure</span>
+          <h1>Run support tickets without the messy handoffs.</h1>
+          <p>eazyDesk brings ticket panels, AI support, transcripts, staff controls, feedback, analytics, and custom branded bots into one reliable dashboard for Discord communities.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="/dashboard">Open Dashboard</a>
+            ${inviteUrl ? `<a class="btn btn-dark" href="${inviteUrl}" target="_blank" rel="noreferrer">Invite Bot</a>` : ''}
+            <a class="btn btn-ghost" href="/documentation">Read Docs</a>
+          </div>
+          <div class="microcopy">
+            <span>Setup in minutes</span>
+            <span>AI support agents</span>
+            <span>${escapeHtml(securityNote)}</span>
+          </div>
         </div>
-        <div class="proof-row" aria-label="Product highlights">
-          <span>Custom bot runtime</span>
-          <span>Transcript archive</span>
-          <span>Staff controls</span>
-        </div>
-        <div class="note">
-          <span class="pill">${securityNote}</span>
-        </div>
-      </div>
-      <div class="hero-visual" aria-hidden="true">
-        <div class="visual-platform"></div>
-        <div class="visual-logo"><img src="/assets/sync.png" alt="" /></div>
-        <div class="dashboard-preview">
-          <div class="preview-top"><span></span><span></span><span></span></div>
-          <div class="preview-body">
-            <div class="preview-line wide"></div>
-            <div class="preview-metrics"><b></b><b></b><b></b></div>
-            <div class="preview-ticket"></div>
-            <div class="preview-ticket short"></div>
+
+        <div class="network-card" aria-label="Ticket network overview">
+          <div class="network-top">
+            <strong>Ticket network overview</strong>
+            <span class="ok-text">All systems operational</span>
+          </div>
+          <div class="network-canvas">
+            <div class="line l1"></div>
+            <div class="line l2"></div>
+            <div class="line l3"></div>
+            <div class="line l4"></div>
+            <div class="node a"><b>Panel posted</b><span>General Support</span></div>
+            <div class="node b"><b>AI agent</b><span>First response ready</span></div>
+            <div class="node c"><b>Staff queue</b><span>Claim and escalate</span></div>
+            <div class="node d"><b>Transcript</b><span>Saved after close</span></div>
+            <div class="cloud"><img src="/assets/sync.png" alt="" /></div>
+          </div>
+          <div class="network-stats">
+            <div><small>Ticket panels</small><strong>Unlimited</strong></div>
+            <div><small>Transcripts</small><strong>Archived</strong></div>
+            <div><small>AI mode</small><strong>Optional</strong></div>
+            <div><small>Custom bots</small><strong>Enterprise</strong></div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="quick-access" aria-label="Quick access">
-      ${inviteUrl ? `<a class="quick-card" href="${inviteUrl}" target="_blank" rel="noreferrer"><span>Invite</span><strong>Add eazyDesk to a server</strong></a>` : ''}
-      ${supportLink ? `<a class="quick-card" href="${supportLink}" target="_blank" rel="noreferrer"><span>Support</span><strong>Join our support server</strong></a>` : ''}
-      <a class="quick-card" href="/pricing"><span>Plans</span><strong>Upgrade plans</strong></a>
-      <a class="quick-card" href="/tutorials"><span>Tutorials</span><strong>Staff onboarding guides</strong></a>
+    <section class="logo-strip">
+      <div class="container logos">
+        <div>Discord tickets</div>
+        <div>AI support</div>
+        <div>Staff workflows</div>
+        <div>Custom branded bots</div>
+      </div>
     </section>
 
-    <section class="feature-grid">
-      <div class="feature">
-        <div class="feature-title">Simple UI</div>
-        <div class="feature-desc">Enjoy our pristine, modern UI with various themes to suit you. Access tickets and manage them without the hassle.</div>
+    <section id="platform" class="section reveal">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">One control plane</span>
+            <h2>Everything connected in one dashboard.</h2>
+          </div>
+          <p>Replace scattered setup commands and staff confusion with a single place to configure ticket flows, publish panels, manage queues, and review outcomes.</p>
+        </div>
+        <div class="platform">
+          <div class="platform-copy">
+            <h3>A clearer way to run Discord support.</h3>
+            <p>Give owners, managers, and staff a polished workspace that keeps routing, claims, transcripts, and server settings close together.</p>
+            <ul>
+              <li>Server-aware dashboard controls</li>
+              <li>Custom bot runtime monitoring</li>
+              <li>Role-based access and staff pages</li>
+              <li>Live ticket and transcript views</li>
+            </ul>
+            <a class="btn btn-primary" href="/dashboard">View the dashboard</a>
+          </div>
+          <div class="platform-ui">
+            <div class="browser">
+              <div class="browser-top"><span></span><span></span><span></span></div>
+              <div class="browser-content">
+                <div class="browser-sidebar">
+                  <div class="active">Overview</div>
+                  <div>Tickets</div>
+                  <div>Panels</div>
+                  <div>AI Support</div>
+                  <div>Transcripts</div>
+                  <div>Branding</div>
+                </div>
+                <div class="browser-main">
+                  <div class="ui-stats">
+                    <div class="ui-stat"><small>Open tickets</small><strong>24</strong></div>
+                    <div class="ui-stat"><small>Claims today</small><strong>128</strong></div>
+                    <div class="ui-stat"><small>Close rate</small><strong>96%</strong></div>
+                  </div>
+                  <div class="ui-grid">
+                    <div class="ui-panel">
+                      <strong>Weekly ticket activity</strong>
+                      <div class="bar-chart"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                    </div>
+                    <div class="ui-panel">
+                      <strong>Recent actions</strong>
+                      <p>Ticket claimed</p>
+                      <p>Transcript sent</p>
+                      <p>Panel published</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="feature">
-        <div class="feature-title">Safer by default</div>
-        <div class="feature-desc">Our tickets bot continually adds security updates to ensure the protection of your server's data.</div>
+    </section>
+
+    <section id="features" class="section feature-band reveal">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Built for support</span>
+            <h2>Powerful modules without the clutter.</h2>
+          </div>
+          <p>Every module is designed to feel consistent, fast, and easy to learn across server owners, managers, and staff.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card"><div class="icon">01</div><h3>Ticket panels</h3><p>Publish single-type or multi-type panels with clean open flows and routing.</p></article>
+          <article class="feature-card"><div class="icon">02</div><h3>AI support agents</h3><p>Let AI handle first responses, guide users, and request closure when an issue is solved.</p></article>
+          <article class="feature-card"><div class="icon">03</div><h3>Transcripts</h3><p>Close tickets with archived transcripts and user-facing overview messages.</p></article>
+          <article class="feature-card"><div class="icon">04</div><h3>Staff controls</h3><p>Claim, escalate, review, and manage support work through focused staff pages.</p></article>
+          <article class="feature-card"><div class="icon">05</div><h3>Custom bots</h3><p>Run branded bot instances with custom identity, embeds, and server-specific setup.</p></article>
+          <article class="feature-card"><div class="icon">06</div><h3>Feedback and analytics</h3><p>Track close reasons, collect ratings, and understand support performance.</p></article>
+        </div>
       </div>
-      <div class="feature">
-        <div class="feature-title">Free AI Support Agents</div>
-        <div class="feature-desc">Quickly respond to tickets and engage with your customers, even if nobody's online.</div>
+    </section>
+
+    <section class="section reveal">
+      <div class="container">
+        <div class="section-head compact-head">
+          <div>
+            <span class="eyebrow">How it works</span>
+            <h2>Create the panel. Handle the ticket. Keep the record.</h2>
+          </div>
+        </div>
+        <div class="workflow">
+          <div class="step"><div class="step-num">STEP 01</div><h3>Configure</h3><p>Choose categories, roles, opening questions, routing, and AI mode for each ticket type.</p></div>
+          <div class="step"><div class="step-num">STEP 02</div><h3>Support</h3><p>Users open tickets, staff claim them, and AI can assist when your team is busy.</p></div>
+          <div class="step"><div class="step-num">STEP 03</div><h3>Close</h3><p>Resolved tickets close cleanly with transcript delivery and audit-friendly history.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="automation" class="section automation-band reveal">
+      <div class="container automation">
+        <div>
+          <span class="eyebrow">Automation</span>
+          <h2>Turn repeated support work into simple flows.</h2>
+          <p>Let eazyDesk handle the predictable parts: opening questions, routing, first AI guidance, transcript delivery, and feedback collection.</p>
+        </div>
+        <div class="automation-panel">
+          <div class="automation-head"><strong>AI assisted closure workflow</strong></div>
+          <div class="automation-body">
+            <div class="flow-node"><div class="flow-label">WHEN</div><div class="flow-value">The user says the issue is solved</div></div>
+            <div class="flow-node"><div class="flow-label">ASK</div><div class="flow-value">Confirm whether they want to close the ticket</div></div>
+            <div class="flow-node"><div class="flow-label">THEN</div><div class="flow-value">Close, transcribe, and send the overview</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section reveal">
+      <div class="container analytics">
+        <div class="analytics-card">
+          <div class="metrics">
+            <div class="metric"><small>Active tickets</small><strong>24</strong></div>
+            <div class="metric"><small>Claims</small><strong>128</strong></div>
+            <div class="metric"><small>Feedback</small><strong>4.8</strong></div>
+          </div>
+          <div class="line-chart">
+            <svg viewBox="0 0 700 240" preserveAspectRatio="none">
+              <defs><linearGradient id="ticketFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#6DD5FA" stop-opacity=".24"/><stop offset="1" stop-color="#6DD5FA" stop-opacity="0"/></linearGradient></defs>
+              <path d="M0,200 C90,180 130,150 210,160 S340,110 420,120 S570,70 700,52 L700,240 L0,240Z" fill="url(#ticketFill)"/>
+              <path d="M0,200 C90,180 130,150 210,160 S340,110 420,120 S570,70 700,52" fill="none" stroke="#6DD5FA" stroke-width="5"/>
+            </svg>
+          </div>
+        </div>
+        <div>
+          <span class="eyebrow">Analytics</span>
+          <h2>Know where support is slowing down.</h2>
+          <p>Review active tickets, close reasons, claim activity, transcripts, and feedback without jumping between Discord channels.</p>
+          <a class="btn btn-ghost" href="/statistics">Explore analytics</a>
+        </div>
       </div>
     </section>
 
     ${gallery}
+
+    <section class="section security reveal">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Security and reliability</span>
+            <h2>Built to keep support available.</h2>
+          </div>
+          <p>Keep access controlled, custom runtimes visible, and transcripts preserved as your support operation grows.</p>
+        </div>
+        <div class="security-grid">
+          <div class="security-card"><h3>Dashboard access</h3><p>Token and Discord login paths protect private server tools.</p></div>
+          <div class="security-card"><h3>Runtime-aware data</h3><p>Custom bot servers, roles, channels, and categories are first-class targets.</p></div>
+          <div class="security-card"><h3>Role controls</h3><p>Give staff and managers the pages they need without exposing everything.</p></div>
+          <div class="security-card"><h3>Transcript history</h3><p>Closed tickets retain useful context for users and staff.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="pricing" class="section reveal">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Pricing</span>
+            <h2>Start free. Upgrade when your team needs more.</h2>
+          </div>
+          <p>Simple plans for community support teams, plus custom branded bot operations for Enterprise servers.</p>
+        </div>
+        <div class="pricing">
+          <div class="price-card"><h3>Free</h3><p>Core ticket workflows for getting started.</p><div class="price">&pound;0</div><ul><li>Unlimited tickets</li><li>Ticket panels</li><li>Logs and transcripts</li></ul><a class="btn btn-ghost" href="/dashboard">Open dashboard</a></div>
+          <div class="price-card featured"><span class="badge">Popular</span><h3>Plus</h3><p>Better visibility for growing teams.</p><div class="price">&pound;8.99<span> one-time</span></div><ul><li>Statistics</li><li>Staff activity tracking</li><li>Priority support</li></ul><a class="btn btn-primary" href="/upgrade">Upgrade</a></div>
+          <div class="price-card"><h3>Pro</h3><p>Automation for busier support servers.</p><div class="price">&pound;14.99<span> one-time</span></div><ul><li>AI moderation</li><li>Advanced analytics</li><li>Higher automation limits</li></ul><a class="btn btn-ghost" href="/upgrade">View Pro</a></div>
+          <div class="price-card"><h3>Enterprise</h3><p>Custom branded bot runtime and guided setup.</p><div class="price">Custom</div><ul><li>Custom bot instance</li><li>Developer Portal guidance</li><li>Runtime monitoring</li></ul><a class="btn btn-ghost" href="/custom-bots">Custom bots</a></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section reveal">
+      <div class="container final-cta">
+        <div>
+          <h2>Give your Discord support desk a proper control plane.</h2>
+          <p>Invite the bot, publish your panel, and manage every ticket from one polished dashboard.</p>
+        </div>
+        <div class="hero-actions">
+          <a class="btn btn-dark" href="/dashboard">Open Dashboard</a>
+          ${inviteUrl ? `<a class="btn btn-ghost light" href="${inviteUrl}" target="_blank" rel="noreferrer">Invite Bot</a>` : ''}
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="footer">
-      <div class="footer-inner">
-        <div>
-          <strong>eazyDesk</strong>
-          <div class="muted">&copy; ${year} ${COPYRIGHT_NAME}. A product under Sync Development.</div>
-        </div>
-        <div class="footer-links">
-          <a href="/dashboard">Dashboard</a>
-          <a href="/documentation">Documentation</a>
-          <a href="/privacy">Privacy</a>
-          <a href="/terms">Terms</a>
-        </div>
+    <div class="container footer-grid">
+      <div>
+        <a class="brand footer-brand" href="/"><img src="/assets/sync.png" alt="eazyDesk" /><span>eazyDesk</span></a>
+        <p>Discord ticket infrastructure by ${COPYRIGHT_NAME}.</p>
+        <div class="muted">&copy; ${year} ${COPYRIGHT_NAME}. A product under Sync Development.</div>
       </div>
+      <div><h4>Platform</h4><a href="#platform">Overview</a><a href="#features">Modules</a><a href="#automation">Automation</a></div>
+      <div><h4>Resources</h4><a href="/documentation">Documentation</a><a href="/tutorials">Tutorials</a>${supportLink ? `<a href="${supportLink}" target="_blank" rel="noreferrer">Support</a>` : ''}</div>
+      <div><h4>Product</h4><a href="/pricing">Pricing</a><a href="/upgrade">Upgrade</a><a href="/custom-bots">Custom Bots</a></div>
+      <div><h4>Legal</h4><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/dashboard">Dashboard</a></div>
+    </div>
   </footer>
   <script>
     (function(){
@@ -1032,6 +1303,15 @@ function createHomeHtml(options = {}) {
           show(idx+1);
         },6000);
       }
+    })();
+    (function(){
+      if(!('IntersectionObserver' in window))return;
+      var observer=new IntersectionObserver(function(entries){
+        entries.forEach(function(entry){
+          if(entry.isIntersecting)entry.target.classList.add('visible');
+        });
+      },{threshold:.12});
+      document.querySelectorAll('.reveal').forEach(function(el){observer.observe(el)});
     })();
   </script>
 </body>
