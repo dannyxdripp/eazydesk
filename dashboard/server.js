@@ -21,6 +21,8 @@ let dashboardCustomBotManager = null;
 const ASSETS_DIR = path.join(__dirname, 'assets');
 const COPYRIGHT_NAME = 'Sync Development';
 let cachedHomeCss = { mtimeMs: 0, value: '' };
+let cachedBaseDashboardCss = '';
+let cachedCloudflareDashboardCss = '';
 
 const transcriptOauthStates = new Map();
 const transcriptSessions = new Map();
@@ -594,6 +596,162 @@ function getHomeCss() {
     }
 }
 
+function getCloudflareDashboardCss() {
+    if (cachedCloudflareDashboardCss) return cachedCloudflareDashboardCss;
+    cachedCloudflareDashboardCss = `
+    /* Cloudflare-inspired single theme override. Keep this last so older theme blocks cannot diverge. */
+    :root,body,body[data-theme],body:not([data-theme]){
+      color-scheme:light;
+      --cf-orange:#f38020;
+      --cf-gold:#faae40;
+      --cf-ink:#1d1d1f;
+      --cf-graphite:#404041;
+      --cf-bg:#f7f7f4;
+      --cf-bg-2:#fffaf4;
+      --cf-card:#ffffff;
+      --cf-card-2:#fff6ea;
+      --cf-line:rgba(64,64,65,.14);
+      --cf-line-strong:rgba(243,128,32,.32);
+      --cf-text:#1d1d1f;
+      --cf-muted:rgba(29,29,31,.68);
+      --cf-soft:rgba(29,29,31,.50);
+      --cf-success:#168a4a;
+      --cf-warning:#b86b00;
+      --cf-danger:#b42318;
+      --bg:var(--cf-bg)!important;
+      --bg2:var(--cf-bg-2)!important;
+      --bg-alt:var(--cf-bg-2)!important;
+      --panel:var(--cf-card)!important;
+      --card:var(--cf-card)!important;
+      --card-strong:var(--cf-card-2)!important;
+      --tx:var(--cf-text)!important;
+      --mt:var(--cf-muted)!important;
+      --mut:var(--cf-muted)!important;
+      --bd:var(--cf-line)!important;
+      --acc:var(--cf-orange)!important;
+      --acc2:var(--cf-gold)!important;
+      --ac:var(--cf-orange)!important;
+      --ac-soft:var(--cf-gold)!important;
+      --ok:var(--cf-success)!important;
+      --er:var(--cf-danger)!important;
+      --dash-bg:var(--cf-bg)!important;
+      --dash-bg-2:var(--cf-bg-2)!important;
+      --dash-panel:var(--cf-card)!important;
+      --dash-panel-2:var(--cf-card)!important;
+      --dash-panel-3:var(--cf-card-2)!important;
+      --dash-border:var(--cf-line)!important;
+      --dash-border-strong:var(--cf-line-strong)!important;
+      --dash-purple:var(--cf-orange)!important;
+      --dash-blue:var(--cf-orange)!important;
+      --dash-cyan:var(--cf-gold)!important;
+      --dash-text:var(--cf-text)!important;
+      --dash-muted:var(--cf-muted)!important;
+      --dash-muted-2:var(--cf-soft)!important;
+      --lumen-blue:var(--cf-orange)!important;
+      --lumen-sky:var(--cf-gold)!important;
+      --lumen-cyan:var(--cf-gold)!important;
+      --lumen-navy:var(--cf-bg)!important;
+      --lumen-midnight:var(--cf-bg-2)!important;
+      --lumen-card:var(--cf-card)!important;
+      --lumen-card-2:var(--cf-card-2)!important;
+      --lumen-border:var(--cf-line)!important;
+      --lumen-border-hot:var(--cf-line-strong)!important;
+      --lumen-text:var(--cf-text)!important;
+      --lumen-muted:var(--cf-muted)!important;
+      --lumen-soft:var(--cf-soft)!important;
+      --shadow:0 14px 34px rgba(64,64,65,.10)!important;
+      --cardGlow:0 1px 2px rgba(64,64,65,.06),0 18px 42px rgba(64,64,65,.10)!important;
+      --cardOutline:var(--cf-line-strong)!important;
+      background:
+        radial-gradient(780px 360px at 16% -8%,rgba(250,174,64,.34),transparent 62%),
+        radial-gradient(700px 360px at 92% 2%,rgba(243,128,32,.20),transparent 58%),
+        linear-gradient(180deg,var(--cf-bg-2),var(--cf-bg))!important;
+      color:var(--cf-text)!important;
+      font-family:"Segoe UI",system-ui,-apple-system,sans-serif!important;
+    }
+    body:before,body:after,.sidebar:before,.welcome:before,.page-hero:before,.stat-tile:before,.ai-panel:before,.module-option:before{display:none!important;content:none!important;animation:none!important}
+    .particles,.bg .grid,.visual-platform{display:none!important}
+    .top,.topbar,.sidebar,.app-sidebar,.card,.item,.pricing-card,.pricing-preview,.preview-frame,.quick-card,.feature,.shot,.auth-card,.custom-select .cs-menu,.cs-menu,.ms-menu,.topnav-menu,.theme-menu{
+      background:var(--cf-card)!important;
+      border:1px solid var(--cf-line)!important;
+      box-shadow:0 1px 2px rgba(64,64,65,.06),0 18px 40px rgba(64,64,65,.08)!important;
+      backdrop-filter:none!important;
+    }
+    .top,.topbar{border-radius:16px!important;top:10px!important}
+    .card:hover,.item:hover,.pricing-card:hover,.feature:hover,.quick-card:hover,.shot:hover{
+      transform:none!important;
+      border-color:var(--cf-line-strong)!important;
+      background:var(--cf-card)!important;
+    }
+    .title,.page-hero h1,.page-hero h2,.page-hero h3,.welcome h3,.hero h1,.accent,.stat-tile strong{
+      color:var(--cf-text)!important;
+      background:none!important;
+      -webkit-text-fill-color:currentColor!important;
+      text-shadow:none!important;
+    }
+    .muted,.help,.list-meta,.nav-sub,.page-hero p,.brand-sub,.plan-note{color:var(--cf-muted)!important}
+    .pricing-kicker,.page-kicker,.module-editor-title,.quick-card span,.kicker,.side-section-title,.topnav-group-title{color:var(--cf-orange)!important}
+    .btn,.btn.primary,.btn.nav-accent,.invite-action{
+      color:#fff!important;
+      background:linear-gradient(180deg,var(--cf-gold),var(--cf-orange))!important;
+      border:1px solid rgba(185,88,14,.38)!important;
+      box-shadow:0 8px 20px rgba(243,128,32,.20)!important;
+    }
+    .btn:hover,.btn.primary:hover,.btn.nav-accent:hover,.invite-action:hover{filter:brightness(.99)!important;transform:none!important;box-shadow:0 10px 22px rgba(243,128,32,.22)!important}
+    .btn-soft,.btn.subtle,.topnav-btn,.server-icon-btn,.theme-item,.nav-link,.chip-btn{
+      color:var(--cf-text)!important;
+      background:#fff!important;
+      border:1px solid var(--cf-line)!important;
+      box-shadow:none!important;
+    }
+    .btn-soft:hover,.btn.subtle:hover,.topnav-btn:hover,.server-icon-btn:hover,.theme-item:hover,.theme-item.active,.nav-link:hover,.chip-btn:hover{
+      background:#fff6ea!important;
+      border-color:var(--cf-line-strong)!important;
+      transform:none!important;
+    }
+    .btn-danger{background:#fff!important;color:var(--cf-danger)!important;border:1px solid rgba(180,35,24,.36)!important;box-shadow:none!important}
+    input,select,textarea,.cs-trigger,.ms-trigger{
+      background:#fff!important;
+      border:1px solid rgba(64,64,65,.18)!important;
+      color:var(--cf-text)!important;
+      box-shadow:none!important;
+    }
+    input:focus,select:focus,textarea:focus,.cs-trigger:focus,.ms-trigger:focus{
+      border-color:var(--cf-orange)!important;
+      box-shadow:0 0 0 3px rgba(243,128,32,.16)!important;
+    }
+    .pill,.role,.ms-chip,.tag,.plan-badge,.hero-stat,.status-pill{
+      color:var(--cf-text)!important;
+      background:#fff6ea!important;
+      border:1px solid rgba(243,128,32,.22)!important;
+      box-shadow:none!important;
+    }
+    .side-link,.nav-item,.topnav-item,.cs-opt,.ms-item{color:var(--cf-text)!important;background:#fff!important;border-color:transparent!important}
+    .side-link.active,.nav-item.active,.topnav-item.active,.cs-opt.active,.ms-item:hover,.topnav-item:hover,.cs-opt:hover{
+      background:#fff6ea!important;
+      border-color:var(--cf-line-strong)!important;
+      box-shadow:none!important;
+    }
+    .side-icon,.nav-kicker,.controller-icon,.sidebar-logo{
+      color:var(--cf-orange)!important;
+      background:#fff6ea!important;
+      border-color:rgba(243,128,32,.24)!important;
+      box-shadow:none!important;
+    }
+    .sidebar-logo img,.brand-mini img,.brand img,.visual-logo img{filter:none!important}
+    .dashboard-preview,.visual-logo{background:#fff!important;border-color:var(--cf-line)!important;box-shadow:0 18px 42px rgba(64,64,65,.10)!important}
+    .preview-top,.pricing-table th,.pricing-table td{border-color:var(--cf-line)!important}
+    .preview-line,.preview-ticket,.preview-metrics b,.preview-row{background:#f0f0ed!important;border-color:var(--cf-line)!important}
+    .status-dot{background:var(--cf-success)!important;box-shadow:none!important}
+    .err,.toast.toast-danger{background:#fff5f3!important;color:var(--cf-danger)!important;border-color:rgba(180,35,24,.26)!important}
+    .announcement-warning,.toast.toast-warn{background:#fff6ea!important;color:var(--cf-warning)!important;border-color:rgba(243,128,32,.28)!important}
+    .announcement-promotional,.toast.toast-ok{background:#f0fff6!important;color:var(--cf-success)!important;border-color:rgba(22,138,74,.24)!important}
+    .upgrade-word,.party-emoji,.theme-nav,.theme-secret{display:none!important}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+    `;
+    return cachedCloudflareDashboardCss;
+}
+
 function getDashboardEnabled() {
     const configured = String(process.env.DASHBOARD_ENABLED || '').trim().toLowerCase();
     if (configured) return configured === 'true';
@@ -843,11 +1001,10 @@ function createHomeHtml(options = {}) {
     (function(){
       try{
         var key='dash_theme';
-        var value=(localStorage.getItem(key)||'dark').toLowerCase();
-        var allowed=['dark','light','ocean','sunset','diamond','hacker'];
-        document.body.dataset.theme=allowed.includes(value)?value:'dark';
+        localStorage.setItem(key,'cloudflare');
+        document.body.dataset.theme='cloudflare';
       }catch(e){
-        document.body.dataset.theme='dark';
+        document.body.dataset.theme='cloudflare';
       }
     })();
     (function(){
@@ -869,7 +1026,12 @@ function createHomeHtml(options = {}) {
         picks.forEach(function(btn,i){btn.classList.toggle('active',i===idx)});
       }
       picks.forEach(function(btn,i){btn.onclick=function(){show(i)}});
-      if(slides.length>1)setInterval(function(){show(idx+1)},5000);
+      if(slides.length>1){
+        setInterval(function(){
+          if(document.hidden)return;
+          show(idx+1);
+        },6000);
+      }
     })();
   </script>
 </body>
@@ -901,21 +1063,11 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
       ${ownerView ? `<a class="btn" href="/overview"><span class="btn-icon">${dashboardIcon('dashboard')}</span><span>Dashboard</span></a>` : ''}
       ${ownerView ? `<a class="btn" href="/setup"><span class="btn-icon">${dashboardIcon('setup')}</span><span>Setup</span></a>` : ''}
       ${ownerView ? `<a class="btn" href="/custom-bots"><span class="btn-icon">${dashboardIcon('embed')}</span><span>Custom Bots</span></a>` : ''}
-      <div id="themeNav" class="theme-nav">
-        <button id="themeBtn" class="btn" type="button"><span class="btn-icon">${dashboardIcon('diagnostics')}</span><span>Theme</span></button>
-        <div class="theme-menu">
-          <button class="theme-item" type="button" data-theme-item="dark">Dark</button>
-          <button class="theme-item" type="button" data-theme-item="light">Light</button>
-          <button class="theme-item" type="button" data-theme-item="ocean">Ocean</button>
-          <button class="theme-item" type="button" data-theme-item="sunset">Sunset</button>
-          <button class="theme-item theme-secret" type="button" data-theme-item="hacker">Hacker</button>
-        </div>
-      </div>
       <a class="btn" href="/logout"><span class="btn-icon">${dashboardIcon('logout')}</span><span>Logout</span></a>
     `;
-    const css = `
+    if (!cachedBaseDashboardCss) cachedBaseDashboardCss = `
     :root{color-scheme:dark;--bg:#0b1020;--bg2:#090d1a;--panel:rgba(17,20,36,.78);--tx:#f7f8ff;--mut:rgba(247,248,255,.66);--bd:rgba(255,255,255,.10);--acc:#38bdf8;--acc2:#60a5fa;--shadow:0 18px 50px rgba(0,0,0,.55);--cardGlow:0 0 0 1px rgba(96,165,250,.12) inset,0 20px 50px rgba(8,15,35,.45);--cardOutline:rgba(96,165,250,.24)}
-    *{box-sizing:border-box}html,body{font-family:"Inter","Readex Pro","Segoe UI",system-ui,-apple-system,sans-serif}body{margin:0;min-height:100vh;background:radial-gradient(980px 520px at 48% -6%,rgba(59,130,246,.22),transparent 58%),radial-gradient(760px 430px at 86% 14%,rgba(109,213,250,.11),transparent 64%),linear-gradient(180deg,var(--bg),var(--bg2));color:var(--tx);font:14px/1.45 "Inter","Readex Pro","Segoe UI",system-ui,-apple-system,sans-serif}
+    *{box-sizing:border-box}html,body{font-family:"Segoe UI",system-ui,-apple-system,sans-serif}body{margin:0;min-height:100vh;background:radial-gradient(980px 520px at 48% -6%,rgba(59,130,246,.22),transparent 58%),radial-gradient(760px 430px at 86% 14%,rgba(109,213,250,.11),transparent 64%),linear-gradient(180deg,var(--bg),var(--bg2));color:var(--tx);font:14px/1.45 "Segoe UI",system-ui,-apple-system,sans-serif}
     body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.045) 1px,transparent 1px);background-size:74px 74px;mask-image:radial-gradient(72% 62% at 50% 24%,rgba(0,0,0,.75),transparent 72%);opacity:.16}
     body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(560px 260px at 50% 16%,rgba(96,165,250,.12),transparent 68%),radial-gradient(620px 360px at 12% 54%,rgba(34,211,238,.06),transparent 72%);opacity:.9}
     body[data-theme="light"]{--bg:#f7f0e4;--bg2:#f3e6d0;--panel:rgba(255,250,243,.82);--tx:#111827;--mut:rgba(17,24,39,.66);--bd:rgba(17,24,39,.12);--acc:#2563eb;--acc2:#38bdf8;--shadow:0 16px 40px rgba(17,24,39,.12);--cardGlow:0 0 0 1px rgba(37,99,235,.10) inset,0 18px 38px rgba(17,24,39,.12);--cardOutline:rgba(37,99,235,.22);background:radial-gradient(700px 380px at 20% 10%,rgba(56,189,248,.14),transparent 55%),radial-gradient(650px 360px at 78% 20%,rgba(37,99,235,.12),transparent 60%),linear-gradient(180deg,var(--bg),var(--bg2))}
@@ -1058,7 +1210,9 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     @keyframes partyFly{0%{transform:translateY(0) rotate(0deg);opacity:0}12%{opacity:.9}100%{transform:translateY(-78vh) rotate(320deg);opacity:0}}
     @media(max-width:900px){.top{position:relative;top:auto;margin:10px 12px 0;align-items:flex-start;flex-direction:column}.nav{justify-content:flex-start}.pricing-grid,.pricing-faq,.custom-bot-layout{grid-template-columns:1fr}.pricing-card.featured{transform:none}.preview-cards{grid-template-columns:1fr}.pricing-table table{min-width:0}.page-hero{padding:18px}.page-hero h1,.page-hero h2{font-size:32px}}
     .err{color:#fecaca;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.10);padding:10px 12px;border-radius:14px}
+    ${getCloudflareDashboardCss()}
     `;
+    const css = cachedBaseDashboardCss;
 
     return `<!doctype html>
 <html lang="en">
@@ -1082,17 +1236,9 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
   <script>
     (function(){
       const key='dash_theme';
-      const unlockKey='dash_hacker_unlocked';
-      const unlocked=()=>{try{return localStorage.getItem(unlockKey)==='true'}catch{return false}};
-      const allowed=['dark','light','ocean','sunset','hacker'];
-      const normalise=v=>{const next=String(v||'').toLowerCase();return allowed.includes(next)&&!(next==='hacker'&&!unlocked())?next:'dark'};
-      const apply=v=>{document.body.dataset.theme=normalise(v);document.body.dataset.hackerUnlocked=unlocked()?'true':'false';document.querySelectorAll('[data-theme-item]').forEach(btn=>btn.classList.toggle('active',btn.getAttribute('data-theme-item')===document.body.dataset.theme));};
-      try{apply(localStorage.getItem(key)||'dark')}catch{apply('dark')}
-      const nav=document.getElementById('themeNav');
-      const btn=document.getElementById('themeBtn');
-      if(btn&&nav){btn.onclick=(e)=>{e.stopPropagation();nav.classList.toggle('open')};document.addEventListener('click',()=>nav.classList.remove('open'))}
-      let darkClicks=0;
-      document.querySelectorAll('[data-theme-item]').forEach(item=>item.onclick=(e)=>{e.stopPropagation();const pick=String(item.getAttribute('data-theme-item')||'');if(pick==='dark'){darkClicks+=1;if(darkClicks>=7){try{localStorage.setItem(unlockKey,'true')}catch{}}}else{darkClicks=0}const next=normalise(pick);try{localStorage.setItem(key,next)}catch{}apply(next);if(nav)nav.classList.remove('open')});
+      try{localStorage.setItem(key,'cloudflare')}catch{}
+      document.body.dataset.theme='cloudflare';
+      document.body.dataset.hackerUnlocked='false';
     })();
   </script>
   <script>${pricingLocalizationScript()}</script>
@@ -5306,9 +5452,6 @@ function createUiHtml(currentPath) {
     return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 <title>${createDocumentTitle(pageTitle)}</title>
 ${publicMetaForPath(currentPath)}
 <link rel="icon" href="/assets/sync.png" />
@@ -5317,7 +5460,7 @@ ${publicMetaForPath(currentPath)}
 body[data-theme="diamond"]{--bg:#061018;--bg-alt:#101827;--card:rgba(236,254,255,.075);--card-strong:rgba(236,254,255,.12);--bd:rgba(165,243,252,.22);--tx:#f8feff;--mt:rgba(236,254,255,.74);--ac:#67e8f9;--ac-soft:#d9f99d;background:radial-gradient(900px 520px at 18% 8%,rgba(103,232,249,.22),transparent 60%),radial-gradient(760px 460px at 90% 12%,rgba(217,249,157,.16),transparent 58%),linear-gradient(155deg,var(--bg),#07131d,var(--bg-alt))}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
-html,body{margin:0;color:var(--tx);font-family:"Readex Pro","Segoe UI","Inter",sans-serif;background:radial-gradient(1200px 760px at 105% -10%,rgba(99,102,241,.26),transparent 58%),radial-gradient(1100px 680px at -8% 112%,rgba(34,197,94,.10),transparent 62%),linear-gradient(160deg,var(--bg),#09090e,var(--bg-alt))}
+html,body{margin:0;color:var(--tx);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;background:radial-gradient(1200px 760px at 105% -10%,rgba(99,102,241,.26),transparent 58%),radial-gradient(1100px 680px at -8% 112%,rgba(34,197,94,.10),transparent 62%),linear-gradient(160deg,var(--bg),#09090e,var(--bg-alt))}
  .layout{display:block;min-height:100vh}
 .sidebar{padding:20px 14px;border-right:1px solid rgba(255,255,255,.14);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));backdrop-filter:blur(22px);position:relative;overflow:hidden}
 .sidebar:before{content:'';position:absolute;inset:-2px;background:url(/assets/hero.svg) center/cover no-repeat;opacity:.22;filter:saturate(1.1);pointer-events:none}
@@ -5586,7 +5729,7 @@ details.acc .acc-body{padding:12px 12px;border-top:1px solid rgba(255,255,255,.1
  --ac:#2563eb;--ac-soft:#38bdf8;--ok:#57f287;--er:#ed4245;--warn:#fee75c;
  --shadow:0 20px 60px rgba(0,0,0,.45);--shadow-soft:0 14px 40px rgba(0,0,0,.35);
 }
-html,body{font-family:"Inter","Readex Pro","Segoe UI",system-ui,-apple-system,sans-serif}
+html,body{font-family:"Segoe UI",system-ui,-apple-system,sans-serif}
   body{
    background:
     radial-gradient(1200px 700px at 100% 0%,rgba(37,99,235,.14),transparent 56%),
@@ -5791,7 +5934,6 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
  .topnav{position:relative}
   .topnav-btn{display:inline-flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-width:190px;border-radius:18px;padding:11px 14px}
   #topNav .topnav-btn{min-width:220px}
-  #themeNav .topnav-btn{min-width:160px}
  .topnav-btn .chev{opacity:.78;transition:transform .18s ease}
  .topnav.open .topnav-btn .chev{transform:rotate(180deg)}
   .topnav-menu{
@@ -5803,7 +5945,6 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
   transition:opacity .16s ease,transform .18s ease
  }
  .topnav.open .topnav-menu{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
-  #themeNav .topnav-menu{min-width:190px}
   .topnav-group{display:grid;gap:7px;padding:6px 0}
   .topnav-group + .topnav-group{border-top:1px solid var(--solid-border);margin-top:6px;padding-top:12px}
   .topnav-group-title{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--mt);font-weight:850;padding:0 4px 2px}
@@ -6210,7 +6351,7 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
     --mt:var(--lumen-muted);
     --bd:var(--lumen-border);
   }
-  html,body{font-family:Inter,Geist,"Plus Jakarta Sans","Segoe UI",system-ui,sans-serif!important;color:var(--lumen-text)!important}
+  html,body{font-family:"Segoe UI",system-ui,-apple-system,sans-serif!important;color:var(--lumen-text)!important}
   body[data-theme],body:not([data-theme]){
     background:
       radial-gradient(900px 540px at 24% -10%,rgba(59,130,246,.28),transparent 62%),
@@ -6284,10 +6425,11 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
   @media(max-width:1100px){.lumen-analytics{grid-template-columns:1fr}.layout{grid-template-columns:1fr!important}.app-sidebar{height:auto!important;position:relative!important}.main{padding:20px!important}}
   @media(max-width:720px){.main{padding:14px!important}.topbar{top:8px!important;align-items:flex-start!important}.topbar-right{width:100%!important}.stat-strip{grid-template-columns:1fr!important}.lumen-card-head{display:grid}.card,.page-hero{padding:16px!important}}
   @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+  ${getCloudflareDashboardCss()}
  </style></head>
 <body>
  <div id="auth" class="auth"><div class="auth-card"><h3>Dashboard Login</h3><div class="muted" style="margin-bottom:10px">Sign in with Discord to continue.</div><a id="authDiscord" class="btn" href="/login" style="display:block;text-align:center;text-decoration:none">Sign in with Discord</a><div class="muted" style="margin:12px 0 6px">or use a token</div><label>Token</label><input id="authToken" type="password" /><div class="row" style="margin-top:10px"><button id="authLogin" class="btn">Login</button></div><div id="authMsg" class="notice danger"></div></div></div>
- <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">${pageDescriptionForPath(currentPath)}</div></div></div><div class="topbar-right"><a class="btn-soft server-icon-btn" href="/dashboard" title="Servers" aria-label="Servers"><span class="btn-icon">${dashboardIcon('servers')}</span></a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu"><div class="topnav-group"><div class="topnav-group-title">General</div>${topNavItem('/overview','Home','General','Snapshot and quick actions')}${topNavItem('/settings','Settings','General','Core config and routing')}${topNavItem('/availability','Availability','General','Queue status and overrides')}${topNavItem('/tutorials','Tutorials','General','Guides and walkthroughs')}</div><div class="topnav-group"><div class="topnav-group-title">Tickets</div>${topNavItem('/tickets','Tickets','Tickets','Active queue management')}${topNavItem('/transcripts','Transcripts','Tickets','Saved conversation history')}${topNavItem('/commands/ticket-types','Ticket Types','Tickets','Flow design and coverage')}${topNavItem('/panels','Panels','Tickets','Panel design and publishing')}${topNavItem('/commands/tag','Tags','Tickets','Reusable staff replies')}</div><div class="topnav-group"><div class="topnav-group-title">Tools</div>${topNavItem('/commands/feedback','Feedback','Content','Feedback destination and flow')}${topNavItem('/statistics','Statistics','Content','Trends and activity')}${topNavItem('/embed-editor','Branding','Custom','White-label identity')}${topNavItem('/documentation','Documentation','Content','Reference notes and placeholders')}</div><div class="topnav-group"><div class="topnav-group-title">Plans</div>${topNavItem('/pricing','Pricing','Billing','Plans and access')}${topNavItem('/upgrade','Upgrade','Billing','Upgrade options and sales')}</div></div></div><div id="themeNav" class="topnav"><button id="themeBtn" class="btn-soft topnav-btn" type="button"><span id="themeLabel">Theme</span><span class="chev">v</span></button><div class="topnav-menu" role="menu"><button type="button" class="topnav-item" data-theme-item="dark">Dark <span class="tag">Default</span></button><button type="button" class="topnav-item" data-theme-item="light">Light <span class="tag">Clean</span></button><button type="button" class="topnav-item" data-theme-item="ocean">Ocean <span class="tag">Cool</span></button><button type="button" class="topnav-item" data-theme-item="sunset">Sunset <span class="tag">Bold</span></button><button type="button" class="topnav-item" data-theme-item="diamond">Diamond <span class="tag">Custom</span></button><button type="button" class="topnav-item theme-secret" data-theme-item="hacker">Hacker <span class="tag">Secret</span></button></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px"><span class="btn-icon">${dashboardIcon('restart')}</span><span>Refresh</span></button></div></div><div id="announcementBar"></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
+ <div class="layout"><main class="main"><div class="topbar"><div class="topbar-left"><a class="brand-mini" href="/" title="Landing page"><img src="/assets/sync.png" alt="Tickets Dashboard" /></a><div class="titles"><h2 id="pageTitle" class="title">${pageTitle}</h2><div class="muted" id="pageHint">${pageDescriptionForPath(currentPath)}</div></div></div><div class="topbar-right"><a class="btn-soft server-icon-btn" href="/dashboard" title="Servers" aria-label="Servers"><span class="btn-icon">${dashboardIcon('servers')}</span></a><div id="topNav" class="topnav"><button id="topNavBtn" class="btn-soft topnav-btn" type="button"><span id="topNavLabel">Navigate</span><span class="chev">v</span></button><div id="topNavMenu" class="topnav-menu" role="menu"><div class="topnav-group"><div class="topnav-group-title">General</div>${topNavItem('/overview','Home','General','Snapshot and quick actions')}${topNavItem('/settings','Settings','General','Core config and routing')}${topNavItem('/availability','Availability','General','Queue status and overrides')}${topNavItem('/tutorials','Tutorials','General','Guides and walkthroughs')}</div><div class="topnav-group"><div class="topnav-group-title">Tickets</div>${topNavItem('/tickets','Tickets','Tickets','Active queue management')}${topNavItem('/transcripts','Transcripts','Tickets','Saved conversation history')}${topNavItem('/commands/ticket-types','Ticket Types','Tickets','Flow design and coverage')}${topNavItem('/panels','Panels','Tickets','Panel design and publishing')}${topNavItem('/commands/tag','Tags','Tickets','Reusable staff replies')}</div><div class="topnav-group"><div class="topnav-group-title">Tools</div>${topNavItem('/commands/feedback','Feedback','Content','Feedback destination and flow')}${topNavItem('/statistics','Statistics','Content','Trends and activity')}${topNavItem('/embed-editor','Branding','Custom','White-label identity')}${topNavItem('/documentation','Documentation','Content','Reference notes and placeholders')}</div><div class="topnav-group"><div class="topnav-group-title">Plans</div>${topNavItem('/pricing','Pricing','Billing','Plans and access')}${topNavItem('/upgrade','Upgrade','Billing','Upgrade options and sales')}</div></div></div><button id="refreshStateBtn" class="btn" style="padding:10px 16px"><span class="btn-icon">${dashboardIcon('restart')}</span><span>Refresh</span></button></div></div><div id="announcementBar"></div><div id="notice" class="notice"></div><section id="app"></section></main></div>
 <script>${pricingLocalizationScript()}</script>
 <script>
  let currentPath=${JSON.stringify(currentPath)},tokenKey='dashboard_token_ui',defaultEmbedTemplates=${JSON.stringify(DEFAULT_EMBED_TEMPLATES)};
@@ -6297,11 +6439,8 @@ const app=document.getElementById('app'),notice=document.getElementById('notice'
  const ensureHeaderActions=()=>{const right=document.querySelector('.topbar-right');if(!right||document.querySelector('.status-pill'))return;const status=document.createElement('span');status.className='status-pill';status.innerHTML='<span class="status-dot"></span>Online';const invite=document.createElement('a');invite.className='btn invite-action';invite.href='/dashboard';invite.title='Invite Bot';invite.innerHTML='<span class="btn-icon">${dashboardIcon('servers')}</span><span>Invite Bot</span>';right.insertBefore(invite,right.firstChild);right.insertBefore(status,invite)};
  ensureHeaderActions();
  const themeKey='dash_theme';
- const hackerUnlockKey='dash_hacker_unlocked';
- const isHackerUnlocked=()=>{try{return localStorage.getItem(hackerUnlockKey)==='true'}catch{return false}};
-  const inferTheme=()=>{try{const saved=String(localStorage.getItem(themeKey)||'dark').toLowerCase();if(saved==='hacker'&&!isHackerUnlocked())return 'dark';return ['dark','light','ocean','sunset','hacker','diamond'].includes(saved)?saved:'dark'}catch{return 'dark'}};
-  document.body.dataset.theme=inferTheme();
-  document.body.dataset.hackerUnlocked=isHackerUnlocked()?'true':'false';
+ const forceCloudflareTheme=()=>{try{localStorage.setItem(themeKey,'cloudflare')}catch{}document.body.dataset.theme='cloudflare';document.body.dataset.hackerUnlocked='false'};
+ forceCloudflareTheme();
   let state=null;
   let ui=(()=>{try{const raw=sessionStorage.getItem('dash_ui');const parsed=raw?JSON.parse(raw):{};return parsed&&typeof parsed==='object'?parsed:{};}catch{return {}}})();
   let bootPromise=null;
@@ -6788,7 +6927,7 @@ function renderDocs(){
  const customDocs=docsSections.length?('<div class="card" style="grid-column:1/-1"><h3>Guide Sections</h3><div class="grid" style="margin-top:10px">'+docsSections.map(section=>'<div class="item" style="display:block"><strong>'+esc(section.title)+'</strong><div class="muted" style="margin-top:8px;white-space:pre-wrap">'+esc(section.body)+'</div></div>').join('')+'</div></div>'):'';
  const operationsDocs=canSeeOps?(
    '<div class="card"><h3>Dashboard Operations</h3><div class="list">'+
-    '<div class="item"><div><strong>Themes and menus</strong><div class="muted">Use the top theme picker for Dark, Light, Ocean, Sunset, and Diamond. Navigation is grouped into General, Tickets, Tools, and Plans.</div></div></div>'+
+    '<div class="item"><div><strong>Theme and menus</strong><div class="muted">The dashboard now uses one Cloudflare-inspired interface across every page. Navigation is grouped into General, Tickets, Tools, and Plans.</div></div></div>'+
     '<div class="item"><div><strong>Staff permissions</strong><div class="muted">Configure role families with STAFF_EXECUTIVE_ROLE_IDS, STAFF_SUPPORT_ROLE_IDS, STAFF_QA_ROLE_IDS, STAFF_COMMUNITY_ROLE_IDS, or SENIOR_STAFF_ROLE_IDS. Comma or space separated role IDs are supported.</div></div></div>'+
     '<div class="item"><div><strong>Online transcripts</strong><div class="muted">Saved transcripts open through /t/&lt;token&gt; when a public token exists. Downloads add ?download=1.</div></div></div>'+
     '<div class="item"><div><strong>Discord OAuth redirect</strong><div class="muted">Add this exact URI to the Discord Developer Portal for transcript login: <code>'+esc(oauthRedirect)+'</code>. If Discord says invalid redirect_uri, update PUBLIC_BASE_URL to your public HTTPS origin and make this URI match exactly.</div></div></div>'+
@@ -6929,10 +7068,6 @@ function wire(){
   const topNavLabel=document.getElementById('topNavLabel');
   const topNavMenu=document.getElementById('topNavMenu');
   const topNavItems=Array.from(document.querySelectorAll('[data-topnav-item]'));
-  const themeNav=document.getElementById('themeNav');
-  const themeBtn=document.getElementById('themeBtn');
-  const themeLabel=document.getElementById('themeLabel');
-  const themeItems=Array.from(document.querySelectorAll('[data-theme-item]'));
     const menuBtn=document.getElementById('menuBtn');
     const menuOverlay=document.getElementById('menuOverlay');
     const closeMenu=()=>{try{document.body.classList.remove('menu-open')}catch{}};
@@ -6942,15 +7077,7 @@ function wire(){
     const pageDescForPath=(p)=>({ '/overview':'A cleaner snapshot of ticket activity, queue health, and the most common next actions.','/settings':'Core server configuration, routing, and system behavior in one place.','/availability':'Adjust queue expectations per ticket type without digging through commands.','/tutorials':'Guides, walkthroughs, and internal onboarding material for your staff.','/commands/ticket-types':'Shape each ticket flow, assign support coverage, and keep categories tidy.','/panels':'Design, save, and publish channel-specific ticket panels.','/commands/tag':'Store reusable answers and keep repeat support responses consistent.','/tickets':'Review active conversations, add notes, and handle escalations quickly.','/transcripts':'Browse saved transcripts and archive history without leaving the dashboard.','/commands/feedback':'Control where feedback lands and how the flow is presented.','/statistics':'Track recent performance, close reasons, and staff activity trends.','/embed-editor':'Customize server branding and reusable bot message templates.','/documentation':'Reference placeholders, templates, and dashboard usage notes.'}[p]||'Manage this part of the dashboard with a simpler, more focused layout.');
      const groupForPath=(p)=>{if(p==='/overview'||p==='/settings'||p==='/availability'||p==='/tutorials')return 'general';if(p==='/commands/ticket-types'||p==='/commands/tag'||p==='/tickets'||p==='/transcripts')return 'tickets';return 'content'};
      const allowedPages=()=>{const access=(state&&state.access)||{};const plan=(state&&state.aiAccess)||{};const set=new Set(['/documentation','/tutorials','/pricing','/upgrade','/privacy','/terms']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/panels','/commands/tag','/tickets','/transcripts','/commands/feedback','/pricing','/upgrade'].forEach(p=>set.add(p));if(plan.isPlusOrHigher)set.add('/statistics');if(plan.isCustom)set.add('/embed-editor');return set}if(access.isManager||access.isStaff||access.canManageSettings||access.canViewTickets)set.add('/overview');if(access.canManageTicketTypes){set.add('/settings');set.add('/commands/ticket-types');set.add('/panels');if(plan.isCustom)set.add('/embed-editor')}if(plan.isPlusOrHigher&&access.canManageTicketTypes)set.add('/statistics');if(access.canManageAvailability)set.add('/availability');if(access.canViewTickets||access.canManageEscalations)set.add('/tickets');if(access.canViewTranscripts)set.add('/transcripts');return set};
-     let darkSecretCount=0;
-     const normaliseTheme=(t)=>{const v=String(t||'').trim().toLowerCase();if(v==='hacker'&&!isHackerUnlocked())return 'dark';return ['dark','light','ocean','sunset','diamond','hacker'].includes(v)?v:'dark'};
-     const syncThemeUi=()=>{const cur=normaliseTheme(document.body.dataset.theme);const labels={dark:'Dark',light:'Light',ocean:'Ocean',sunset:'Sunset',diamond:'Diamond',hacker:'Hacker'};if(themeLabel)themeLabel.textContent='Theme: '+(labels[cur]||'Dark');themeItems.forEach(btn=>{const v=btn.getAttribute('data-theme-item')||'';btn.classList.toggle('active',v===cur)})};
-     const applyTheme=(t)=>{document.body.dataset.theme=normaliseTheme(t);syncThemeUi()};
-     const setTheme=(t)=>{const next=normaliseTheme(t);try{localStorage.setItem(themeKey,next)}catch{}applyTheme(next)};
-     const registerDarkSecret=()=>false;
-     applyTheme(document.body.dataset.theme||'dark');
-     if(themeNav&&themeBtn){themeBtn.onclick=(ev)=>{ev.stopPropagation();const next=!themeNav.classList.contains('open');closePickers();if(next)themeNav.classList.add('open');else themeNav.classList.remove('open')}};
-     themeItems.forEach(btn=>{btn.onclick=()=>{const pick=btn.getAttribute('data-theme-item')||'';if(pick==='dark'){darkSecretCount+=1;if(darkSecretCount>=7){try{localStorage.setItem(hackerUnlockKey,'true')}catch{}document.body.dataset.hackerUnlocked='true'}}else{darkSecretCount=0}setTheme(pick);closePickers()}});
+     forceCloudflareTheme();
      const closeTopNav=()=>{if(topNav)topNav.classList.remove('open')};
    const setTopNavValue=(p)=>{const next=String(p||'');if(topNav)topNav.dataset.value=next;if(topNavLabel)topNavLabel.textContent=navTitleForPath(next);topNavItems.forEach(b=>{const v=b.getAttribute('data-value')||'';b.classList.toggle('active',v===next)})};
    const syncNav=()=>{document.querySelectorAll('.nav-item').forEach(a=>{const p=a.getAttribute('data-nav')||a.getAttribute('href')||'';a.classList.toggle('active',p===currentPath)})};
@@ -7145,7 +7272,7 @@ function renderOverview(){
   : '';
 
  return '<div class="page-shell">'+
-  '<div class="card page-hero welcome"><div class="page-hero-head"><div><div class="page-kicker">Lumen Command Center</div><h3>'+greet+', welcome back.</h3><p>A clean operations view for tickets, automation, analytics, and server health. Jump into the module that needs attention without losing context.</p><div class="row" style="grid-template-columns:auto auto;justify-content:start;margin-top:18px"><button type="button" class="btn qa" data-go="/tickets" style="width:auto">Open Queue</button><button type="button" class="btn-soft qa" data-go="/commands/ticket-types" style="width:auto">Manage Modules</button></div></div><div class="page-pill-row">'+pill(totals.activeTickets||0)+' '+pill(limited)+' '+pill(reduced)+'</div></div></div>'+
+  '<div class="card page-hero welcome"><div class="page-hero-head"><div><div class="page-kicker">eazyDesk Command Center</div><h3>'+greet+', welcome back.</h3><p>A clean operations view for tickets, automation, analytics, and server health. Jump into the module that needs attention without losing context.</p><div class="row" style="grid-template-columns:auto auto;justify-content:start;margin-top:18px"><button type="button" class="btn qa" data-go="/tickets" style="width:auto">Open Queue</button><button type="button" class="btn-soft qa" data-go="/commands/ticket-types" style="width:auto">Manage Modules</button></div></div><div class="page-pill-row">'+pill(totals.activeTickets||0)+' '+pill(limited)+' '+pill(reduced)+'</div></div></div>'+
   '<div class="stat-strip">'+
    '<div class="stat-tile"><div class="muted">Active tickets</div><strong>'+Number(totals.activeTickets||0)+'</strong></div>'+
    '<div class="stat-tile"><div class="muted">Closed (14d)</div><strong>'+Number(totals.totalClosed||0)+'</strong></div>'+
