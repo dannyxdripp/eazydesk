@@ -22,7 +22,7 @@ const ASSETS_DIR = path.join(__dirname, 'assets');
 const COPYRIGHT_NAME = 'Sync Development';
 let cachedHomeCss = { mtimeMs: 0, value: '' };
 let cachedBaseDashboardCss = '';
-let cachedCloudflareDashboardCss = '';
+let cachedUnifiedDashboardCss = '';
 
 const transcriptOauthStates = new Map();
 const transcriptSessions = new Map();
@@ -596,160 +596,160 @@ function getHomeCss() {
     }
 }
 
-function getCloudflareDashboardCss() {
-    if (cachedCloudflareDashboardCss) return cachedCloudflareDashboardCss;
-    cachedCloudflareDashboardCss = `
-    /* Cloudflare-inspired single theme override. Keep this last so older theme blocks cannot diverge. */
+function getUnifiedDashboardCss() {
+    if (cachedUnifiedDashboardCss) return cachedUnifiedDashboardCss;
+    cachedUnifiedDashboardCss = `
+    /* Single site theme override. Keep this last so older theme blocks cannot diverge. */
     :root,body,body[data-theme],body:not([data-theme]){
-      color-scheme:light;
-      --cf-orange:#f38020;
-      --cf-gold:#faae40;
-      --cf-ink:#1d1d1f;
-      --cf-graphite:#404041;
-      --cf-bg:#f7f7f4;
-      --cf-bg-2:#fffaf4;
-      --cf-card:#ffffff;
-      --cf-card-2:#fff6ea;
-      --cf-line:rgba(64,64,65,.14);
-      --cf-line-strong:rgba(243,128,32,.32);
-      --cf-text:#1d1d1f;
-      --cf-muted:rgba(29,29,31,.68);
-      --cf-soft:rgba(29,29,31,.50);
-      --cf-success:#168a4a;
-      --cf-warning:#b86b00;
-      --cf-danger:#b42318;
-      --bg:var(--cf-bg)!important;
-      --bg2:var(--cf-bg-2)!important;
-      --bg-alt:var(--cf-bg-2)!important;
-      --panel:var(--cf-card)!important;
-      --card:var(--cf-card)!important;
-      --card-strong:var(--cf-card-2)!important;
-      --tx:var(--cf-text)!important;
-      --mt:var(--cf-muted)!important;
-      --mut:var(--cf-muted)!important;
-      --bd:var(--cf-line)!important;
-      --acc:var(--cf-orange)!important;
-      --acc2:var(--cf-gold)!important;
-      --ac:var(--cf-orange)!important;
-      --ac-soft:var(--cf-gold)!important;
-      --ok:var(--cf-success)!important;
-      --er:var(--cf-danger)!important;
-      --dash-bg:var(--cf-bg)!important;
-      --dash-bg-2:var(--cf-bg-2)!important;
-      --dash-panel:var(--cf-card)!important;
-      --dash-panel-2:var(--cf-card)!important;
-      --dash-panel-3:var(--cf-card-2)!important;
-      --dash-border:var(--cf-line)!important;
-      --dash-border-strong:var(--cf-line-strong)!important;
-      --dash-purple:var(--cf-orange)!important;
-      --dash-blue:var(--cf-orange)!important;
-      --dash-cyan:var(--cf-gold)!important;
-      --dash-text:var(--cf-text)!important;
-      --dash-muted:var(--cf-muted)!important;
-      --dash-muted-2:var(--cf-soft)!important;
-      --lumen-blue:var(--cf-orange)!important;
-      --lumen-sky:var(--cf-gold)!important;
-      --lumen-cyan:var(--cf-gold)!important;
-      --lumen-navy:var(--cf-bg)!important;
-      --lumen-midnight:var(--cf-bg-2)!important;
-      --lumen-card:var(--cf-card)!important;
-      --lumen-card-2:var(--cf-card-2)!important;
-      --lumen-border:var(--cf-line)!important;
-      --lumen-border-hot:var(--cf-line-strong)!important;
-      --lumen-text:var(--cf-text)!important;
-      --lumen-muted:var(--cf-muted)!important;
-      --lumen-soft:var(--cf-soft)!important;
-      --shadow:0 14px 34px rgba(64,64,65,.10)!important;
-      --cardGlow:0 1px 2px rgba(64,64,65,.06),0 18px 42px rgba(64,64,65,.10)!important;
-      --cardOutline:var(--cf-line-strong)!important;
+      color-scheme:dark;
+      --site-blue:#3B82F6;
+      --site-sky:#60A5FA;
+      --site-cyan:#6DD5FA;
+      --site-navy:#07111F;
+      --site-midnight:#0B1629;
+      --site-card:rgba(12,24,44,.78);
+      --site-card-2:rgba(18,32,56,.86);
+      --site-line:rgba(148,190,255,.14);
+      --site-line-strong:rgba(96,165,250,.36);
+      --site-text:#F8FBFF;
+      --site-muted:rgba(226,238,255,.70);
+      --site-soft:rgba(226,238,255,.54);
+      --site-success:#57F287;
+      --site-warning:#FBBF24;
+      --site-danger:#EF4444;
+      --bg:var(--site-navy)!important;
+      --bg2:var(--site-midnight)!important;
+      --bg-alt:var(--site-midnight)!important;
+      --panel:var(--site-card)!important;
+      --card:var(--site-card)!important;
+      --card-strong:var(--site-card-2)!important;
+      --tx:var(--site-text)!important;
+      --mt:var(--site-muted)!important;
+      --mut:var(--site-muted)!important;
+      --bd:var(--site-line)!important;
+      --acc:var(--site-blue)!important;
+      --acc2:var(--site-cyan)!important;
+      --ac:var(--site-blue)!important;
+      --ac-soft:var(--site-cyan)!important;
+      --ok:var(--site-success)!important;
+      --er:var(--site-danger)!important;
+      --dash-bg:var(--site-navy)!important;
+      --dash-bg-2:var(--site-midnight)!important;
+      --dash-panel:var(--site-card)!important;
+      --dash-panel-2:var(--site-card)!important;
+      --dash-panel-3:var(--site-card-2)!important;
+      --dash-border:var(--site-line)!important;
+      --dash-border-strong:var(--site-line-strong)!important;
+      --dash-purple:var(--site-blue)!important;
+      --dash-blue:var(--site-blue)!important;
+      --dash-cyan:var(--site-cyan)!important;
+      --dash-text:var(--site-text)!important;
+      --dash-muted:var(--site-muted)!important;
+      --dash-muted-2:var(--site-soft)!important;
+      --lumen-blue:var(--site-blue)!important;
+      --lumen-sky:var(--site-sky)!important;
+      --lumen-cyan:var(--site-cyan)!important;
+      --lumen-navy:var(--site-navy)!important;
+      --lumen-midnight:var(--site-midnight)!important;
+      --lumen-card:var(--site-card)!important;
+      --lumen-card-2:var(--site-card-2)!important;
+      --lumen-border:var(--site-line)!important;
+      --lumen-border-hot:var(--site-line-strong)!important;
+      --lumen-text:var(--site-text)!important;
+      --lumen-muted:var(--site-muted)!important;
+      --lumen-soft:var(--site-soft)!important;
+      --shadow:0 18px 44px rgba(2,8,23,.34)!important;
+      --cardGlow:0 0 0 1px rgba(96,165,250,.10) inset,0 18px 44px rgba(2,8,23,.34)!important;
+      --cardOutline:var(--site-line-strong)!important;
       background:
-        radial-gradient(780px 360px at 16% -8%,rgba(250,174,64,.34),transparent 62%),
-        radial-gradient(700px 360px at 92% 2%,rgba(243,128,32,.20),transparent 58%),
-        linear-gradient(180deg,var(--cf-bg-2),var(--cf-bg))!important;
-      color:var(--cf-text)!important;
+        radial-gradient(900px 440px at 18% -8%,rgba(59,130,246,.30),transparent 64%),
+        radial-gradient(760px 380px at 92% 2%,rgba(109,213,250,.16),transparent 60%),
+        linear-gradient(180deg,var(--site-navy),var(--site-midnight))!important;
+      color:var(--site-text)!important;
       font-family:"Segoe UI",system-ui,-apple-system,sans-serif!important;
     }
-    body:before,body:after,.sidebar:before,.welcome:before,.page-hero:before,.stat-tile:before,.ai-panel:before,.module-option:before{display:none!important;content:none!important;animation:none!important}
-    .particles,.bg .grid,.visual-platform{display:none!important}
+    body:before,.sidebar:before,.welcome:before,.page-hero:before,.stat-tile:before,.ai-panel:before,.module-option:before{display:none!important;content:none!important;animation:none!important}
+    body:after{content:""!important;position:fixed!important;inset:0!important;z-index:-1!important;pointer-events:none!important;background-image:linear-gradient(to right,rgba(148,190,255,.045) 1px,transparent 1px),linear-gradient(to bottom,rgba(148,190,255,.045) 1px,transparent 1px)!important;background-size:74px 74px!important;mask-image:radial-gradient(70% 56% at 50% 18%,rgba(0,0,0,.62),transparent 76%)!important;opacity:.34!important}
+    .particles,.visual-platform{display:none!important}
     .top,.topbar,.sidebar,.app-sidebar,.card,.item,.pricing-card,.pricing-preview,.preview-frame,.quick-card,.feature,.shot,.auth-card,.custom-select .cs-menu,.cs-menu,.ms-menu,.topnav-menu,.theme-menu{
-      background:var(--cf-card)!important;
-      border:1px solid var(--cf-line)!important;
-      box-shadow:0 1px 2px rgba(64,64,65,.06),0 18px 40px rgba(64,64,65,.08)!important;
-      backdrop-filter:none!important;
+      background:linear-gradient(180deg,rgba(18,32,56,.84),rgba(10,22,40,.72))!important;
+      border:1px solid var(--site-line)!important;
+      box-shadow:0 0 0 1px rgba(255,255,255,.025) inset,0 18px 44px rgba(2,8,23,.34)!important;
+      backdrop-filter:blur(16px)!important;
     }
     .top,.topbar{border-radius:16px!important;top:10px!important}
     .card:hover,.item:hover,.pricing-card:hover,.feature:hover,.quick-card:hover,.shot:hover{
       transform:none!important;
-      border-color:var(--cf-line-strong)!important;
-      background:var(--cf-card)!important;
+      border-color:var(--site-line-strong)!important;
+      background:linear-gradient(180deg,rgba(20,36,62,.90),rgba(11,24,43,.78))!important;
     }
     .title,.page-hero h1,.page-hero h2,.page-hero h3,.welcome h3,.hero h1,.accent,.stat-tile strong{
-      color:var(--cf-text)!important;
+      color:var(--site-text)!important;
       background:none!important;
       -webkit-text-fill-color:currentColor!important;
       text-shadow:none!important;
     }
-    .muted,.help,.list-meta,.nav-sub,.page-hero p,.brand-sub,.plan-note{color:var(--cf-muted)!important}
-    .pricing-kicker,.page-kicker,.module-editor-title,.quick-card span,.kicker,.side-section-title,.topnav-group-title{color:var(--cf-orange)!important}
+    .muted,.help,.list-meta,.nav-sub,.page-hero p,.brand-sub,.plan-note{color:var(--site-muted)!important}
+    .pricing-kicker,.page-kicker,.module-editor-title,.quick-card span,.kicker,.side-section-title,.topnav-group-title{color:var(--site-cyan)!important}
     .btn,.btn.primary,.btn.nav-accent,.invite-action{
       color:#fff!important;
-      background:linear-gradient(180deg,var(--cf-gold),var(--cf-orange))!important;
-      border:1px solid rgba(185,88,14,.38)!important;
-      box-shadow:0 8px 20px rgba(243,128,32,.20)!important;
+      background:linear-gradient(135deg,var(--site-blue),var(--site-cyan))!important;
+      border:1px solid rgba(96,165,250,.46)!important;
+      box-shadow:0 10px 26px rgba(59,130,246,.24)!important;
     }
-    .btn:hover,.btn.primary:hover,.btn.nav-accent:hover,.invite-action:hover{filter:brightness(.99)!important;transform:none!important;box-shadow:0 10px 22px rgba(243,128,32,.22)!important}
+    .btn:hover,.btn.primary:hover,.btn.nav-accent:hover,.invite-action:hover{filter:brightness(1.04)!important;transform:none!important;box-shadow:0 12px 30px rgba(59,130,246,.30)!important}
     .btn-soft,.btn.subtle,.topnav-btn,.server-icon-btn,.theme-item,.nav-link,.chip-btn{
-      color:var(--cf-text)!important;
-      background:#fff!important;
-      border:1px solid var(--cf-line)!important;
+      color:var(--site-text)!important;
+      background:rgba(255,255,255,.045)!important;
+      border:1px solid var(--site-line)!important;
       box-shadow:none!important;
     }
     .btn-soft:hover,.btn.subtle:hover,.topnav-btn:hover,.server-icon-btn:hover,.theme-item:hover,.theme-item.active,.nav-link:hover,.chip-btn:hover{
-      background:#fff6ea!important;
-      border-color:var(--cf-line-strong)!important;
+      background:rgba(96,165,250,.12)!important;
+      border-color:var(--site-line-strong)!important;
       transform:none!important;
     }
-    .btn-danger{background:#fff!important;color:var(--cf-danger)!important;border:1px solid rgba(180,35,24,.36)!important;box-shadow:none!important}
+    .btn-danger{background:rgba(239,68,68,.08)!important;color:#fecaca!important;border:1px solid rgba(239,68,68,.36)!important;box-shadow:none!important}
     input,select,textarea,.cs-trigger,.ms-trigger{
-      background:#fff!important;
-      border:1px solid rgba(64,64,65,.18)!important;
-      color:var(--cf-text)!important;
+      background:rgba(5,14,28,.78)!important;
+      border:1px solid rgba(148,190,255,.18)!important;
+      color:var(--site-text)!important;
       box-shadow:none!important;
     }
     input:focus,select:focus,textarea:focus,.cs-trigger:focus,.ms-trigger:focus{
-      border-color:var(--cf-orange)!important;
-      box-shadow:0 0 0 3px rgba(243,128,32,.16)!important;
+      border-color:var(--site-sky)!important;
+      box-shadow:0 0 0 3px rgba(96,165,250,.18)!important;
     }
     .pill,.role,.ms-chip,.tag,.plan-badge,.hero-stat,.status-pill{
-      color:var(--cf-text)!important;
-      background:#fff6ea!important;
-      border:1px solid rgba(243,128,32,.22)!important;
+      color:var(--site-text)!important;
+      background:rgba(96,165,250,.12)!important;
+      border:1px solid rgba(96,165,250,.22)!important;
       box-shadow:none!important;
     }
-    .side-link,.nav-item,.topnav-item,.cs-opt,.ms-item{color:var(--cf-text)!important;background:#fff!important;border-color:transparent!important}
+    .side-link,.nav-item,.topnav-item,.cs-opt,.ms-item{color:var(--site-text)!important;background:transparent!important;border-color:transparent!important}
     .side-link.active,.nav-item.active,.topnav-item.active,.cs-opt.active,.ms-item:hover,.topnav-item:hover,.cs-opt:hover{
-      background:#fff6ea!important;
-      border-color:var(--cf-line-strong)!important;
+      background:rgba(96,165,250,.12)!important;
+      border-color:var(--site-line-strong)!important;
       box-shadow:none!important;
     }
     .side-icon,.nav-kicker,.controller-icon,.sidebar-logo{
-      color:var(--cf-orange)!important;
-      background:#fff6ea!important;
-      border-color:rgba(243,128,32,.24)!important;
+      color:var(--site-cyan)!important;
+      background:rgba(96,165,250,.12)!important;
+      border-color:rgba(96,165,250,.24)!important;
       box-shadow:none!important;
     }
     .sidebar-logo img,.brand-mini img,.brand img,.visual-logo img{filter:none!important}
-    .dashboard-preview,.visual-logo{background:#fff!important;border-color:var(--cf-line)!important;box-shadow:0 18px 42px rgba(64,64,65,.10)!important}
-    .preview-top,.pricing-table th,.pricing-table td{border-color:var(--cf-line)!important}
-    .preview-line,.preview-ticket,.preview-metrics b,.preview-row{background:#f0f0ed!important;border-color:var(--cf-line)!important}
-    .status-dot{background:var(--cf-success)!important;box-shadow:none!important}
-    .err,.toast.toast-danger{background:#fff5f3!important;color:var(--cf-danger)!important;border-color:rgba(180,35,24,.26)!important}
-    .announcement-warning,.toast.toast-warn{background:#fff6ea!important;color:var(--cf-warning)!important;border-color:rgba(243,128,32,.28)!important}
-    .announcement-promotional,.toast.toast-ok{background:#f0fff6!important;color:var(--cf-success)!important;border-color:rgba(22,138,74,.24)!important}
+    .dashboard-preview,.visual-logo{background:rgba(10,22,40,.84)!important;border-color:var(--site-line)!important;box-shadow:0 18px 44px rgba(2,8,23,.34)!important}
+    .preview-top,.pricing-table th,.pricing-table td{border-color:var(--site-line)!important}
+    .preview-line,.preview-ticket,.preview-metrics b,.preview-row{background:rgba(96,165,250,.12)!important;border-color:var(--site-line)!important}
+    .status-dot{background:var(--site-success)!important;box-shadow:0 0 16px rgba(87,242,135,.24)!important}
+    .err,.toast.toast-danger{background:rgba(239,68,68,.10)!important;color:#fecaca!important;border-color:rgba(239,68,68,.28)!important}
+    .announcement-warning,.toast.toast-warn{background:rgba(251,191,36,.10)!important;color:#fde68a!important;border-color:rgba(251,191,36,.30)!important}
+    .announcement-promotional,.toast.toast-ok{background:rgba(87,242,135,.10)!important;color:#bbf7d0!important;border-color:rgba(87,242,135,.24)!important}
     .upgrade-word,.party-emoji,.theme-nav,.theme-secret{display:none!important}
     @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
     `;
-    return cachedCloudflareDashboardCss;
+    return cachedUnifiedDashboardCss;
 }
 
 function getDashboardEnabled() {
@@ -1001,10 +1001,10 @@ function createHomeHtml(options = {}) {
     (function(){
       try{
         var key='dash_theme';
-        localStorage.setItem(key,'cloudflare');
-        document.body.dataset.theme='cloudflare';
+        localStorage.setItem(key,'site');
+        document.body.dataset.theme='site';
       }catch(e){
-        document.body.dataset.theme='cloudflare';
+        document.body.dataset.theme='site';
       }
     })();
     (function(){
@@ -1210,7 +1210,7 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
     @keyframes partyFly{0%{transform:translateY(0) rotate(0deg);opacity:0}12%{opacity:.9}100%{transform:translateY(-78vh) rotate(320deg);opacity:0}}
     @media(max-width:900px){.top{position:relative;top:auto;margin:10px 12px 0;align-items:flex-start;flex-direction:column}.nav{justify-content:flex-start}.pricing-grid,.pricing-faq,.custom-bot-layout{grid-template-columns:1fr}.pricing-card.featured{transform:none}.preview-cards{grid-template-columns:1fr}.pricing-table table{min-width:0}.page-hero{padding:18px}.page-hero h1,.page-hero h2{font-size:32px}}
     .err{color:#fecaca;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.10);padding:10px 12px;border-radius:14px}
-    ${getCloudflareDashboardCss()}
+    ${getUnifiedDashboardCss()}
     `;
     const css = cachedBaseDashboardCss;
 
@@ -1236,8 +1236,8 @@ function baseDashboardPage({ title, body, script = '', ownerView = false, staffV
   <script>
     (function(){
       const key='dash_theme';
-      try{localStorage.setItem(key,'cloudflare')}catch{}
-      document.body.dataset.theme='cloudflare';
+      try{localStorage.setItem(key,'site')}catch{}
+      document.body.dataset.theme='site';
       document.body.dataset.hackerUnlocked='false';
     })();
   </script>
@@ -6425,7 +6425,7 @@ body[data-theme="light"] .nav-item.active{background:linear-gradient(140deg,rgba
   @media(max-width:1100px){.lumen-analytics{grid-template-columns:1fr}.layout{grid-template-columns:1fr!important}.app-sidebar{height:auto!important;position:relative!important}.main{padding:20px!important}}
   @media(max-width:720px){.main{padding:14px!important}.topbar{top:8px!important;align-items:flex-start!important}.topbar-right{width:100%!important}.stat-strip{grid-template-columns:1fr!important}.lumen-card-head{display:grid}.card,.page-hero{padding:16px!important}}
   @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
-  ${getCloudflareDashboardCss()}
+  ${getUnifiedDashboardCss()}
  </style></head>
 <body>
  <div id="auth" class="auth"><div class="auth-card"><h3>Dashboard Login</h3><div class="muted" style="margin-bottom:10px">Sign in with Discord to continue.</div><a id="authDiscord" class="btn" href="/login" style="display:block;text-align:center;text-decoration:none">Sign in with Discord</a><div class="muted" style="margin:12px 0 6px">or use a token</div><label>Token</label><input id="authToken" type="password" /><div class="row" style="margin-top:10px"><button id="authLogin" class="btn">Login</button></div><div id="authMsg" class="notice danger"></div></div></div>
@@ -6439,8 +6439,8 @@ const app=document.getElementById('app'),notice=document.getElementById('notice'
  const ensureHeaderActions=()=>{const right=document.querySelector('.topbar-right');if(!right||document.querySelector('.status-pill'))return;const status=document.createElement('span');status.className='status-pill';status.innerHTML='<span class="status-dot"></span>Online';const invite=document.createElement('a');invite.className='btn invite-action';invite.href='/dashboard';invite.title='Invite Bot';invite.innerHTML='<span class="btn-icon">${dashboardIcon('servers')}</span><span>Invite Bot</span>';right.insertBefore(invite,right.firstChild);right.insertBefore(status,invite)};
  ensureHeaderActions();
  const themeKey='dash_theme';
- const forceCloudflareTheme=()=>{try{localStorage.setItem(themeKey,'cloudflare')}catch{}document.body.dataset.theme='cloudflare';document.body.dataset.hackerUnlocked='false'};
- forceCloudflareTheme();
+ const forceSiteTheme=()=>{try{localStorage.setItem(themeKey,'site')}catch{}document.body.dataset.theme='site';document.body.dataset.hackerUnlocked='false'};
+ forceSiteTheme();
   let state=null;
   let ui=(()=>{try{const raw=sessionStorage.getItem('dash_ui');const parsed=raw?JSON.parse(raw):{};return parsed&&typeof parsed==='object'?parsed:{};}catch{return {}}})();
   let bootPromise=null;
@@ -6927,7 +6927,7 @@ function renderDocs(){
  const customDocs=docsSections.length?('<div class="card" style="grid-column:1/-1"><h3>Guide Sections</h3><div class="grid" style="margin-top:10px">'+docsSections.map(section=>'<div class="item" style="display:block"><strong>'+esc(section.title)+'</strong><div class="muted" style="margin-top:8px;white-space:pre-wrap">'+esc(section.body)+'</div></div>').join('')+'</div></div>'):'';
  const operationsDocs=canSeeOps?(
    '<div class="card"><h3>Dashboard Operations</h3><div class="list">'+
-    '<div class="item"><div><strong>Theme and menus</strong><div class="muted">The dashboard now uses one Cloudflare-inspired interface across every page. Navigation is grouped into General, Tickets, Tools, and Plans.</div></div></div>'+
+    '<div class="item"><div><strong>Theme and menus</strong><div class="muted">The dashboard now uses one site-matched interface across every page. Navigation is grouped into General, Tickets, Tools, and Plans.</div></div></div>'+
     '<div class="item"><div><strong>Staff permissions</strong><div class="muted">Configure role families with STAFF_EXECUTIVE_ROLE_IDS, STAFF_SUPPORT_ROLE_IDS, STAFF_QA_ROLE_IDS, STAFF_COMMUNITY_ROLE_IDS, or SENIOR_STAFF_ROLE_IDS. Comma or space separated role IDs are supported.</div></div></div>'+
     '<div class="item"><div><strong>Online transcripts</strong><div class="muted">Saved transcripts open through /t/&lt;token&gt; when a public token exists. Downloads add ?download=1.</div></div></div>'+
     '<div class="item"><div><strong>Discord OAuth redirect</strong><div class="muted">Add this exact URI to the Discord Developer Portal for transcript login: <code>'+esc(oauthRedirect)+'</code>. If Discord says invalid redirect_uri, update PUBLIC_BASE_URL to your public HTTPS origin and make this URI match exactly.</div></div></div>'+
@@ -7077,7 +7077,7 @@ function wire(){
     const pageDescForPath=(p)=>({ '/overview':'A cleaner snapshot of ticket activity, queue health, and the most common next actions.','/settings':'Core server configuration, routing, and system behavior in one place.','/availability':'Adjust queue expectations per ticket type without digging through commands.','/tutorials':'Guides, walkthroughs, and internal onboarding material for your staff.','/commands/ticket-types':'Shape each ticket flow, assign support coverage, and keep categories tidy.','/panels':'Design, save, and publish channel-specific ticket panels.','/commands/tag':'Store reusable answers and keep repeat support responses consistent.','/tickets':'Review active conversations, add notes, and handle escalations quickly.','/transcripts':'Browse saved transcripts and archive history without leaving the dashboard.','/commands/feedback':'Control where feedback lands and how the flow is presented.','/statistics':'Track recent performance, close reasons, and staff activity trends.','/embed-editor':'Customize server branding and reusable bot message templates.','/documentation':'Reference placeholders, templates, and dashboard usage notes.'}[p]||'Manage this part of the dashboard with a simpler, more focused layout.');
      const groupForPath=(p)=>{if(p==='/overview'||p==='/settings'||p==='/availability'||p==='/tutorials')return 'general';if(p==='/commands/ticket-types'||p==='/commands/tag'||p==='/tickets'||p==='/transcripts')return 'tickets';return 'content'};
      const allowedPages=()=>{const access=(state&&state.access)||{};const plan=(state&&state.aiAccess)||{};const set=new Set(['/documentation','/tutorials','/pricing','/upgrade','/privacy','/terms']);if(access.isOwner||access.canFullDashboard){['/overview','/settings','/availability','/commands/ticket-types','/panels','/commands/tag','/tickets','/transcripts','/commands/feedback','/pricing','/upgrade'].forEach(p=>set.add(p));if(plan.isPlusOrHigher)set.add('/statistics');if(plan.isCustom)set.add('/embed-editor');return set}if(access.isManager||access.isStaff||access.canManageSettings||access.canViewTickets)set.add('/overview');if(access.canManageTicketTypes){set.add('/settings');set.add('/commands/ticket-types');set.add('/panels');if(plan.isCustom)set.add('/embed-editor')}if(plan.isPlusOrHigher&&access.canManageTicketTypes)set.add('/statistics');if(access.canManageAvailability)set.add('/availability');if(access.canViewTickets||access.canManageEscalations)set.add('/tickets');if(access.canViewTranscripts)set.add('/transcripts');return set};
-     forceCloudflareTheme();
+     forceSiteTheme();
      const closeTopNav=()=>{if(topNav)topNav.classList.remove('open')};
    const setTopNavValue=(p)=>{const next=String(p||'');if(topNav)topNav.dataset.value=next;if(topNavLabel)topNavLabel.textContent=navTitleForPath(next);topNavItems.forEach(b=>{const v=b.getAttribute('data-value')||'';b.classList.toggle('active',v===next)})};
    const syncNav=()=>{document.querySelectorAll('.nav-item').forEach(a=>{const p=a.getAttribute('data-nav')||a.getAttribute('href')||'';a.classList.toggle('active',p===currentPath)})};
