@@ -638,11 +638,14 @@ async function runTicketInactivitySweep(client) {
 
         await updateTicketChannelMetadata(channel, ticket, now);
 
-        const inactiveFor12Hours = (now - getLastActivityMs(ticket)) >= TWELVE_HOURS_MS;
-        if (!inactiveFor12Hours) continue;
+        const inactivityBackoffMs = Math.max(TWELVE_HOURS_MS, Number(ticket.inactivityBackoffMs || TWELVE_HOURS_MS));
+        const snoozedUntilMs = Date.parse(ticket.inactivitySnoozedUntil || '');
+        if (!Number.isNaN(snoozedUntilMs) && now < snoozedUntilMs) continue;
+        const inactiveLongEnough = (now - getLastActivityMs(ticket)) >= inactivityBackoffMs;
+        if (!inactiveLongEnough) continue;
 
         const notifiedAtMs = Date.parse(ticket.inactivityNotifiedAt || '');
-        if (!Number.isNaN(notifiedAtMs) && (now - notifiedAtMs) < TWELVE_HOURS_MS) continue;
+        if (!Number.isNaN(notifiedAtMs) && (now - notifiedAtMs) < inactivityBackoffMs) continue;
 
         const activeRequest = ticketStore.getCloseRequest(ticket.channelId, activeStorage);
         if (activeRequest?.status === 'pending') continue;
@@ -663,20 +666,24 @@ async function runTicketInactivitySweep(client) {
         const mentions = [...new Set([ticket.createdBy, ticket.claimedBy].filter(Boolean))]
             .map(id => `<@${id}>`)
             .join(' ');
-
-        const base = buildMessage(
-                'Inactivity Notice',
-                [
-                    mentions || null,
-                    `This ticket has been inactive for 12+ hours.`,
-                    `A close request was created and will auto-close in **${AUTO_CLOSE_REQUEST_TIMER_MIN} minutes** unless the ticket opener acts.`
-                ].filter(Boolean).join('\n\n'),
-                0xFEE75C
-            );
+        const inactiveHours = Math.max(1, Math.floor(inactivityBackoffMs / (60 * 60 * 1000)));
 
         await channel.send({
-            ...base,
-            components: [...base.components, closeRequestCommand.buildCloseRequestButtons()]
+            flags: MessageFlags.IsComponentsV2,
+            components: [{
+                type: 17,
+                components: [{
+                    type: 10,
+                    content: [
+                        '# Ticket Inactivity',
+                        mentions || null,
+                        `> This ticket has been inactive for ${inactiveHours}+ hours.`,
+                        '',
+                        `> This ticket will automatically close ${closeRequestCommand.formatFutureTimestamp(AUTO_CLOSE_REQUEST_TIMER_MIN)}.`,
+                        '`To cancel request, please press an option below.`'
+                    ].filter(Boolean).join('\n')
+                }]
+            }, closeRequestCommand.buildCloseRequestButtons()]
         }).catch(() => null);
 
         closeRequestCommand.scheduleCloseRequestTimer(channel, AUTO_CLOSE_REQUEST_TIMER_MIN);
@@ -733,8 +740,16 @@ client.on('guildCreate', async guild => {
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 const commands = [];
+const hiddenCommandFiles = new Set([
+    'tags.js',
+    ...String(process.env.HIDDEN_COMMAND_FILES || '')
+        .split(',')
+        .map(file => file.trim())
+        .filter(Boolean)
+]);
 
 for (const file of commandFiles) {
+    if (hiddenCommandFiles.has(file)) continue;
     const filePath = path.join(commandsPath, file);
     const command = require(filePath);
     if (command.data && command.execute) {
@@ -915,15 +930,28 @@ async function handleRuntimeInteraction(interaction, runtimeClient = client) {
                 return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
             }
 
-            await interaction.update(buildMessage('Resolution Confirmed', 'The requester confirmed the issue is resolved. This ticket will now be closed.', 0x57F287));
-
-            await closeRequestCommand.closeTicketWithTranscript(
-                ticketChannel,
-                'The requester confirmed the issue is resolved.',
-                interaction.user.id
-            );
+            await interaction.deferUpdate().catch(() => null);
+            try {
+                await closeRequestCommand.closeTicketWithTranscript(
+                    ticketChannel,
+                    'The requester confirmed the issue is resolved.',
+                    interaction.user.id
+                );
+            } catch (error) {
+                const base = buildMessage('Close Failed', error.permissionMessage || 'Could not close this ticket. Check my channel permissions and try again.', 0xED4245);
+                await interaction.followUp({ ...base, flags: MessageFlags.Ephemeral | base.flags }).catch(() => null);
+            }
         } else if (interaction.customId === ticketHandler.AI_SUPPORT_BUTTON_ID) {
-            await interaction.update(buildMessage('AI Prompted Response', 'The requester indicated that support is still required. A representative will continue assisting shortly.', 0x5865F2));
+            const ticketChannel = interaction.channel;
+            const activeStorage = ticketStore.getActiveStorage();
+            const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
+            if (ticket) {
+                ticket.aiDisabledAt = new Date().toISOString();
+                ticket.aiHumanRequestedAt = ticket.aiDisabledAt;
+                ticket.aiHumanRequestedBy = interaction.user.id;
+                ticketStore.saveActiveStorage(activeStorage);
+            }
+            await interaction.update(buildMessage('Support Requested', 'AI replies are paused for this ticket. A support member will continue from here.', 0x5865F2));
         } else if (interaction.customId === tagCommand.TAG_CREATE_CONFIRM_ID || interaction.customId === tagCommand.TAG_CREATE_CANCEL_ID) {
             await tagCommand.handleButton(interaction);
         } else if (interaction.customId === closeRequestCommand.CLOSE_NOW_ID || interaction.customId === closeRequestCommand.CANCEL_ID) {

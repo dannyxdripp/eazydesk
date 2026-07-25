@@ -39,6 +39,11 @@ function formatDelay(minutes) {
     return Number.isInteger(hours) ? `${hours} hour(s)` : `${minutes} minute(s)`;
 }
 
+function formatFutureTimestamp(minutes, fromMs = Date.now(), style = 'R') {
+    const ms = Number(fromMs || Date.now()) + (Math.max(0, Number(minutes) || 0) * 60 * 1000);
+    return `<t:${Math.floor(ms / 1000)}:${style}>`;
+}
+
 function buildCloseRequestButtons() {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -144,6 +149,8 @@ module.exports = {
     CLOSE_NOW_ID,
     CANCEL_ID,
     buildCloseRequestButtons,
+    formatDelay,
+    formatFutureTimestamp,
     scheduleCloseRequestTimer,
     closeTicketWithTranscript,
     data: new SlashCommandBuilder()
@@ -192,7 +199,7 @@ module.exports = {
                 '**Close Request**',
                 `> ${interaction.user} has requested to close this ticket.`,
                 `> Reason: \`${safeReason}\``,
-                `> Auto-close in **${timerLabel}** unless denied.`,
+                `> Auto-close ${formatFutureTimestamp(timer)} unless denied.`,
                 `-# Accept or Deny using the options below.`
             ];
 
@@ -223,6 +230,30 @@ module.exports = {
 
         if (interaction.customId === CANCEL_ID) {
             ticketStore.removeCloseRequest(ticketChannel.id);
+            if (request.source === 'auto-notifier' && ticket) {
+                const activeStorage = ticketStore.getActiveStorage();
+                const storedTicket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
+                if (storedTicket) {
+                    const currentBackoff = Math.max(12 * 60 * 60 * 1000, Number(storedTicket.inactivityBackoffMs || 12 * 60 * 60 * 1000));
+                    storedTicket.inactivityBackoffMs = Math.min(currentBackoff * 2, 7 * 24 * 60 * 60 * 1000);
+                    storedTicket.inactivitySnoozedUntil = new Date(Date.now() + storedTicket.inactivityBackoffMs).toISOString();
+                    storedTicket.inactivityNotifiedAt = null;
+                    ticketStore.saveActiveStorage(activeStorage);
+                }
+                const response = {
+                    flags: MessageFlags.IsComponentsV2,
+                    components: [{
+                        type: 17,
+                        components: [{
+                            type: 10,
+                            content: 'Thank you for your response, your ticket will remain open.'
+                        }]
+                    }]
+                };
+                await interaction.update(response).catch(() => null);
+                setTimeout(() => interaction.message?.delete?.().catch(() => null), 2500).unref?.();
+                return;
+            }
             const base = buildEmbed(RESPONSES.cancelledTitle, RESPONSES.cancelledDescription, 0x57F287);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }

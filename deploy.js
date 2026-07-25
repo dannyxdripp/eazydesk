@@ -22,8 +22,16 @@ function deployLog(message) {
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+const hiddenCommandFiles = new Set([
+    'tags.js',
+    ...String(process.env.HIDDEN_COMMAND_FILES || '')
+        .split(',')
+        .map(file => file.trim())
+        .filter(Boolean)
+]);
 
 for (const file of commandFiles) {
+    if (hiddenCommandFiles.has(file)) continue;
     const filePath = path.join(commandsPath, file);
     const command = require(filePath);
     if (command.data) {

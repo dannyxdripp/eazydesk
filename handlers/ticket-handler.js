@@ -57,9 +57,13 @@ const PERMISSION_REPAIR_CACHE_TTL_MS = 60 * 1000;
 const permissionRepairCache = new Map();
 const AI_NOTICE_TTL_MS = 10 * 60 * 1000;
 const aiNoticeCache = new Map();
+const aiConversationDebounce = new Map();
 const AI_FETCH_TIMEOUT_MS = Math.max(3000, Number(process.env.AI_FETCH_TIMEOUT_MS || 15000));
 const AI_MODEL_COOLDOWN_MS = Math.max(60_000, Number(process.env.AI_MODEL_COOLDOWN_MS || 10 * 60 * 1000));
+const AI_CONVERSATION_REPLY_DELAY_MS = Math.max(1000, Number(process.env.AI_CONVERSATION_REPLY_DELAY_MS || 15_000));
+const AI_KEY_LIMIT_PER_MINUTE = Math.max(1, Number(process.env.AI_KEY_LIMIT_PER_MINUTE || 5));
 const aiModelFailureCache = new Map();
+const aiKeyUsage = new Map();
 const AI_SUPPORT_AGENT_NAMES = [
     'Nova',
     'Astra',
@@ -668,6 +672,18 @@ function isIssueSolvedIntent(value) {
         /^(thanks|thank you|ty|cheers|perfect|great|awesome|nice),?\s*(it\s+)?(worked|works|fixed|solved|resolved)\b/.test(text);
 }
 
+function isHumanSupportIntent(value) {
+    const text = normalizeIntentText(value);
+    if (!text) return false;
+    return /\b(i\s+want|i\s+need|can\s+i\s+get|give\s+me|bring\s+in|talk\s+to|speak\s+to)\s+(a\s+)?(human|person|staff|support|agent|representative|real\s+person)\b/.test(text) ||
+        /\b(no\s+ai|stop\s+ai|disable\s+ai|human\s+please|staff\s+please|real\s+support|real\s+agent)\b/.test(text);
+}
+
+function ticketTypeAllowsAi(ticketType, guildId, storage = null) {
+    const type = ticketStore.findTicketType(ticketType, guildId, storage);
+    return type?.aiEnabled !== false && type?.disableAi !== true && type?.aiDisabled !== true;
+}
+
 function randomAiSupportAgentName() {
     const configured = String(process.env.AI_SUPPORT_AGENT_NAMES || '')
         .split(',')
@@ -680,7 +696,7 @@ function randomAiSupportAgentName() {
 function buildAiSupportIntroMessage(agentName = randomAiSupportAgentName()) {
     const container = new ContainerBuilder()
         .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent('## <:userrobot:1487431675570032681> AI Support Agent')
+            new TextDisplayBuilder().setContent('## AI Support Agent')
         )
         .addSeparatorComponents(
             new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
@@ -773,6 +789,38 @@ function getGeminiModelCandidates({ vision = false } = {}) {
     ].filter(Boolean))];
 }
 
+function getGeminiApiKeys() {
+    return [...new Set([
+        process.env.GEMINI_API_KEY,
+        ...String(process.env.GEMINI_API_KEYS || '').split(','),
+        process.env.GEMINI_API_KEY_2,
+        process.env.GEMINI_API_KEY_3
+    ].map(key => String(key || '').trim()).filter(Boolean))];
+}
+
+function hasGeminiApiKey() {
+    return getGeminiApiKeys().length > 0;
+}
+
+function reserveGeminiApiKey() {
+    const keys = getGeminiApiKeys();
+    if (!keys.length) return '';
+    const now = Date.now();
+    let bestKey = '';
+    let bestCount = Infinity;
+    for (const key of keys) {
+        const recent = (aiKeyUsage.get(key) || []).filter(ts => (now - ts) < 60_000);
+        aiKeyUsage.set(key, recent);
+        if (recent.length < bestCount) {
+            bestCount = recent.length;
+            bestKey = key;
+        }
+    }
+    if (!bestKey || bestCount >= AI_KEY_LIMIT_PER_MINUTE) return '';
+    aiKeyUsage.set(bestKey, [...(aiKeyUsage.get(bestKey) || []), now]);
+    return bestKey;
+}
+
 function getAvailableGeminiModels(options = {}) {
     const now = Date.now();
     return getGeminiModelCandidates(options).filter(model => {
@@ -815,7 +863,7 @@ function extractInteractionText(interaction) {
 }
 
 async function createGeminiInteraction(model, input) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = reserveGeminiApiKey();
     if (!apiKey) return null;
     const request = fetchWithTimeout('https://generativelanguage.googleapis.com/v1beta/interactions', {
         method: 'POST',
@@ -885,6 +933,23 @@ async function notifyAiConversationUnavailable(message, reason) {
     return true;
 }
 
+async function notifyHumanSupportRequested(message, ticket, storage = null) {
+    const activeStorage = storage || ticketStore.getActiveStorage();
+    ticket.aiDisabledAt = new Date().toISOString();
+    ticket.aiHumanRequestedAt = ticket.aiDisabledAt;
+    ticket.aiHumanRequestedBy = message.author?.id || null;
+    ticketStore.saveActiveStorage(activeStorage);
+
+    const supportTeam = ticketStore.findSupportTeamForTicketType(ticket.ticketType, message.guild?.id || ticket.guildId || null, activeStorage);
+    const roleIds = ticketStore.getSupportTeamRoleIds(supportTeam)
+        .filter(roleId => message.guild?.roles?.cache?.has?.(roleId));
+    const ping = roleIds.length ? roleIds.map(roleId => `<@&${roleId}>`).join(' ') : '';
+    await message.channel?.send?.({
+        content: [ping || null, `<@${message.author.id}> asked for a human. AI replies are now paused for this ticket.`].filter(Boolean).join('\n'),
+        allowedMentions: { users: [message.author.id], roles: roleIds }
+    }).catch(() => null);
+}
+
 function robloxDevForumSearchUrl(query) {
     const q = encodeURIComponent(String(query || '').trim().slice(0, 160));
     return q ? `https://devforum.roblox.com/search?q=${q}` : 'https://devforum.roblox.com/';
@@ -910,8 +975,7 @@ async function searchRobloxDevForum(reasonText) {
 }
 
 async function getGeminiSuggestion(reasonText, matchedTags, options = {}) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return null;
+    if (!hasGeminiApiKey()) return null;
     try {
         const models = getAvailableGeminiModels();
         if (!models.length) return null;
@@ -958,7 +1022,7 @@ async function getGeminiSuggestion(reasonText, matchedTags, options = {}) {
 }
 
 async function summarizeImageAttachment(attachment) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = reserveGeminiApiKey();
     const contentType = String(attachment?.contentType || '').toLowerCase();
     const url = String(attachment?.url || '').trim();
     if (!envFlag('AI_IMAGE_SUMMARY_ENABLED', false) || !envFlag('AI_IMAGE_SUMMARY_LEGACY_GENERATE_CONTENT', false)) return null;
@@ -1033,6 +1097,9 @@ async function notifyGuildOwnerTrialExpired(guild, aiAccess, storage) {
 
 async function sendAiPromptedResponse(channel, reasonText) {
     const activeStorage = ticketStore.getActiveStorage();
+    const ticket = ticketStore.getTicketByChannelId(channel?.id, activeStorage);
+    if (ticket?.aiFirstReplySentAt || ticket?.aiDisabledAt || ticket?.aiHumanRequestedAt) return;
+    if (!ticketTypeAllowsAi(ticket?.ticketType, channel?.guild?.id || ticket?.guildId || null, activeStorage)) return;
     const aiControl = ticketStore.getAiControl(activeStorage);
     if (aiControl.manualDisabled) return;
 
@@ -1057,7 +1124,7 @@ async function sendAiPromptedResponse(channel, reasonText) {
 
     if (!aiSettings.autoLearn && !aiSettings.autoResolution) return;
 
-    const hasGemini = Boolean(process.env.GEMINI_API_KEY);
+    const hasGemini = hasGeminiApiKey();
     if (!canAttemptAiFirstReply(aiSettings, matchedTags, safeReason, hasGemini)) return;
 
     const primaryTag = matchedTags[0] || null;
@@ -1086,6 +1153,8 @@ async function sendAiPromptedResponse(channel, reasonText) {
 
     const responseText = suggestion || String(primaryTag?.description || '').trim();
     if (!responseText) return;
+    ticket.aiFirstReplySentAt = new Date().toISOString();
+    ticketStore.saveActiveStorage(activeStorage);
 
     const responseTitle = String(primaryTag?.title || 'Suggested Response').trim() || 'Suggested Response';
     const quote = (text) => String(text || '')
@@ -1141,6 +1210,8 @@ async function sendAiPromptedResponse(channel, reasonText) {
 
 async function handleAiConversationMessage(message, ticket, activeStorage = null) {
     const storage = activeStorage || ticketStore.getActiveStorage();
+    if (ticket?.aiDisabledAt || ticket?.aiHumanRequestedAt) return false;
+    if (!ticketTypeAllowsAi(ticket?.ticketType, message?.guild?.id || ticket?.guildId || null, storage)) return false;
     const guildAiAccess = ticketStore.getEffectiveGuildAiAccess(message?.guild?.id || ticket?.guildId || null, storage);
     if (!guildAiAccess.hasAccess) return false;
     const aiControl = ticketStore.getAiControl(storage);
@@ -1148,7 +1219,7 @@ async function handleAiConversationMessage(message, ticket, activeStorage = null
     const aiSettings = ticketStore.getGuildAiSettings(message?.guild?.id || ticket?.guildId || null, storage);
     if (!aiSettings.enabled || !(aiSettings.mode === 'conversation' || aiSettings.conversation)) return false;
     if (ticket?.createdBy && String(ticket.createdBy) !== String(message.author?.id || '')) return false;
-    if (!process.env.GEMINI_API_KEY) {
+    if (!hasGeminiApiKey()) {
         return notifyAiConversationUnavailable(message, 'missing_gemini_api_key');
     }
 
@@ -1172,42 +1243,74 @@ async function handleAiConversationMessage(message, ticket, activeStorage = null
         return true;
     }
 
-    const imageSummaries = [];
-    for (const attachment of imageAttachments) {
-        const summary = await summarizeImageAttachment(attachment);
-        if (summary) imageSummaries.push(summary);
+    if (isHumanSupportIntent(content)) {
+        await notifyHumanSupportRequested(message, ticket, storage);
+        return true;
     }
 
-    const imageOnlyNotice = imageAttachments.length && !imageSummaries.length
-        ? `[User uploaded ${imageAttachments.length === 1 ? 'an image' : `${imageAttachments.length} images`}. Ask them to describe the relevant details if needed.]`
-        : '';
-    const userContent = [
+    const channelId = String(message.channel.id);
+    const existing = aiConversationDebounce.get(channelId) || { messages: [], timer: null };
+    existing.messages.push({
         content,
-        imageSummaries.length
-            ? `[Image summary: ${imageSummaries.map(item => item.summary).join(' | ')}]`
-            : imageOnlyNotice
-    ].filter(Boolean).join('\n');
+        attachments: imageAttachments,
+        authorId: message.author.id,
+        createdAt: new Date().toISOString()
+    });
+    if (existing.timer) clearTimeout(existing.timer);
+    existing.timer = setTimeout(async () => {
+        const batch = aiConversationDebounce.get(channelId);
+        aiConversationDebounce.delete(channelId);
+        if (!batch?.messages?.length) return;
+        try {
+            const latestStorage = ticketStore.getActiveStorage();
+            const latestTicket = ticketStore.getTicketByChannelId(channelId, latestStorage);
+            if (!latestTicket || latestTicket.aiDisabledAt || latestTicket.aiHumanRequestedAt) return;
+            await message.channel?.sendTyping?.().catch(() => null);
 
-    const entry = ticketStore.appendAiConversation(message.channel.id, {
-        messages: userContent ? [{ role: 'user', content: userContent, createdAt: new Date().toISOString() }] : [],
-        imageSummaries
-    }, storage);
-    const contextMessages = Array.isArray(entry?.messages) ? entry.messages.slice(-10) : [];
-    await message.channel?.sendTyping?.().catch(() => null);
-    const responseText = compactText(await getGeminiSuggestion(userContent || 'The user uploaded an image.', [], {
-        conversation: true,
-        contextMessages,
-        imageSummaries: Array.isArray(entry?.imageSummaries) ? entry.imageSummaries.slice(-5) : []
-    }), 1800);
+            const imageSummaries = [];
+            const allAttachments = batch.messages.flatMap(item => item.attachments || []).slice(0, 3);
+            for (const attachment of allAttachments) {
+                const summary = await summarizeImageAttachment(attachment);
+                if (summary) imageSummaries.push(summary);
+            }
 
-    if (!responseText) {
-        return notifyAiConversationUnavailable(message, 'empty_model_response');
-    }
-    ticketStore.appendAiConversation(message.channel.id, {
-        messages: [{ role: 'assistant', content: responseText, createdAt: new Date().toISOString() }]
-    }, storage);
+            const combinedText = compactText(batch.messages.map(item => item.content).filter(Boolean).join('\n'), 1800);
+            const imageOnlyNotice = allAttachments.length && !imageSummaries.length
+                ? `[User uploaded ${allAttachments.length === 1 ? 'an image' : `${allAttachments.length} images`}. Ask them to describe the relevant details if needed.]`
+                : '';
+            const userContent = [
+                combinedText,
+                imageSummaries.length
+                    ? `[Image summary: ${imageSummaries.map(item => item.summary).join(' | ')}]`
+                    : imageOnlyNotice
+            ].filter(Boolean).join('\n');
 
-    await message.reply({ content: responseText, allowedMentions: { repliedUser: false } }).catch(() => null);
+            const entry = ticketStore.appendAiConversation(channelId, {
+                messages: userContent ? [{ role: 'user', content: userContent, createdAt: new Date().toISOString() }] : [],
+                imageSummaries
+            }, latestStorage);
+            const contextMessages = Array.isArray(entry?.messages) ? entry.messages.slice(-10) : [];
+            const responseText = compactText(await getGeminiSuggestion(userContent || 'The user uploaded an image.', [], {
+                conversation: true,
+                contextMessages,
+                imageSummaries: Array.isArray(entry?.imageSummaries) ? entry.imageSummaries.slice(-5) : []
+            }), 1800);
+
+            if (!responseText) {
+                await notifyAiConversationUnavailable(message, 'empty_model_response');
+                return;
+            }
+            ticketStore.appendAiConversation(channelId, {
+                messages: [{ role: 'assistant', content: responseText, createdAt: new Date().toISOString() }]
+            }, latestStorage);
+            await message.channel?.send?.({ content: responseText, allowedMentions: { parse: [] } }).catch(() => null);
+        } catch (error) {
+            console.warn('[AI] Delayed conversation reply failed:', error?.message || error);
+            await notifyAiConversationUnavailable(message, 'delayed_reply_failed');
+        }
+    }, AI_CONVERSATION_REPLY_DELAY_MS);
+    existing.timer.unref?.();
+    aiConversationDebounce.set(channelId, existing);
     return true;
 }
 
@@ -1387,9 +1490,6 @@ module.exports = {
             }
 
             const mentionText = teamRoleIds.length ? teamRoleIds.map(roleId => `<@&${roleId}>`).join(' ') : '';
-            if (mentionText) {
-                await ticketChannel.send({ content: mentionText });
-            }
 
             const openEmbed = resolveOpenTicketEmbed(
                 ticketConfig,
@@ -1399,7 +1499,10 @@ module.exports = {
                 ticketChannel,
                 options.attachments || []
             );
-            const mainPanel = buildV2Notice(openEmbed.title, openEmbed.description, 0x5865F2);
+            const guildBranding = typeof ticketStore.getGuildConfig === 'function'
+                ? ticketStore.getGuildConfig(interaction.guildId, activeStorage)?.branding || {}
+                : {};
+            const mainPanel = buildV2Notice(openEmbed.title, openEmbed.description, parseHexColor(guildBranding.accentColor, 0x5865F2));
             const components = [...mainPanel.components];
             if (statusInfo.status === 'increased_volume' || statusInfo.status === 'reduced_assistance') {
                 const meta = getAvailabilityMeta(statusInfo.status);
@@ -1410,13 +1513,15 @@ module.exports = {
                 new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger)
             );
 
-            await ticketChannel.send({ flags: MessageFlags.IsComponentsV2, components: [...components, closeRow] });
-
             if (allowAttachments) {
                 const attachmentsContainer = new ContainerBuilder().addTextDisplayComponents(
                     new TextDisplayBuilder().setContent('> You can upload any additional supporting images/files in this ticket (screenshots, videos, receipts, etc).')
                 );
-                await ticketChannel.send({ flags: MessageFlags.IsComponentsV2, components: [attachmentsContainer] }).catch(() => null);
+                components.push(attachmentsContainer);
+            }
+
+            if (shouldSendAiSupportIntro(ticketChannel, activeStorage) && ticketTypeAllowsAi(ticketType, interaction.guildId, activeStorage)) {
+                components.push(...buildAiSupportIntroMessage().components);
             }
 
             const createdAt = new Date().toISOString();
@@ -1439,8 +1544,11 @@ module.exports = {
             activeStorage.tickets.push(nextTicket);
             ticketStore.saveActiveStorage(activeStorage);
             await updateTicketChannelMetadata(ticketChannel, nextTicket);
-            await sendAiSupportIntro(ticketChannel, activeStorage).catch(error => {
-                console.warn('[AI] Intro message failed:', error?.message || error);
+            await ticketChannel.send({
+                content: mentionText || undefined,
+                flags: MessageFlags.IsComponentsV2,
+                components: [...components, closeRow],
+                allowedMentions: { roles: teamRoleIds }
             });
 
             const createdContainer = new ContainerBuilder().addTextDisplayComponents(

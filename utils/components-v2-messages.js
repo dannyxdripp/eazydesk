@@ -89,8 +89,6 @@ function inferKind(title, color) {
 }
 
 function kindEmoji(kind) {
-    if (kind === 'success') return '[OK]';
-    if (kind === 'error') return '[!]';
     return '';
 }
 
