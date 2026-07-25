@@ -13,7 +13,6 @@ const {
     StringSelectMenuBuilder,
     PermissionsBitField,
     ChannelType,
-    ComponentType
 } = require('discord.js');
 const ticketStore = require('../utils/ticket-store');
 const { touchTicket, updateTicketChannelMetadata } = require('../utils/ticket-metadata');
@@ -37,7 +36,6 @@ const AI_SUPPORT_BUTTON_ID = 'ai_prompt_support';
 const TICKET_REASON_MODAL_PREFIX = 'ticket_reason_modal:';
 const TICKET_REASON_INPUT_ID = 'ticket_open_reason';
 const TICKET_QUESTION_INPUT_PREFIX = 'ticket_open_question_';
-const TICKET_FILE_UPLOAD_INPUT_ID = 'ticket_open_files';
 const CHANNEL_CREATE_PERMISSIONS = [
     PermissionsBitField.Flags.ManageChannels
 ];
@@ -782,10 +780,12 @@ function getGeminiModelCandidates({ vision = false } = {}) {
         .split(',')
         .map(item => item.trim())
         .filter(Boolean);
-    const defaultModel = String(process.env.GEMINI_MODEL || 'gemini-3.5-flash').trim();
+    const defaultModel = String(process.env.GEMINI_MODEL || 'gemini-3.6-flash').trim();
     return [...new Set([
         defaultModel,
-        ...configured
+        ...configured,
+        'gemini-3.6-flash',
+        'gemini-2.0-flash'
     ].filter(Boolean))];
 }
 
@@ -862,9 +862,61 @@ function extractInteractionText(interaction) {
     return text || null;
 }
 
+function normalizeGeminiModelName(model) {
+    return String(model || '').trim().replace(/^models\//, '') || 'gemini-3.6-flash';
+}
+
+function extractGenerateContentText(payload) {
+    const direct = payload?.output_text || payload?.outputText;
+    if (direct) return String(direct);
+    const candidates = Array.isArray(payload?.candidates) ? payload.candidates : [];
+    const parts = candidates.flatMap(candidate => Array.isArray(candidate?.content?.parts) ? candidate.content.parts : []);
+    const text = parts.map(part => part?.text || '').filter(Boolean).join('\n').trim();
+    return text || null;
+}
+
+async function createGenerateContentFallback(model, input, apiKey) {
+    const modelName = normalizeGeminiModelName(model);
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const response = await fetchWithTimeout(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{
+                role: 'user',
+                parts: [{ text: String(input || '') }]
+            }],
+            generationConfig: {
+                temperature: 0.4,
+                maxOutputTokens: 220
+            }
+        })
+    }, AI_FETCH_TIMEOUT_MS);
+
+    if (!response.ok) {
+        markGeminiModelFailure(model, response);
+        await logGeminiFailure(model, response);
+        const error = new Error(`Gemini generateContent failed with ${response.status}`);
+        error.status = response.status;
+        error.aiLogged = true;
+        throw error;
+    }
+
+    const data = await response.json().catch(() => ({}));
+    return {
+        output_text: extractGenerateContentText(data),
+        generateContent: data
+    };
+}
+
 async function createGeminiInteraction(model, input) {
     const apiKey = reserveGeminiApiKey();
     if (!apiKey) return null;
+    const mode = String(process.env.GEMINI_API_MODE || '').trim().toLowerCase();
+    if (mode === 'generatecontent' || mode === 'generate-content') {
+        return createGenerateContentFallback(model, input, apiKey);
+    }
+
     const request = fetchWithTimeout('https://generativelanguage.googleapis.com/v1beta/interactions', {
         method: 'POST',
         headers: {
@@ -884,6 +936,9 @@ async function createGeminiInteraction(model, input) {
         })
     }, AI_FETCH_TIMEOUT_MS).then(async response => {
         if (!response.ok) {
+            if ((response.status === 400 || response.status === 404) && mode !== 'interactions') {
+                return createGenerateContentFallback(model, input, apiKey);
+            }
             markGeminiModelFailure(model, response);
             await logGeminiFailure(model, response);
             const error = new Error(`Gemini interaction failed with ${response.status}`);
@@ -1325,6 +1380,7 @@ module.exports = {
     saveActiveStorage: ticketStore.saveActiveStorage,
     loadTicketTypes: ticketStore.getTicketTypes,
     handleAiConversationMessage,
+    notifyHumanSupportRequested,
     isCloseTicketIntent,
     isIssueSolvedIntent,
     buildAiSupportIntroMessage,
@@ -1486,6 +1542,7 @@ module.exports = {
                     errorCode: channelRepair.error?.code,
                     errorStatus: channelRepair.error?.status
                 });
+                await ticketChannel.delete('Ticket creation failed because bot channel permissions could not be repaired').catch(() => null);
                 return sendEphemeral(interaction, buildInfoMessage('Missing Permissions', channelRepair.message, 0xED4245));
             }
 
@@ -1502,7 +1559,8 @@ module.exports = {
             const guildBranding = typeof ticketStore.getGuildConfig === 'function'
                 ? ticketStore.getGuildConfig(interaction.guildId, activeStorage)?.branding || {}
                 : {};
-            const mainPanel = buildV2Notice(openEmbed.title, openEmbed.description, parseHexColor(guildBranding.accentColor, 0x5865F2));
+            const openDescription = [mentionText, openEmbed.description].filter(Boolean).join('\n\n');
+            const mainPanel = buildV2Notice(openEmbed.title, openDescription, parseHexColor(guildBranding.accentColor, 0x5865F2));
             const components = [...mainPanel.components];
             if (statusInfo.status === 'increased_volume' || statusInfo.status === 'reduced_assistance') {
                 const meta = getAvailabilityMeta(statusInfo.status);
@@ -1545,7 +1603,6 @@ module.exports = {
             ticketStore.saveActiveStorage(activeStorage);
             await updateTicketChannelMetadata(ticketChannel, nextTicket);
             await ticketChannel.send({
-                content: mentionText || undefined,
                 flags: MessageFlags.IsComponentsV2,
                 components: [...components, closeRow],
                 allowedMentions: { roles: teamRoleIds }
@@ -1878,7 +1935,7 @@ module.exports = {
 
         const modal = new ModalBuilder()
             .setCustomId(`${TICKET_REASON_MODAL_PREFIX}${selectedType}`)
-            .setTitle(`Open ${ticketConfig.name}`);
+            .setTitle(`Open ${ticketConfig.name}`.slice(0, 45));
 
         const allowAttachments = ticketConfig.allowAttachments !== false;
         const questions = normalizeOpeningQuestions(ticketConfig, interaction.guildId, allowAttachments);
@@ -1891,36 +1948,6 @@ module.exports = {
                 .setMaxLength(question.maxLength);
             if (question.placeholder) input.setPlaceholder(question.placeholder);
             modal.addComponents(new ActionRowBuilder().addComponents(input));
-        }
-
-        if (allowAttachments) {
-            // Discord now supports file uploads inside modals via ComponentType.Label + ComponentType.FileUpload.
-            // discord.js doesn't currently expose a builder for these, so we pass raw modal component data.
-            const modalData = modal.toJSON();
-            modalData.components.push({
-                type: ComponentType.Label,
-                label: 'File Upload (Optional)',
-                description: 'Upload screenshots or other files that help us resolve your request.',
-                component: {
-                    type: ComponentType.FileUpload,
-                    custom_id: TICKET_FILE_UPLOAD_INPUT_ID,
-                    min_values: 0,
-                    max_values: 10,
-                    required: false
-                }
-            });
-            return interaction.showModal(modalData).catch(error => {
-                if (isUnknownInteractionError(error)) {
-                    console.warn('[Tickets] Ticket modal interaction expired before Discord accepted it.', {
-                        guildId: interaction.guildId || null,
-                        channelId: interaction.channelId || null,
-                        userId: interaction.user?.id || null,
-                        selectedType
-                    });
-                    return null;
-                }
-                throw error;
-            });
         }
 
         return interaction.showModal(modal).catch(error => {
@@ -1957,15 +1984,7 @@ module.exports = {
             }).filter(item => item.answer);
             const reason = formatQuestionAnswers(answers) || 'No reason provided.';
 
-            let attachments = [];
-            try {
-                const upload = interaction.fields.getField(TICKET_FILE_UPLOAD_INPUT_ID, ComponentType.FileUpload);
-                if (upload?.attachments?.size) {
-                    attachments = [...upload.attachments.values()].map(att => att?.url).filter(Boolean);
-                }
-            } catch {
-                // Field missing (ticket type may have attachments disabled) or unsupported on older clients.
-            }
+            const attachments = [];
 
             return this.processTicketTypeSelection(interaction, selectedType, reason, { attachments, questionAnswers: answers });
         } catch (error) {
@@ -2004,6 +2023,7 @@ module.exports = {
 
     async handleUrgentTicketConfirmation(interaction) {
         try {
+            await ensureEphemeralAck(interaction);
             const [, selectedType] = interaction.customId.split(':');
             const ticketConfig = ticketStore.findTicketTypeBySelectValue(selectedType, interaction.guildId);
             if (!ticketConfig) {

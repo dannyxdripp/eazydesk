@@ -43,6 +43,10 @@ function getIntervalMs() {
     return Math.max(15000, Number(process.env.CUSTOM_BOT_SYNC_INTERVAL_MS || 30000));
 }
 
+function getSyncConcurrency() {
+    return Math.max(1, Math.min(5, Number(process.env.CUSTOM_BOT_SYNC_CONCURRENCY || 2)));
+}
+
 function getBotOwnerId() {
     return String(process.env.BOT_OWNER_ID || process.env.OWNER_USER_ID || process.env.OWNER_ID || '').trim();
 }
@@ -534,15 +538,29 @@ async function syncAll() {
     const storage = ticketStore.getActiveStorage();
     const configured = storage.aiGuildAccess && typeof storage.aiGuildAccess === 'object' ? storage.aiGuildAccess : {};
     const desired = new Set();
+    const starts = [];
     for (const [guildId, rawAccess] of Object.entries(configured)) {
         const access = ticketStore.getEffectiveGuildAiAccess(guildId, storage);
         if (!isEligible(access)) continue;
         desired.add(String(guildId));
-        await startGuild(guildId, access);
+        starts.push({ guildId, access });
     }
+
+    const concurrency = getSyncConcurrency();
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(concurrency, starts.length) }, async () => {
+        while (cursor < starts.length) {
+            const item = starts[cursor++];
+            await startGuild(item.guildId, item.access);
+        }
+    });
+    await Promise.all(workers);
+
+    const stops = [];
     for (const guildId of clients.keys()) {
-        if (!desired.has(guildId)) await stopGuild(guildId, 'removed from configuration');
+        if (!desired.has(guildId)) stops.push(stopGuild(guildId, 'removed from configuration'));
     }
+    await Promise.all(stops);
 }
 
 async function start(options = {}) {

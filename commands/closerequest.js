@@ -57,6 +57,55 @@ function buildCloseRequestButtons() {
     );
 }
 
+function closePermissionPatch(required) {
+    const keys = {
+        [PermissionsBitField.Flags.ViewChannel]: 'ViewChannel',
+        [PermissionsBitField.Flags.SendMessages]: 'SendMessages',
+        [PermissionsBitField.Flags.EmbedLinks]: 'EmbedLinks',
+        [PermissionsBitField.Flags.ReadMessageHistory]: 'ReadMessageHistory',
+        [PermissionsBitField.Flags.ManageChannels]: 'ManageChannels'
+    };
+    const patch = {};
+    for (const permission of required) {
+        const key = keys[permission];
+        if (key) patch[key] = true;
+    }
+    return patch;
+}
+
+async function ensureClosePermissions(ticketChannel) {
+    const guild = ticketChannel?.guild || null;
+    if (!guild || !ticketChannel || typeof ticketChannel.permissionsFor !== 'function') return;
+    if (!guild.members?.me && typeof guild.members?.fetchMe === 'function') {
+        await guild.members.fetchMe().catch(() => null);
+    }
+
+    const me = guild.members?.me || null;
+    if (!me) return;
+
+    const required = [
+        PermissionsBitField.Flags.ViewChannel,
+        PermissionsBitField.Flags.SendMessages,
+        PermissionsBitField.Flags.EmbedLinks,
+        PermissionsBitField.Flags.ReadMessageHistory,
+        PermissionsBitField.Flags.ManageChannels
+    ];
+    const current = ticketChannel.permissionsFor(me);
+    const missing = required.filter(permission => !current?.has?.(permission));
+    if (!missing.length) return;
+
+    const canRepair = current?.has?.(PermissionsBitField.Flags.ManageChannels)
+        || me.permissions?.has?.(PermissionsBitField.Flags.Administrator)
+        || me.permissions?.has?.(PermissionsBitField.Flags.ManageChannels);
+    if (!canRepair || !ticketChannel.permissionOverwrites?.edit) return;
+
+    await ticketChannel.permissionOverwrites.edit(
+        me.id,
+        closePermissionPatch(required),
+        { reason: 'Repair bot permissions before closing ticket' }
+    ).catch(() => null);
+}
+
 function scheduleCloseRequestTimer(ticketChannel, timerMinutes) {
     setTimeout(async () => {
         try {
@@ -78,6 +127,7 @@ async function closeTicketWithTranscript(ticketChannel, reason, closedByUserId =
     const activeStorage = ticketStore.getActiveStorage();
     const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
     const closedAt = new Date().toISOString();
+    await ensureClosePermissions(ticketChannel);
     const closedEmbed = resolveEmbedPayload(ticketStore, 'ticketClosed', {
         closedBy: closedByUserId ? `<@${closedByUserId}>` : 'System',
         reason
@@ -229,8 +279,9 @@ module.exports = {
         }
 
         if (interaction.customId === CANCEL_ID) {
-            ticketStore.removeCloseRequest(ticketChannel.id);
             if (request.source === 'auto-notifier' && ticket) {
+                await interaction.deferUpdate().catch(() => null);
+                ticketStore.removeCloseRequest(ticketChannel.id);
                 const activeStorage = ticketStore.getActiveStorage();
                 const storedTicket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
                 if (storedTicket) {
@@ -250,10 +301,11 @@ module.exports = {
                         }]
                     }]
                 };
-                await interaction.update(response).catch(() => null);
+                await interaction.message?.edit?.(response).catch(() => null);
                 setTimeout(() => interaction.message?.delete?.().catch(() => null), 2500).unref?.();
                 return;
             }
+            ticketStore.removeCloseRequest(ticketChannel.id);
             const base = buildEmbed(RESPONSES.cancelledTitle, RESPONSES.cancelledDescription, 0x57F287);
             return interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags });
         }

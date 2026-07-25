@@ -134,6 +134,12 @@ function splitCsv(value, fallback = []) {
     return source.split(',').map(item => item.trim()).filter(Boolean);
 }
 
+function envFlag(name, fallback = false) {
+    const raw = String(process.env[name] ?? '').trim().toLowerCase();
+    if (!raw) return Boolean(fallback);
+    return ['1', 'true', 'yes', 'on'].includes(raw);
+}
+
 function toPresenceStatus(value) {
     const status = String(value || '').trim().toLowerCase();
     if (['online', 'idle', 'dnd', 'invisible'].includes(status)) return status;
@@ -787,20 +793,25 @@ client.once('clientReady', async () => {
         storageMonitor.reportCustomBotEvent('error', { reason: 'branding runtime failed to start' }, error).catch(() => null);
     });
 
-    // Refresh and deploy commands
-    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-    try {
-        deployLog('Deploying commands globally...');
-        await rest.put(Routes.applicationCommands(process.env.APP_ID), { body: commands });
-        deployLog('Successfully deployed commands globally.');
+    if (envFlag('DEPLOY_COMMANDS_ON_START', false)) {
+        (async () => {
+            const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+            try {
+                deployLog('Deploying commands globally...');
+                await rest.put(Routes.applicationCommands(process.env.APP_ID), { body: commands });
+                deployLog('Successfully deployed commands globally.');
 
-        if (process.env.TEST_GUILD_ID) {
-            deployLog('Deploying commands to testing server...');
-            await rest.put(Routes.applicationGuildCommands(process.env.APP_ID, process.env.TEST_GUILD_ID), { body: commands });
-            deployLog('Successfully deployed commands to testing server.');
-        }
-    } catch (error) {
-        console.error('[Deploying \u{1F504}\uFE0F] Error deploying commands:', error);
+                if (process.env.TEST_GUILD_ID) {
+                    deployLog('Deploying commands to testing server...');
+                    await rest.put(Routes.applicationGuildCommands(process.env.APP_ID, process.env.TEST_GUILD_ID), { body: commands });
+                    deployLog('Successfully deployed commands to testing server.');
+                }
+            } catch (error) {
+                console.error('[Deploying \u{1F504}\uFE0F] Error deploying commands:', error);
+            }
+        })();
+    } else {
+        deployLog('Skipped startup command deployment. Run npm run deploy:commands, or set DEPLOY_COMMANDS_ON_START=true.');
     }
 
     runTicketInactivitySweep(client).catch(error => {
@@ -946,12 +957,17 @@ async function handleRuntimeInteraction(interaction, runtimeClient = client) {
             const activeStorage = ticketStore.getActiveStorage();
             const ticket = ticketStore.getTicketByChannelId(ticketChannel.id, activeStorage);
             if (ticket) {
-                ticket.aiDisabledAt = new Date().toISOString();
-                ticket.aiHumanRequestedAt = ticket.aiDisabledAt;
-                ticket.aiHumanRequestedBy = interaction.user.id;
-                ticketStore.saveActiveStorage(activeStorage);
+                await interaction.deferUpdate().catch(() => null);
+                await ticketHandler.notifyHumanSupportRequested({
+                    channel: ticketChannel,
+                    guild: interaction.guild,
+                    author: interaction.user
+                }, ticket, activeStorage);
+                await interaction.message?.edit?.(buildMessage('Support Requested', 'AI replies are paused for this ticket. A support member will continue from here.', 0x5865F2)).catch(() => null);
+            } else {
+                const base = buildMessage('Invalid Channel', 'This action is only available in an active ticket channel.', 0xED4245);
+                await interaction.reply({ ...base, flags: MessageFlags.Ephemeral | base.flags }).catch(() => null);
             }
-            await interaction.update(buildMessage('Support Requested', 'AI replies are paused for this ticket. A support member will continue from here.', 0x5865F2));
         } else if (interaction.customId === tagCommand.TAG_CREATE_CONFIRM_ID || interaction.customId === tagCommand.TAG_CREATE_CANCEL_ID) {
             await tagCommand.handleButton(interaction);
         } else if (interaction.customId === closeRequestCommand.CLOSE_NOW_ID || interaction.customId === closeRequestCommand.CANCEL_ID) {
